@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .naming import RE_PROJECT_DIR, normalize_project_name, make_filename
+from .naming import RE_PROJECT_DIR, make_filename, resolve_project_name
 from .paths import paths_for_type
 
 
@@ -72,8 +72,7 @@ def validate_all(state: Any, prefs: Any):
 
     # Filename and target path
     try:
-        project_base = root.name if not bool(getattr(state, "use_custom_name", False)) else getattr(state, "custom_name", "")
-        proj_name = normalize_project_name(project_base)
+        proj_name = resolve_project_name(state)
         token_map = {'BASE': 'BaseModel', 'PV': 'PV', 'REND': 'Render', 'SB': 'SB', 'ANIM': 'Anim', 'TMP': 'Tmp'}
         token = token_map.get(state.project_type)
         filename = make_filename(proj_name, token, rev, getattr(state, "sc_number", None) if needs_sc else None) + ".blend"

@@ -6,7 +6,7 @@ from pathlib import Path
 import bpy
 from bpy.types import Operator
 
-from .paths import paths_for_type
+from ..core.paths import paths_for_type
 
 
 class LIME_OT_ensure_folders(Operator):

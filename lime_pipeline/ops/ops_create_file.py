@@ -10,8 +10,8 @@ class LIME_OT_create_file(Operator):
 
     def execute(self, context):
         st = context.window_manager.lime_pipeline
-        prefs = context.preferences.addons[__package__].preferences
-        from .validate import validate_all
+        prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+        from ..core.validate import validate_all
 
         ok, errors, warns, filename, target_path, backups = validate_all(st, prefs)
         if not ok or not target_path:

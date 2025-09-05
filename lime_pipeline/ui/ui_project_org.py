@@ -11,43 +11,38 @@ class LIME_PT_project_org(Panel):
     bl_category = CAT
     bl_label = "Project Organization"
     bl_idname = "LIME_PT_project_org"
+    bl_order = 0
 
     def draw(self, ctx):
         wm = ctx.window_manager
         st = wm.lime_pipeline
-        prefs = ctx.preferences.addons[__package__].preferences
+        prefs = ctx.preferences.addons[__package__.split('.')[0]].preferences
         layout = self.layout
 
-        # Micro-section 1: project settings
         box = layout.box()
         box.label(text="Project Settings")
 
-        # Project root picker (single folder icon)
         row = box.row(align=True)
         row.prop(st, "project_root", text="Project Root")
 
-        # Type and revision
         box.prop(st, "project_type", text="Project Type")
         box.prop(st, "rev_letter", text="Revision (A–Z)")
 
-        # Scene controls: sc_number + toggle in same row
         needs_sc = st.project_type not in {'BASE', 'TMP'}
         row = box.row(align=True)
         row.enabled = needs_sc
         row.prop(st, "sc_number", text="Scene #")
         row.prop(st, "free_scene_numbering", text="Free numbering", toggle=True)
 
-        # Custom project name as toggle + name in same row
         row = box.row(align=True)
         row.prop(st, "use_custom_name", text="Custom Project Name", toggle=True)
         sub = row.row(align=True)
         sub.enabled = st.use_custom_name
         sub.prop(st, "custom_name", text="Name")
 
-        # Micro-section 2: validation & preview
         box2 = layout.box()
         box2.label(text="Status & Preview")
-        from .validate import validate_all
+        from ..core.validate import validate_all
         ok, errors, warns, filename, target_path, backups = validate_all(st, prefs)
         icon = 'CHECKMARK' if ok else 'ERROR'
         box2.label(text=("Ready to save" if ok else "Not ready"), icon=icon)
@@ -81,7 +76,6 @@ class LIME_PT_project_org(Panel):
         op = right.operator("lime.show_text", text="", icon='COPYDOWN', emboss=False)
         op.text = filename or ""
 
-        # Micro-section 3: actions
         box3 = layout.box()
         box3.label(text="Actions")
         row = box3.row()

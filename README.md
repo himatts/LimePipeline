@@ -1,9 +1,15 @@
 # Lime Pipeline (Blender 4.5 LTS add-on)
 
-Organización de proyectos, normalización de nombres y helpers para primer guardado y backups.
+Lime Pipeline es un add-on de Blender orientado a estudios y equipos que buscan orden y consistencia en la producción. Su propósito es estandarizar la organización de proyectos y escenas para reducir fricción operativa y errores humanos.
+
+De forma práctica, el add-on:
+- Centraliza la configuración del proyecto (raíz, tipo, revisión y escena) y genera nombres limpios y consistentes.
+- Asiste en el primer guardado, rutas objetivo y backups numerados.
+- Crea y gestiona estructuras de SHOT dentro de la escena, incluyendo instanciado y duplicado de shots con políticas claras.
+- Presenta dos paneles simples en el Sidebar para flujo de archivos y preparación interna de la escena.
 
 - Target: Blender 4.5 LTS
-- Panel: View3D > Sidebar (N) > Lime Pipeline > Project Organization
+- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Internal Setup
 - Preferencias: Edit > Preferences > Add-ons > Lime Pipeline
 
 ## Estructura del paquete `lime_pipeline/`
@@ -11,12 +17,20 @@ Organización de proyectos, normalización de nombres y helpers para primer guar
 - `__init__.py`: registro del add-on y bl_info
 - `prefs.py`: AddonPreferences
 - `props.py`: PropertyGroup persistente en WindowManager
-- `naming.py`: normalización y helpers de nombres
+- `core/`: núcleo común
+  - `naming.py`: `resolve_project_name`, normalización y helpers
+  - `validate_scene.py`: validaciones puras de contexto de escena/SHOT
 - `paths.py`: resolución de rutas RAMV por tipo
 - `scan.py`: escaneo y sugerencia de SC
 - `validate.py`: validaciones y gating de acciones
-- `ops_*.py`: operadores (pick root, folders, create file, backup)
-- `ui.py`: panel principal
+- `scene/scene_utils.py`: helpers con efectos en Outliner (crear/instanciar/duplicar SHOT)
+- `data/templates.py`: plantilla declarativa del árbol de SHOT y políticas
+- `ops/`: operadores
+  - `ops_shots.py`: New Shot / Shot Instance / Duplicate Shot
+  - otros: pick root, folders, create file, backup
+- `ui/`: paneles
+  - `ui_project_org.py`: Project Organization (archivos)
+  - `ui_internal_setup.py`: Internal Setup (escena/colecciones)
 
 ## Instalación local para pruebas
 

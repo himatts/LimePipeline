@@ -26,8 +26,8 @@ class LIME_OT_create_backup(Operator):
 
     def execute(self, context):
         st = context.window_manager.lime_pipeline
-        prefs = context.preferences.addons[__package__].preferences
-        from .validate import validate_all
+        prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+        from ..core.validate import validate_all
 
         ok, errors, warns, filename, target_path, backups = validate_all(st, prefs)
         if not target_path or not target_path.exists():
@@ -39,7 +39,6 @@ class LIME_OT_create_backup(Operator):
         backup_name = f"Backup_{idx:02d}_{filename}"
         backup_path = backups / backup_name
 
-        # Ensure the currently open file is saved first
         bpy.ops.wm.save_mainfile()
         shutil.copy2(target_path, backup_path)
         self.report({'INFO'}, f"Backup created: {backup_path.name}")
