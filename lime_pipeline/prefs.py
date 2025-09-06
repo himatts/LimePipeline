@@ -31,6 +31,15 @@ class LimePipelinePrefs(AddonPreferences):
     path_warn_len: IntProperty(name="Warn at length", default=200, min=50, max=400, description="Show a warning when target path exceeds this length")
     path_block_len: IntProperty(name="Block at length", default=240, min=60, max=400, description="Block saving when target path exceeds this length")
     remember_last_rev: BoolProperty(name="Remember last Rev", default=True, description="Remember last used revision letter across sessions")
+    libraries_override_dir: StringProperty(
+        name="Libraries Override",
+        subtype='DIR_PATH',
+        default="",
+        description=(
+            "Optional: override path for Lime library .blend files. "
+            "If set, 'lime_pipeline_lib.blend' is read from here"
+        ),
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -42,5 +51,7 @@ class LimePipelinePrefs(AddonPreferences):
         col.prop(self, "path_warn_len")
         col.prop(self, "path_block_len")
         col.prop(self, "remember_last_rev")
+        col.separator()
+        col.prop(self, "libraries_override_dir")
 
 

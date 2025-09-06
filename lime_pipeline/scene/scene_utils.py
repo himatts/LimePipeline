@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, List, Tuple
+import re
 
 import bpy
 
@@ -106,13 +107,34 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
     dst_shot = bpy.data.collections.new(name)
     scene.collection.children.link(dst_shot)
 
-    # Phase 1: replicate collection tree exactly from source
+    # Phase 1: replicate collection tree from source, but rename subcollections to new SH## prefix
     coll_map: Dict[bpy.types.Collection, bpy.types.Collection] = {src_shot: dst_shot}
+
+    _SH_PREFIX_RE = re.compile(r"^SH(\d{2,3})_(.+)$")
+
+    def _renamed_for_idx(name: str, idx: int) -> str:
+        """Return name with leading SH##_ prefix replaced by new index; preserve numeric suffix like .001.
+
+        Examples:
+        - 'SH01_00_UTILS_CAM' -> 'SH02_00_UTILS_CAM'
+        - 'SH12_01_Project_MAIN.001' -> 'SH02_01_Project_MAIN.001'
+        - '00_UTILS_LIGHTS' -> 'SH02_00_UTILS_LIGHTS'
+        """
+        core, dot, rest = name.partition('.')
+        m = _SH_PREFIX_RE.match(core or "")
+        if m:
+            base = m.group(2)
+        else:
+            base = core
+        new_core = f"SH{idx:02d}_{base}" if base else f"SH{idx:02d}_"
+        return new_core + (dot + rest if dot else "")
 
     def clone_tree(src: bpy.types.Collection):
         dst_parent = coll_map[src]
         for child in src.children:
-            new_child = bpy.data.collections.new(child.name)
+            # New child name must adopt destination SH## prefix
+            new_name = _renamed_for_idx(child.name, dst_index)
+            new_child = bpy.data.collections.new(new_name)
             # Copy color tag if present
             try:
                 new_child.color_tag = child.color_tag
@@ -150,6 +172,17 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
         obj_to_colls[obj].append(coll)
 
     # Create duplicates (duplicate data for isolation: cameras/lights/rigs y otros)
+    _CAM_NAME_RE = re.compile(r"^SHOT_(\d{2,3})_CAMERA_(\d+)$")
+    _SHOBJ_PREFIX_RE = re.compile(r"^SH(\d{2,3})_(.+)$")
+
+    def _split_suffix(n: str) -> tuple[str, str]:
+        """Split Blender numeric suffix like '.001'. Return (core, suffix_with_dot_or_empty)."""
+        if not n:
+            return "", ""
+        core, dot, rest = n.rpartition('.')
+        if dot and rest.isdigit() and len(rest) == 3:
+            return core, "." + rest
+        return n, ""
     for src_obj, colls in obj_to_colls.items():
         dup = src_obj.copy()
         # Duplicate data for cameras/lights/rigs; duplicate others as well to keep shots isolated
@@ -164,6 +197,29 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
             mirrored = coll_map.get(c)
             if mirrored is not None:
                 mirrored.objects.link(dup)
+        # If it's a camera following our naming convention, update shot index in the name
+        try:
+            if getattr(dup, "type", None) == 'CAMERA':
+                raw = dup.name or ""
+                core, _suffix = _split_suffix(raw)
+                m = _CAM_NAME_RE.match(core)
+                if m:
+                    cam_idx = int(m.group(2))
+                    new_name = f"SHOT_{dst_index:02d}_CAMERA_{cam_idx}"
+                    dup.name = new_name
+                    if getattr(dup, "data", None) is not None:
+                        dup.data.name = new_name + ".Data"
+                else:
+                    # If follows SH##_ prefix, replace with new shot index while preserving rest
+                    m2 = _SHOBJ_PREFIX_RE.match(core)
+                    if m2:
+                        base = m2.group(2)
+                        new_name = f"SH{dst_index:02d}_{base}"
+                        dup.name = new_name
+                        if getattr(dup, "data", None) is not None:
+                            dup.data.name = new_name + ".Data"
+        except Exception:
+            pass
 
     # Phase 3: remap parenting and constraints to point inside the duplicated shot
     for src_obj, dup_obj in obj_map.items():

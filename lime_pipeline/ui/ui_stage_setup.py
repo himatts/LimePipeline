@@ -24,6 +24,7 @@ class LIME_PT_stage_setup(Panel):
         layout.label(text="Create scene elements")
         col = layout.column(align=True)
         col.operator("lime.add_camera_rig", text="Create Camera (Rig)", icon='OUTLINER_DATA_CAMERA')
+        col.operator("lime.import_layout", text="Import Layout", icon='APPEND_BLEND')
         # Placeholders for future utilities
         row = layout.row(align=True)
         row.enabled = False
@@ -42,5 +43,4 @@ class LIME_PT_stage_setup(Panel):
 __all__ = [
     "LIME_PT_stage_setup",
 ]
-
 

@@ -36,6 +36,9 @@ from .ops.ops_proposal_view import (
     LIME_OT_take_all_pv_shots,
     LIME_OT_add_camera_rig,
 )
+from .ops.ops_import_layout import (
+    LIME_OT_import_layout,
+)
 
 
 classes = (
@@ -50,6 +53,7 @@ classes = (
     LIME_OT_take_pv_shot,
     LIME_OT_take_all_pv_shots,
     LIME_OT_add_camera_rig,
+    LIME_OT_import_layout,
     LIME_PT_project_org,
     LIME_PT_internal_setup,
     LIME_PT_proposal_view,
