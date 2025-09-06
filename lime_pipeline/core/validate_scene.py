@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Optional, Tuple, List
+import re
 
 import bpy
 
@@ -105,5 +106,28 @@ def can_duplicate_shot(ctx) -> Tuple[bool, str]:
     if active_shot_context(ctx) is not None:
         return True, ""
     return False, "Active una colección dentro de un 'SHOT ##' para duplicar."
+
+def get_shot_child_by_basename(shot: bpy.types.Collection, base_name: str) -> Optional[bpy.types.Collection]:
+    """Return direct child collection of shot whose name matches base_name ignoring numeric suffixes.
+
+    Example: base_name='00_UTILS_CAM' will match children named '00_UTILS_CAM', '00_UTILS_CAM.001', etc.
+    """
+    if shot is None or not base_name:
+        return None
+    for child in shot.children:
+        name = child.name or ""
+        # Strip numeric suffix like ".001"
+        core = name.split('.', 1)[0]
+        # If prefixed with SH##_ remove it
+        if core.startswith("SH") and '_' in core:
+            try:
+                after = core.split('_', 1)[1]
+            except Exception:
+                after = core
+            core = after
+        if core == base_name:
+            return child
+    return None
+
 
 

@@ -29,6 +29,30 @@ class LimePipelineState(PropertyGroup):
     custom_name: StringProperty(name="Custom Project Name", description="Letters/digits only; will be normalized to TitleCase")
     preview_name: StringProperty(name="Preview Name", options={'HIDDEN'})
     preview_path: StringProperty(name="Preview Path", subtype='FILE_PATH', options={'HIDDEN'})
+    # Dynamic camera selection for Proposal Views
+    def _camera_items(self, context):
+        try:
+            from .core import validate_scene
+            from .data import templates
+        except Exception:
+            return [("NONE", "No Camera", "", 0)]
+        items = []
+        try:
+            shot = validate_scene.active_shot_context(context)
+            if shot is not None:
+                base = getattr(templates, "C_UTILS_CAM", "00_UTILS_CAM")
+                cam_coll = validate_scene.get_shot_child_by_basename(shot, base)
+                if cam_coll is not None:
+                    cams = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
+                    # Stable order by name
+                    cams.sort(key=lambda o: o.name)
+                    for idx, cam in enumerate(cams, 1):
+                        items.append((cam.name, f"Cam {idx}: {cam.name}", "", idx))
+        except Exception:
+            pass
+        return items or [("NONE", "No Camera", "", 0)]
+
+    selected_camera: EnumProperty(name="Camera", items=_camera_items)
 
 
 def register():

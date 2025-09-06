@@ -21,10 +21,12 @@ def make_collection(parent: bpy.types.Collection, name: str) -> bpy.types.Collec
     return _ensure_child(parent, name)
 
 
-def _apply_tree(parent: bpy.types.Collection, node: dict, project_name: str) -> None:
+def _apply_tree(parent: bpy.types.Collection, node: dict, project_name: str, shot_idx: int) -> None:
     raw_name = node.get("name", "")
     name = raw_name.format(ProjectName=project_name)
-    coll = _ensure_child(parent, name)
+    # Prefix with SH##_ for ALL subtree levels using provided root shot index
+    prefixed = f"SH{shot_idx:02d}_{name}" if shot_idx else name
+    coll = _ensure_child(parent, prefixed)
     color = node.get("color_tag")
     if color:
         try:
@@ -37,12 +39,13 @@ def _apply_tree(parent: bpy.types.Collection, node: dict, project_name: str) -> 
         except Exception:
             pass
     for child in node.get("children", []) or []:
-        _apply_tree(coll, child, project_name)
+        _apply_tree(coll, child, project_name, shot_idx)
 
 
 def ensure_shot_tree(root: bpy.types.Collection, project_name: str) -> None:
+    shot_idx = parse_shot_index(root.name) or 0
     for node in SHOT_TREE:
-        _apply_tree(root, node, project_name)
+        _apply_tree(root, node, project_name, shot_idx)
 
 
 def _format_shot_name(index: int) -> str:
