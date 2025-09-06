@@ -2,6 +2,7 @@ import bpy
 from bpy.types import Panel
 
 from ..core import validate_scene
+from ..core.naming import detect_ptype_from_filename
 from ..data.templates import C_UTILS_CAM
 
 
@@ -21,9 +22,15 @@ class LIME_PT_proposal_view(Panel):
         st = getattr(ctx.window_manager, "lime_pipeline", None)
         if st is None:
             return False
-        if getattr(st, "project_type", None) != 'PV':
+        # Only enable when current saved .blend filename matches PV type
+        try:
+            is_saved = bool(bpy.data.filepath)
+        except Exception:
+            is_saved = False
+        if not is_saved:
             return False
-        if not bpy.data.is_saved:
+        ptype = detect_ptype_from_filename(bpy.data.filepath)
+        if ptype != 'PV':
             return False
         return True
 

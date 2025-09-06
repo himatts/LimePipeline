@@ -75,3 +75,48 @@ def resolve_project_name(state) -> str:
     return normalize_project_name(base)
 
 
+# Central mapping between project type code and filename token
+# Kept here to avoid duplication and allow parsing from filenames.
+TOKENS_BY_PTYPE: dict[str, str] = {
+    'BASE': 'BaseModel',
+    'PV': 'PV',
+    'REND': 'Render',
+    'SB': 'SB',
+    'ANIM': 'Anim',
+    'TMP': 'Tmp',
+}
+
+PTYPE_BY_TOKEN: dict[str, str] = {v: k for k, v in TOKENS_BY_PTYPE.items()}
+
+
+def detect_ptype_from_filename(path_or_name: str) -> str | None:
+    """Detect the Lime Pipeline project type code from a .blend filename.
+
+    Returns one of {'BASE','PV','REND','SB','ANIM','TMP'} or None if not matching
+    the canonical naming scheme produced by make_filename().
+    """
+    try:
+        name = Path(path_or_name).name
+    except Exception:
+        name = str(path_or_name or "")
+
+    # Strip extension if present
+    if name.lower().endswith('.blend'):
+        name = name[:-6]
+
+    # Patterns:
+    # With SC: <ProjectName>_(PV|Render|SB|Anim)_SC###_Rev_X
+    # No SC:  <ProjectName>_(BaseModel|Tmp)_Rev_X
+    m_sc = re.match(r"^(.+?)_(PV|Render|SB|Anim)_SC(\d{3})_Rev_([A-Z])$", name)
+    if m_sc:
+        token = m_sc.group(2)
+        return PTYPE_BY_TOKEN.get(token)
+
+    m_nosc = re.match(r"^(.+?)_(BaseModel|Tmp)_Rev_([A-Z])$", name)
+    if m_nosc:
+        token = m_nosc.group(2)
+        return PTYPE_BY_TOKEN.get(token)
+
+    return None
+
+

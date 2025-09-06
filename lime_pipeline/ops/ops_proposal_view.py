@@ -7,7 +7,7 @@ import re
 
 from ..core import validate_scene
 from ..core.paths import paths_for_type
-from ..core.naming import resolve_project_name
+from ..core.naming import resolve_project_name, detect_ptype_from_filename
 from ..data.templates import C_UTILS_CAM
 
 
@@ -41,13 +41,14 @@ class LIME_OT_proposal_view_config(Operator):
         st = getattr(ctx.window_manager, "lime_pipeline", None)
         if st is None:
             return False
-        if getattr(st, "project_type", None) != 'PV':
-            return False
+        # Only when current file is saved and is a PV file
         try:
             is_saved = bool(bpy.data.filepath)
         except Exception:
             is_saved = False
         if not is_saved:
+            return False
+        if detect_ptype_from_filename(bpy.data.filepath) != 'PV':
             return False
         return True
 
@@ -105,13 +106,15 @@ class LIME_OT_take_pv_shot(Operator):
     @classmethod
     def poll(cls, ctx):
         st = getattr(ctx.window_manager, "lime_pipeline", None)
-        if st is None or getattr(st, "project_type", None) != 'PV':
+        if st is None:
             return False
         try:
             is_saved = bool(bpy.data.filepath)
         except Exception:
             is_saved = False
         if not is_saved:
+            return False
+        if detect_ptype_from_filename(bpy.data.filepath) != 'PV':
             return False
         shot = validate_scene.active_shot_context(ctx)
         if shot is None:
@@ -206,13 +209,15 @@ class LIME_OT_take_all_pv_shots(Operator):
     @classmethod
     def poll(cls, ctx):
         st = getattr(ctx.window_manager, "lime_pipeline", None)
-        if st is None or getattr(st, "project_type", None) != 'PV':
+        if st is None:
             return False
         try:
             is_saved = bool(bpy.data.filepath)
         except Exception:
             is_saved = False
         if not is_saved:
+            return False
+        if detect_ptype_from_filename(bpy.data.filepath) != 'PV':
             return False
         shots = validate_scene.list_shot_roots(ctx.scene)
         if not shots:

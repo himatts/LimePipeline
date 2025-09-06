@@ -3,7 +3,7 @@ from bpy.types import Operator
 
 from ..core import validate_scene
 from ..core.naming import resolve_project_name
-from ..scene.scene_utils import create_shot, instance_shot, duplicate_shot
+from ..scene.scene_utils import create_shot, instance_shot, duplicate_shot, ensure_shot_tree
 
 
 class LIME_OT_new_shot(Operator):

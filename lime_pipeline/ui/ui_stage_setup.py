@@ -11,7 +11,7 @@ class LIME_PT_stage_setup(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT
-    bl_label = "Escenario"
+    bl_label = "Stage"
     bl_idname = "LIME_PT_stage_setup"
     bl_order = 3
 
@@ -21,22 +21,22 @@ class LIME_PT_stage_setup(Panel):
 
     def draw(self, ctx):
         layout = self.layout
-        layout.label(text="Crear elementos de escena")
+        layout.label(text="Create scene elements")
         col = layout.column(align=True)
-        col.operator("lime.add_camera_rig", text="Crear Cámara (Rig)", icon='OUTLINER_DATA_CAMERA')
-        # Placeholders para futuras utilidades
+        col.operator("lime.add_camera_rig", text="Create Camera (Rig)", icon='OUTLINER_DATA_CAMERA')
+        # Placeholders for future utilities
         row = layout.row(align=True)
         row.enabled = False
-        row.operator("wm.call_menu", text="Background para Cámara", icon='IMAGE_DATA')
+        row.operator("wm.call_menu", text="Camera Background", icon='IMAGE_DATA')
         row = layout.row(align=True)
         row.enabled = False
-        row.operator("wm.call_menu", text="Set básico", icon='MESH_GRID')
+        row.operator("wm.call_menu", text="Basic Set", icon='MESH_GRID')
         row = layout.row(align=True)
         row.enabled = False
-        row.operator("wm.call_menu", text="Luz Main", icon='LIGHT')
+        row.operator("wm.call_menu", text="Main Light", icon='LIGHT')
         row = layout.row(align=True)
         row.enabled = False
-        row.operator("wm.call_menu", text="Luz Aux", icon='LIGHT')
+        row.operator("wm.call_menu", text="Aux Light", icon='LIGHT')
 
 
 __all__ = [

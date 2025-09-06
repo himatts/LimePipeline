@@ -47,4 +47,9 @@ class LIME_PT_internal_setup(Panel):
             hint = layout.row(align=True)
             hint.label(text=msg_d, icon='INFO')
 
+        # Add Missing Collections
+        row = layout.row(align=True)
+        row.enabled = validate_scene.active_shot_context(ctx) is not None
+        row.operator("lime.add_missing_collections", text="Add Missing Collections", icon='FILE_REFRESH')
+
 

@@ -27,6 +27,9 @@ from .ops.ops_shots import (
     LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
 )
+from .ops.ops_add_missing import (
+    LIME_OT_add_missing_collections,
+)
 from .ops.ops_proposal_view import (
     LIME_OT_proposal_view_config,
     LIME_OT_take_pv_shot,
@@ -54,6 +57,7 @@ classes = (
     LIME_OT_new_shot,
     LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
+    LIME_OT_add_missing_collections,
 )
 
 
