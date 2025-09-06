@@ -25,7 +25,7 @@ class LIME_PT_stage_setup(Panel):
         col = layout.column(align=True)
         col.operator("lime.add_camera_rig", text="Create Camera (Rig)", icon='OUTLINER_DATA_CAMERA')
         col.operator("lime.import_layout", text="Import Layout", icon='APPEND_BLEND')
-        # Placeholders for future utilities
+        # Utilities
         row = layout.row(align=True)
         row.enabled = False
         row.operator("wm.call_menu", text="Camera Background", icon='IMAGE_DATA')
@@ -33,14 +33,11 @@ class LIME_PT_stage_setup(Panel):
         row.enabled = False
         row.operator("wm.call_menu", text="Basic Set", icon='MESH_GRID')
         row = layout.row(align=True)
-        row.enabled = False
-        row.operator("wm.call_menu", text="Main Light", icon='LIGHT')
+        row.operator("lime.stage_main_light", text="Main Light", icon='LIGHT')
         row = layout.row(align=True)
-        row.enabled = False
-        row.operator("wm.call_menu", text="Aux Light", icon='LIGHT')
+        row.operator("lime.stage_aux_light", text="Aux Light", icon='LIGHT')
 
 
 __all__ = [
     "LIME_PT_stage_setup",
 ]
-

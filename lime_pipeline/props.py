@@ -19,6 +19,17 @@ PROJECT_TYPES = [
 ]
 
 
+def _on_selected_camera_update(self, context):
+    try:
+        name = getattr(self, "selected_camera", "") or ""
+        if name and name != "NONE":
+            cam = bpy.data.objects.get(name)
+            if cam is not None and getattr(cam, "type", None) == 'CAMERA':
+                context.scene.camera = cam
+    except Exception:
+        pass
+
+
 class LimePipelineState(PropertyGroup):
     project_root: StringProperty(name="Project Root", subtype='DIR_PATH', description="Select the project root folder named 'XX-##### Project Name'")
     project_type: EnumProperty(name="Project Type", items=PROJECT_TYPES, default='REND', description="Type of project work: affects naming and target folders")
@@ -52,7 +63,7 @@ class LimePipelineState(PropertyGroup):
             pass
         return items or [("NONE", "No Camera", "", 0)]
 
-    selected_camera: EnumProperty(name="Camera", items=_camera_items)
+    selected_camera: EnumProperty(name="Camera", items=_camera_items, update=_on_selected_camera_update)
 
 
 def register():

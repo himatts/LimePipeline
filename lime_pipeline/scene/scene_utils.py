@@ -197,11 +197,11 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
             mirrored = coll_map.get(c)
             if mirrored is not None:
                 mirrored.objects.link(dup)
-        # If it's a camera following our naming convention, update shot index in the name
+        # Update name to reflect new SHOT index, preserving numeric suffix when applicable
         try:
+            raw = dup.name or ""
+            core, suffix = _split_suffix(raw)
             if getattr(dup, "type", None) == 'CAMERA':
-                raw = dup.name or ""
-                core, _suffix = _split_suffix(raw)
                 m = _CAM_NAME_RE.match(core)
                 if m:
                     cam_idx = int(m.group(2))
@@ -210,14 +210,22 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
                     if getattr(dup, "data", None) is not None:
                         dup.data.name = new_name + ".Data"
                 else:
-                    # If follows SH##_ prefix, replace with new shot index while preserving rest
+                    # Fall back to generic SH##_ rename if matches that scheme
                     m2 = _SHOBJ_PREFIX_RE.match(core)
                     if m2:
                         base = m2.group(2)
-                        new_name = f"SH{dst_index:02d}_{base}"
+                        new_name = f"SH{dst_index:02d}_{base}{suffix}"
                         dup.name = new_name
                         if getattr(dup, "data", None) is not None:
                             dup.data.name = new_name + ".Data"
+            else:
+                m2 = _SHOBJ_PREFIX_RE.match(core)
+                if m2:
+                    base = m2.group(2)
+                    new_name = f"SH{dst_index:02d}_{base}{suffix}"
+                    dup.name = new_name
+                    if getattr(dup, "data", None) is not None:
+                        dup.data.name = new_name + ".Data"
         except Exception:
             pass
 
