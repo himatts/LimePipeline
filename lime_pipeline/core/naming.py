@@ -120,3 +120,82 @@ def detect_ptype_from_filename(path_or_name: str) -> str | None:
     return None
 
 
+def parse_blend_details(path_or_name: str) -> dict | None:
+    """Parse key metadata from a .blend filename following Lime naming.
+
+    Returns dict with keys: {
+        'project_name': str,
+        'ptype': str | None,  # 'BASE','PV','REND','SB','ANIM','TMP'
+        'sc': int | None,
+        'rev': str | None,   # single uppercase letter
+    } or None if not parseable.
+    """
+    try:
+        name = Path(path_or_name).name
+    except Exception:
+        name = str(path_or_name or "")
+    if not name:
+        return None
+    if name.lower().endswith('.blend'):
+        name = name[:-6]
+
+    # With SC: <ProjectName>_(PV|Render|SB|Anim)_SC###_Rev_X
+    m_sc = re.match(r"^(.+?)_(PV|Render|SB|Anim)_SC(\d{3})_Rev_([A-Z])$", name)
+    if m_sc:
+        return {
+            'project_name': m_sc.group(1),
+            'ptype': PTYPE_BY_TOKEN.get(m_sc.group(2)),
+            'sc': int(m_sc.group(3)),
+            'rev': m_sc.group(4),
+        }
+
+    # No SC:  <ProjectName>_(BaseModel|Tmp)_Rev_X
+    m_nosc = re.match(r"^(.+?)_(BaseModel|Tmp)_Rev_([A-Z])$", name)
+    if m_nosc:
+        return {
+            'project_name': m_nosc.group(1),
+            'ptype': PTYPE_BY_TOKEN.get(m_nosc.group(2)),
+            'sc': None,
+            'rev': m_nosc.group(3),
+        }
+    return None
+
+
+def hydrate_state_from_filepath(state) -> None:
+    """Populate WindowManager LimePipelineState from current .blend filepath when possible.
+
+    Sets: project_root, project_type, rev_letter, sc_number if not already set.
+    Safe no-op on errors.
+    """
+    try:
+        import bpy  # local import to avoid hard dependency at module import time
+        from pathlib import Path as _P
+        blend_path = _P(getattr(bpy.data, 'filepath', '') or '')
+        if not blend_path:
+            return
+        info = parse_blend_details(blend_path.name)
+        if info:
+            if not getattr(state, 'project_type', None) and info.get('ptype'):
+                state.project_type = info['ptype']
+            if not getattr(state, 'rev_letter', None) and info.get('rev'):
+                state.rev_letter = info['rev']
+            try:
+                current_sc = int(getattr(state, 'sc_number', 0) or 0)
+            except Exception:
+                current_sc = 0
+            if current_sc == 0 and info.get('sc') is not None:
+                state.sc_number = int(info['sc'])
+
+        # Deduce project_root from folder structure: <root>/2. Graphic & Media/3. Rendering-Animation-Video/...
+        gm = None
+        for parent in blend_path.parents:
+            if parent.name == '2. Graphic & Media':
+                gm = parent
+                break
+        if gm is not None and not getattr(state, 'project_root', None):
+            root = gm.parent
+            state.project_root = str(root)
+    except Exception:
+        pass
+
+

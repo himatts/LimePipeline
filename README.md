@@ -9,7 +9,7 @@ De forma práctica, el add-on:
 - Presenta dos paneles simples en el Sidebar para flujo de archivos y preparación interna de la escena.
 
 - Target: Blender 4.5 LTS
-- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Internal Setup
+- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Shots
 - Preferencias: Edit > Preferences > Add-ons > Lime Pipeline
 
 ## Estructura del paquete `lime_pipeline/`
@@ -30,7 +30,7 @@ De forma práctica, el add-on:
   - otros: pick root, folders, create file, backup
 - `ui/`: paneles
   - `ui_project_org.py`: Project Organization (archivos)
-  - `ui_internal_setup.py`: Internal Setup (escena/colecciones)
+  - `ui_shots.py`: Shots (escena/colecciones)
 
 ## Instalación local para pruebas
 

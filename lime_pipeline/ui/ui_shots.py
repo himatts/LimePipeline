@@ -7,12 +7,12 @@ from ..core import validate_scene
 CAT = "Lime Pipeline"
 
 
-class LIME_PT_internal_setup(Panel):
+class LIME_PT_shots(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT
-    bl_label = "Internal Setup"
-    bl_idname = "LIME_PT_internal_setup"
+    bl_label = "Shots"
+    bl_idname = "LIME_PT_shots"
     bl_order = 1
 
     def draw(self, ctx):

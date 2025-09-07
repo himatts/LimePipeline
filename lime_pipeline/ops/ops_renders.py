@@ -4,19 +4,68 @@ from bpy.types import Operator
 from pathlib import Path
 
 from ..core.paths import paths_for_type
-from ..core.naming import resolve_project_name, detect_ptype_from_filename
+from ..core.naming import (
+    resolve_project_name,
+    detect_ptype_from_filename,
+    parse_blend_details,
+    hydrate_state_from_filepath,
+)
 from ..core import validate_scene
 from ..data.templates import C_UTILS_CAM
 
 
 def _get_editables_dir(state) -> Path:
-    root = Path(getattr(state, "project_root", "") or "")
+    # Try to hydrate state from current file if fields are missing
+    hydrate_state_from_filepath(state)
+    root_str = getattr(state, "project_root", "") or ""
+    if not root_str:
+        raise RuntimeError("Project Root no configurado. Ve a Project Org y selecciona la carpeta raíz.")
+    root = Path(root_str)
     rev = (getattr(state, "rev_letter", "") or "").upper()
+    if not rev or len(rev) != 1 or not ('A' <= rev <= 'Z'):
+        raise RuntimeError("Rev inválido. Define una letra de revisión (A–Z) en Project Org.")
     sc = getattr(state, "sc_number", None)
     _ramv, folder_type, _scenes, _target, _backups = paths_for_type(root, 'REND', rev, sc)
     editables_dir = folder_type / "editables"
     editables_dir.mkdir(parents=True, exist_ok=True)
     return editables_dir
+
+
+def _resolve_prj_rev_sc(state):
+    """Resolve (project_name, sc_number, rev_letter) prioritizing current .blend filename.
+
+    - Prefer parse from `bpy.data.filepath` via parse_blend_details()
+    - Fallback to WindowManager state for any missing component
+    """
+    project_name = None
+    rev = None
+    sc = None
+
+    try:
+        info = parse_blend_details(bpy.data.filepath or "")
+        if info:
+            project_name = info.get('project_name') or None
+            rev = info.get('rev') or None
+            sc = info.get('sc') if info.get('sc') is not None else None
+    except Exception:
+        pass
+
+    if not project_name:
+        try:
+            project_name = resolve_project_name(state)
+        except Exception:
+            project_name = "Project"
+    if rev is None:
+        try:
+            rev = (getattr(state, "rev_letter", "") or "").upper() or None
+        except Exception:
+            rev = None
+    if sc is None:
+        try:
+            sc = int(getattr(state, "sc_number", 0) or 0)
+        except Exception:
+            sc = 0
+    return project_name, sc, (rev or "")
 
 
 class LIME_OT_render_config(Operator):
@@ -224,7 +273,7 @@ class LIME_OT_render_shot(Operator):
             self.report({'ERROR'}, f"Cámara '{cam_name}' no encontrada")
             return {'CANCELLED'}
 
-        project_name = resolve_project_name(st)
+        project_name, sc_number, rev = _resolve_prj_rev_sc(st)
         shot_idx = validate_scene.parse_shot_index(shot.name) or 0
         cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
         cameras.sort(key=lambda o: o.name)
@@ -233,21 +282,48 @@ class LIME_OT_render_shot(Operator):
             if c.name == cam_obj.name:
                 cam_index = i
                 break
-        sc_number = getattr(st, "sc_number", 0) or 0
-        rev = (getattr(st, "rev_letter", "") or "").upper()
         filename = f"{project_name}_Render_SH{shot_idx:02d}C{cam_index}_SC{sc_number:03d}_Rev_{rev}.png"
 
-        editables_dir = _get_editables_dir(st)
+        try:
+            editables_dir = _get_editables_dir(st)
+        except Exception as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
         image_path = editables_dir / filename
 
         original_camera = scene.camera
         orig_path = scene.render.filepath
         try:
             scene.camera = cam_obj
-            scene.render.filepath = str(image_path.with_suffix(''))
-            bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+            # Ensure extension handling and overwrite
+            try:
+                scene.render.use_file_extension = True
+                scene.render.use_overwrite = True
+            except Exception:
+                pass
+            # Ensure output includes filename + extension explicitly
+            # and normalize slashes for Blender on Windows
+            out_full = str(image_path).replace('\\', '/')
+            # Ensure PNG format in case config wasn't applied
+            try:
+                scene.render.image_settings.file_format = 'PNG'
+                scene.render.image_settings.color_mode = 'RGBA'
+            except Exception:
+                pass
+            scene.render.filepath = out_full
+            restore_output = True
+            try:
+                res = bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+                # When INVOKE_DEFAULT is used, Blender may render asynchronously.
+                # Avoid restoring filepath immediately to prevent saving as ".png" in folder.
+                if res and 'CANCELLED' not in res:
+                    restore_output = False
+            except RuntimeError:
+                bpy.ops.render.render(write_still=True)
+            finally:
+                if restore_output:
+                    scene.render.filepath = orig_path
         finally:
-            scene.render.filepath = orig_path
             scene.camera = original_camera
 
         self.report({'INFO'}, f"Render guardado: {filename}")
@@ -284,10 +360,12 @@ class LIME_OT_render_all(Operator):
         st = wm.lime_pipeline
         scene = context.scene
 
-        project_name = resolve_project_name(st)
-        sc_number = getattr(st, "sc_number", 0) or 0
-        rev = (getattr(st, "rev_letter", "") or "").upper()
-        editables_dir = _get_editables_dir(st)
+        project_name, sc_number, rev = _resolve_prj_rev_sc(st)
+        try:
+            editables_dir = _get_editables_dir(st)
+        except Exception as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
 
         original_camera = scene.camera
 
@@ -308,8 +386,20 @@ class LIME_OT_render_all(Operator):
                 orig_path = scene.render.filepath
                 try:
                     scene.camera = cam_obj
-                    scene.render.filepath = str(image_path.with_suffix(''))
-                    bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+                    try:
+                        scene.render.use_file_extension = True
+                        scene.render.use_overwrite = True
+                    except Exception:
+                        pass
+                    out_full = str(image_path).replace('\\', '/')
+                    try:
+                        scene.render.image_settings.file_format = 'PNG'
+                        scene.render.image_settings.color_mode = 'RGBA'
+                    except Exception:
+                        pass
+                    scene.render.filepath = out_full
+                    # For batch renders, use blocking call to ensure correct filenames per camera
+                    bpy.ops.render.render(write_still=True)
                 finally:
                     scene.render.filepath = orig_path
 

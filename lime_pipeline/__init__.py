@@ -14,11 +14,13 @@ import bpy
 from .prefs import LimePipelinePrefs
 from .props import register as register_props, unregister as unregister_props
 from .ui import LIME_PT_project_org
-from .ui import LIME_PT_internal_setup
+from .ui import LIME_PT_shots
 from .ui import LIME_PT_proposal_view
+from .ui import LIME_PT_renders
 from .ui import LIME_PT_stage_setup
 from .ops.ops_select_root import LIME_OT_pick_root
 from .ops.ops_folders import LIME_OT_ensure_folders, LIME_OT_open_folder
+from .ops.ops_folders import LIME_OT_open_output_folder
 from .ops.ops_create_file import LIME_OT_create_file
 from .ops.ops_backup import LIME_OT_create_backup
 from .ops.ops_tooltips import LIME_OT_show_text
@@ -39,6 +41,11 @@ from .ops.ops_proposal_view import (
 from .ops.ops_import_layout import (
     LIME_OT_import_layout,
 )
+from .ops.ops_renders import (
+    LIME_OT_render_config,
+    LIME_OT_render_shot,
+    LIME_OT_render_all,
+)
 from .ops.ops_stage import (
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
@@ -50,6 +57,7 @@ classes = (
     LIME_OT_pick_root,
     LIME_OT_ensure_folders,
     LIME_OT_open_folder,
+    LIME_OT_open_output_folder,
     LIME_OT_create_file,
     LIME_OT_create_backup,
     LIME_OT_show_text,
@@ -58,11 +66,15 @@ classes = (
     LIME_OT_take_all_pv_shots,
     LIME_OT_add_camera_rig,
     LIME_OT_import_layout,
+    LIME_OT_render_config,
+    LIME_OT_render_shot,
+    LIME_OT_render_all,
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
     LIME_PT_project_org,
-    LIME_PT_internal_setup,
+    LIME_PT_shots,
     LIME_PT_proposal_view,
+    LIME_PT_renders,
     LIME_PT_stage_setup,
     LIME_OT_new_shot,
     LIME_OT_shot_instance,
