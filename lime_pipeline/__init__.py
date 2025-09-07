@@ -9,6 +9,7 @@ bl_info = {
 }
 
 import bpy
+from bpy.app.handlers import persistent
 
 # Registration is centralized here to keep imports stable for future growth
 from .prefs import LimePipelinePrefs
@@ -50,6 +51,10 @@ from .ops.ops_stage import (
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
 )
+from .ops.ops_rev import (
+    LIME_OT_rev_prev,
+    LIME_OT_rev_next,
+)
 
 
 classes = (
@@ -80,6 +85,8 @@ classes = (
     LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
     LIME_OT_add_missing_collections,
+    LIME_OT_rev_prev,
+    LIME_OT_rev_next,
 )
 
 
@@ -87,11 +94,34 @@ def register():
     register_props()
     for cls in classes:
         bpy.utils.register_class(cls)
+    # Register load handler to hydrate state on file load
+    if _on_load_post not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_on_load_post)
 
 
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     unregister_props()
+    try:
+        bpy.app.handlers.load_post.remove(_on_load_post)
+    except Exception:
+        pass
+
+
+@persistent
+def _on_load_post(dummy):
+    try:
+        st = bpy.context.window_manager.lime_pipeline
+    except Exception:
+        st = None
+    if st is None:
+        return
+    try:
+        # Forcefully hydrate from the current .blend filepath
+        from .core.naming import hydrate_state_from_filepath
+        hydrate_state_from_filepath(st, force=True)
+    except Exception:
+        pass
 
 

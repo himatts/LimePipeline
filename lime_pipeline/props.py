@@ -33,7 +33,30 @@ def _on_selected_camera_update(self, context):
 class LimePipelineState(PropertyGroup):
     project_root: StringProperty(name="Project Root", subtype='DIR_PATH', description="Select the project root folder named 'XX-##### Project Name'")
     project_type: EnumProperty(name="Project Type", items=PROJECT_TYPES, default='REND', description="Type of project work: affects naming and target folders")
-    rev_letter: StringProperty(name="Rev", maxlen=1, description="Revision letter A–Z")
+    # Sync helpers between letter and index
+    def _on_rev_index_update(self, context):
+        # Prevent recursive update loops when syncing with rev_letter
+        if getattr(self, "_updating_rev", False):
+            return
+        try:
+            setattr(self, "_updating_rev", True)
+            idx = int(getattr(self, "rev_index", 1))
+            if idx < 1:
+                idx = 1
+            if idx > 26:
+                idx = 26
+            self.rev_letter = chr(ord('A') + (idx - 1))
+        except Exception:
+            pass
+        finally:
+            setattr(self, "_updating_rev", False)
+
+    # Note: rev_letter is the source-of-truth value used elsewhere in the addon.
+    # We only update rev_letter when rev_index changes (one-way sync) to avoid
+    # recursive update loops.
+
+    rev_letter: StringProperty(name="Rev", default="A", maxlen=1, description="Revision letter A–Z")
+    rev_index: IntProperty(name="Rev", default=1, min=1, max=26, step=1, description="Revision as stepper (A–Z)", update=_on_rev_index_update)
     sc_number: IntProperty(name="SC", default=10, min=1, max=999, step=10, description="Scene number (001–999). Suggested multiples of Scene Step")
     free_scene_numbering: BoolProperty(name="Free SC numbering", default=False, description="Allow any scene number; ignore Scene Step multiple rule")
     use_custom_name: BoolProperty(name="Use Custom Name", default=False, description="Override project name derived from root folder")

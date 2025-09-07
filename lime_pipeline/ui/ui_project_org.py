@@ -25,66 +25,82 @@ class LIME_PT_project_org(Panel):
         row = box.row(align=True)
         row.prop(st, "project_root", text="Project Root")
 
-        box.prop(st, "project_type", text="Project Type")
-        box.prop(st, "rev_letter", text="Revision (A–Z)")
+        # Vertical layout: Type, Rev (letters), Scene; labels left-aligned
+        row = box.row(align=True)
+        col_left = row.column(align=True)
+        col_right = row.column(align=True)
+
+        # Labels
+        col_left.label(text="Type")
+        col_left.label(text="Rev")
+        col_left.label(text="Scene")
+
+        # Controls
+        col_right.prop(st, "project_type", text="")
+        rev_row = col_right.row(align=True)
+        # Show letter read-only with prev/next arrows
+        letter_val = (getattr(st, 'rev_letter', '') or 'A').strip().upper()
+        if not letter_val or not ('A' <= letter_val[0] <= 'Z'):
+            letter_val = 'A'
+        rev_row.label(text=letter_val[0])
+        op_prev = rev_row.operator("lime.rev_prev", text="", icon='TRIA_LEFT')
+        op_next = rev_row.operator("lime.rev_next", text="", icon='TRIA_RIGHT')
 
         needs_sc = st.project_type not in {'BASE', 'TMP'}
-        row = box.row(align=True)
-        row.enabled = needs_sc
-        row.prop(st, "sc_number", text="Scene #")
-        row.prop(st, "free_scene_numbering", text="Free numbering", toggle=True)
+        sc_row = col_right.row(align=True)
+        sc_row.enabled = needs_sc
+        sc_row.prop(st, "sc_number", text="")
 
-        row = box.row(align=True)
-        row.prop(st, "use_custom_name", text="Custom Project Name", toggle=True)
-        sub = row.row(align=True)
+        # Toggles on same row with shorter labels
+        row_toggle = box.row(align=True)
+        row_toggle.enabled = needs_sc
+        row_toggle.prop(st, "free_scene_numbering", text="Free numbering", toggle=True)
+        row_toggle.prop(st, "use_custom_name", text="Custom name", toggle=True)
+
+        # Optional custom name field below
+        sub = box.row(align=True)
         sub.enabled = st.use_custom_name
         sub.prop(st, "custom_name", text="Name")
 
-        box2 = layout.box()
-        box2.label(text="Status & Preview")
+        # Compute preview/status once
         from ..core.validate import validate_all
         ok, errors, warns, filename, target_path, backups = validate_all(st, prefs)
+
+        # File Preview box simplified: show only filename on a single row
+        box_preview = layout.box()
+        box_preview.label(text="File Preview")
+        row_fn = box_preview.row(align=True)
+        row_fn.alignment = 'LEFT'
+        row_fn.label(text=(filename or ""))
+
+        # Status box (checks/avisos)
+        box_status = layout.box()
+        box_status.label(text="Status")
         icon = 'CHECKMARK' if ok else 'ERROR'
-        box2.label(text=("Ready to save" if ok else "Not ready"), icon=icon)
+        box_status.label(text=("Ready to save" if ok else "Not ready"), icon=icon)
         if not ok:
             for e in errors:
-                row = box2.row(align=True)
+                row = box_status.row(align=True)
                 row.alignment = 'LEFT'
                 row.label(text="", icon='CANCEL')
                 op = row.operator("lime.show_text", text=e, emboss=False)
                 op.text = e
         for w in warns:
-            row = box2.row(align=True)
+            row = box_status.row(align=True)
             row.alignment = 'LEFT'
             row.label(text="", icon='ERROR')
             op = row.operator("lime.show_text", text=w, emboss=False)
             op.text = w
 
-        split = box2.split(factor=0.22, align=True)
-        split.label(text="Final Path:")
-        right = split.row(align=True)
-        right.alignment = 'LEFT'
-        right.label(text=(str(target_path) if target_path else ""))
-        op = right.operator("lime.show_text", text="", icon='COPYDOWN', emboss=False)
-        op.text = str(target_path) if target_path else ""
-
-        split = box2.split(factor=0.22, align=True)
-        split.label(text="Filename:")
-        right = split.row(align=True)
-        right.alignment = 'LEFT'
-        right.label(text=(filename or ""))
-        op = right.operator("lime.show_text", text="", icon='COPYDOWN', emboss=False)
-        op.text = filename or ""
-
         box3 = layout.box()
         box3.label(text="Actions")
         row = box3.row()
         row.enabled = ok
-        row.operator("lime.create_file", text="Create file", icon='FILE_TICK')
+        row.operator("lime.create_file", text="Create .blend", icon='FILE_TICK')
         row = box3.row(align=True)
         row.operator("lime.create_backup", text="Create Backup", icon='DUPLICATE')
         row = box3.row(align=True)
-        row.operator("lime.ensure_folders", text="Create missing folders", icon='FILE_NEW')
-        row.operator("lime.open_folder", text="Open target folder", icon='FILE_FOLDER')
+        row.operator("lime.ensure_folders", text="Create Folders", icon='FILE_NEW')
+        row.operator("lime.open_folder", text="Open Folder", icon='FILE_FOLDER')
 
 

@@ -161,7 +161,7 @@ def parse_blend_details(path_or_name: str) -> dict | None:
     return None
 
 
-def hydrate_state_from_filepath(state) -> None:
+def hydrate_state_from_filepath(state, force: bool = False) -> None:
     """Populate WindowManager LimePipelineState from current .blend filepath when possible.
 
     Sets: project_root, project_type, rev_letter, sc_number if not already set.
@@ -175,15 +175,22 @@ def hydrate_state_from_filepath(state) -> None:
             return
         info = parse_blend_details(blend_path.name)
         if info:
-            if not getattr(state, 'project_type', None) and info.get('ptype'):
+            # Project type
+            if info.get('ptype') and (force or not getattr(state, 'project_type', None)):
                 state.project_type = info['ptype']
-            if not getattr(state, 'rev_letter', None) and info.get('rev'):
+            # Revision letter (+ keep rev_index in sync if present)
+            if info.get('rev') and (force or not getattr(state, 'rev_letter', None)):
                 state.rev_letter = info['rev']
+                try:
+                    state.rev_index = ord(info['rev']) - ord('A') + 1  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            # Scene number
             try:
                 current_sc = int(getattr(state, 'sc_number', 0) or 0)
             except Exception:
                 current_sc = 0
-            if current_sc == 0 and info.get('sc') is not None:
+            if info.get('sc') is not None and (force or current_sc == 0):
                 state.sc_number = int(info['sc'])
 
         # Deduce project_root from folder structure: <root>/2. Graphic & Media/3. Rendering-Animation-Video/...
@@ -192,7 +199,7 @@ def hydrate_state_from_filepath(state) -> None:
             if parent.name == '2. Graphic & Media':
                 gm = parent
                 break
-        if gm is not None and not getattr(state, 'project_root', None):
+        if gm is not None and (force or not getattr(state, 'project_root', None)):
             root = gm.parent
             state.project_root = str(root)
     except Exception:
