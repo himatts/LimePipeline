@@ -1,0 +1,24 @@
+# UI — Lime Toolbox (rules)
+
+## Purpose
+- The **Lime Toolbox** tab is the home for upcoming tools related to **animation** and **materials**.
+- Out of scope: touching saves/paths/renders logic.
+
+## Alignment
+- Keep UI text **in English**.
+- **Fast UI**: no blocking operations, keep draw lightweight.
+- **No IO or state mutation in `draw()`**.
+
+## Naming & Structure
+- Panels: `LIME_TB_PT_*`.
+- Operators: `LIME_TB_OT_*`, with `bl_idname = "lime.tb_*"`.
+- Keep Toolbox modules separate from Pipeline ones. If Toolbox needs properties later, create a dedicated `PropertyGroup` (e.g., `WindowManager.lime_toolbox`).
+
+## MVP Status
+- Placeholder only. No heavy logic. The button should only `report({'INFO'}, ...)`.
+
+## Acceptance Checklist
+- Add-on installs & enables without errors.
+- **Lime Toolbox** tab is visible in the Sidebar (N) within View3D.
+- Clicking **Do Nothing (WIP)** shows an INFO message.
+- Existing Lime Pipeline panels work unchanged.
