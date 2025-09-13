@@ -35,6 +35,62 @@ def _isolate_other_shots(scene, target_shot, include_all=False):
     return validate_scene.isolate_shots_temporarily(scene, target_shot, include_all)
 
 
+# Helper: rename the parent Armature of a camera using Lime naming
+_CAM_NAME_RE = re.compile(r"^SHOT_(\d{2,3})_CAMERA_(\d+)")
+
+
+def _rename_parent_armature_for_camera(cam_obj, shot_idx_hint: int | None = None, cam_idx_hint: int | None = None) -> None:
+    try:
+        if getattr(cam_obj, "type", None) != 'CAMERA':
+            return
+        # Determine indices from hints or from camera name
+        shot_idx = shot_idx_hint
+        cam_idx = cam_idx_hint
+        if shot_idx is None or cam_idx is None:
+            m = _CAM_NAME_RE.match(getattr(cam_obj, 'name', '') or '')
+            if m:
+                try:
+                    shot_idx = int(m.group(1)) if shot_idx is None else shot_idx
+                    cam_idx = int(m.group(2)) if cam_idx is None else cam_idx
+                except Exception:
+                    pass
+        if shot_idx is None or cam_idx is None:
+            return
+        sh_token = f"SH{shot_idx:02d}" if shot_idx < 100 else f"SH{shot_idx:03d}"
+        desired = f"CAM_RIG_{sh_token}_{cam_idx}"
+
+        # Find the highest Armature ancestor
+        arm = None
+        cur = getattr(cam_obj, 'parent', None)
+        while cur is not None:
+            try:
+                if getattr(cur, 'type', None) == 'ARMATURE':
+                    arm = cur
+                cur = getattr(cur, 'parent', None)
+            except Exception:
+                break
+        if arm is None:
+            return
+
+        # Ensure unique object name
+        final = desired
+        guard = 1
+        try:
+            while final in bpy.data.objects.keys() and bpy.data.objects[final] is not arm:
+                guard += 1
+                final = f"{desired}_{guard}"
+            arm.name = final
+            if getattr(arm, 'data', None) is not None:
+                try:
+                    arm.data.name = final + ".Data"
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 class LIME_OT_proposal_view_config(Operator):
     bl_idname = "lime.proposal_view_config"
     bl_label = "Proposal View Config"
@@ -409,6 +465,11 @@ class LIME_OT_add_camera_rig(Operator):
                         cam.name = target_name
                         if getattr(cam, "data", None) is not None:
                             cam.data.name = target_name + ".Data"
+                        # After camera rename, rename its parent Armature (rig)
+                        try:
+                            _rename_parent_armature_for_camera(cam, shot_idx_hint=shot_idx, cam_idx_hint=next_idx)
+                        except Exception:
+                            pass
                         next_idx += 1
                     except Exception as ex:
                         print(f"[LimePV] Simple rename error: {ex}")

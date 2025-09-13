@@ -58,6 +58,60 @@ def _resolve_prj_rev_sc(state):
     return project_name, sc, (rev or "")
 
 
+# Helper: rename the parent Armature of a camera using Lime naming
+import re
+_CAM_NAME_RE = re.compile(r"^SHOT_(\d{2,3})_CAMERA_(\d+)")
+
+
+def _rename_parent_armature_for_camera(cam_obj, shot_idx_hint: int | None = None, cam_idx_hint: int | None = None) -> None:
+    try:
+        import bpy as _bpy  # local import for safety
+        if getattr(cam_obj, "type", None) != 'CAMERA':
+            return
+        shot_idx = shot_idx_hint
+        cam_idx = cam_idx_hint
+        if shot_idx is None or cam_idx is None:
+            m = _CAM_NAME_RE.match(getattr(cam_obj, 'name', '') or '')
+            if m:
+                try:
+                    shot_idx = int(m.group(1)) if shot_idx is None else shot_idx
+                    cam_idx = int(m.group(2)) if cam_idx is None else cam_idx
+                except Exception:
+                    pass
+        if shot_idx is None or cam_idx is None:
+            return
+        sh_token = f"SH{shot_idx:02d}" if shot_idx < 100 else f"SH{shot_idx:03d}"
+        desired = f"CAM_RIG_{sh_token}_{cam_idx}"
+        # Find highest Armature ancestor
+        arm = None
+        cur = getattr(cam_obj, 'parent', None)
+        while cur is not None:
+            try:
+                if getattr(cur, 'type', None) == 'ARMATURE':
+                    arm = cur
+                cur = getattr(cur, 'parent', None)
+            except Exception:
+                break
+        if arm is None:
+            return
+        final = desired
+        guard = 1
+        try:
+            while final in _bpy.data.objects.keys() and _bpy.data.objects[final] is not arm:
+                guard += 1
+                final = f"{desired}_{guard}"
+            arm.name = final
+            if getattr(arm, 'data', None) is not None:
+                try:
+                    arm.data.name = final + ".Data"
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def _camera_index_for_shot(shot, camera_obj) -> int:
     try:
         cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
@@ -478,6 +532,11 @@ class LIME_OT_rename_shot_cameras(Operator):
                     except Exception:
                         pass
                 renamed += 1
+                # After camera rename, rename parent Armature (rig)
+                try:
+                    _rename_parent_armature_for_camera(cam, shot_idx_hint=shot_idx, cam_idx_hint=idx)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -486,5 +545,213 @@ class LIME_OT_rename_shot_cameras(Operator):
 
 
 __all__.append("LIME_OT_rename_shot_cameras")
+
+
+class LIME_OT_delete_camera_rig(Operator):
+    bl_idname = "lime.delete_camera_rig"
+    bl_label = "Delete Camera (Rig)"
+    bl_description = "Delete this camera and its rig, then rename remaining cameras in the SHOT"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    camera_name: StringProperty(name="Camera Name", default="")
+
+    @classmethod
+    def poll(cls, ctx):
+        name = getattr(cls, 'camera_name', '') or ''
+        # Poll is static in Blender; rely on existence at execute time
+        return True
+
+    def execute(self, context):
+        name = (self.camera_name or '').strip()
+        cam = bpy.data.objects.get(name)
+        if cam is None or getattr(cam, 'type', None) != 'CAMERA':
+            self.report({'ERROR'}, f"Invalid camera: {name}")
+            return {'CANCELLED'}
+
+        # Determine SHOT for renaming later
+        shot = None
+        try:
+            for c in getattr(cam, 'users_collection', []) or []:
+                shot = validate_scene.find_shot_root_for_collection(c, context.scene)
+                if shot is not None:
+                    break
+        except Exception:
+            shot = None
+
+        # Find rig root (top-most parent)
+        root = cam
+        try:
+            while getattr(root, 'parent', None) is not None:
+                root = root.parent
+        except Exception:
+            root = cam
+
+        # Collect hierarchy (root + descendants)
+        rig_objects = []
+        queue = [root]
+        seen = set()
+        while queue:
+            ob = queue.pop(0)
+            if ob in seen:
+                continue
+            seen.add(ob)
+            rig_objects.append(ob)
+            try:
+                for ch in getattr(ob, 'children', []) or []:
+                    queue.append(ch)
+            except Exception:
+                pass
+
+        # Ensure OBJECT mode before removing
+        try:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        except Exception:
+            pass
+
+        # Remove children first, then parents
+        removed = 0
+        for ob in reversed(rig_objects):
+            try:
+                bpy.data.objects.remove(ob, do_unlink=True)
+                removed += 1
+            except Exception:
+                pass
+
+        # Rename remaining cameras in the shot
+        if shot is not None:
+            try:
+                cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+                if cam_coll is not None:
+                    cameras = [obj for obj in cam_coll.objects if getattr(obj, 'type', None) == 'CAMERA']
+                    cameras.sort(key=lambda o: o.name)
+                    # First pass: temp unique names to avoid collisions
+                    for cam2 in cameras:
+                        try:
+                            tmp = f"__TMP_RENAME__{cam2.name}"
+                            guard = 1
+                            base = tmp
+                            while tmp in bpy.data.objects.keys():
+                                guard += 1
+                                tmp = f"{base}_{guard}"
+                            cam2.name = tmp
+                            if getattr(cam2, 'data', None) is not None:
+                                try:
+                                    cam2.data.name = tmp + '.Data'
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    # Second pass: assign sequential names and rename rigs
+                    try:
+                        shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+                    except Exception:
+                        shot_idx = 0
+                    for idx, cam2 in enumerate(cameras, 1):
+                        final = f"SHOT_{shot_idx:02d}_CAMERA_{idx}"
+                        guard = 1
+                        name_try = final
+                        try:
+                            while name_try in bpy.data.objects.keys() and bpy.data.objects[name_try] is not cam2:
+                                guard += 1
+                                name_try = f"{final}_{guard}"
+                            cam2.name = name_try
+                            if getattr(cam2, 'data', None) is not None:
+                                try:
+                                    cam2.data.name = name_try + '.Data'
+                                except Exception:
+                                    pass
+                            # Rename its parent armature rig accordingly
+                            try:
+                                _rename_parent_armature_for_camera(cam2, shot_idx_hint=shot_idx, cam_idx_hint=idx)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        self.report({'INFO'}, f"Deleted {removed} object(s)")
+        return {'FINISHED'}
+
+
+class LIME_OT_pose_camera_rig(Operator):
+    bl_idname = "lime.pose_camera_rig"
+    bl_label = "Pose Rig"
+    bl_description = "Activate the camera's rig Armature and switch to Pose Mode"
+    bl_options = {'REGISTER'}
+
+    camera_name: StringProperty(name="Camera Name", default="")
+
+    def execute(self, context):
+        name = (self.camera_name or '').strip()
+        cam = bpy.data.objects.get(name)
+        if cam is None or getattr(cam, 'type', None) != 'CAMERA':
+            self.report({'ERROR'}, f"Invalid camera: {name}")
+            return {'CANCELLED'}
+        # Find highest Armature ancestor
+        arm = None
+        cur = getattr(cam, 'parent', None)
+        while cur is not None:
+            try:
+                if getattr(cur, 'type', None) == 'ARMATURE':
+                    arm = cur
+                cur = getattr(cur, 'parent', None)
+            except Exception:
+                break
+        if arm is None:
+            self.report({'WARNING'}, 'No Armature found for this camera')
+            return {'CANCELLED'}
+
+        # Select and activate the armature, switch to POSE mode
+        try:
+            for ob in context.selected_objects or []:
+                try:
+                    ob.select_set(False)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            arm.select_set(True)
+        except Exception:
+            pass
+        try:
+            context.view_layer.objects.active = arm
+        except Exception:
+            pass
+        # Try to switch to POSE mode; use override if available
+        switched = False
+        try:
+            bpy.ops.object.mode_set(mode='POSE')
+            switched = True
+        except Exception:
+            pass
+        if not switched:
+            try:
+                win = None; area = None; region = None
+                for w in context.window_manager.windows:
+                    for a in w.screen.areas:
+                        if a.type == 'VIEW_3D':
+                            r = next((rg for rg in a.regions if rg.type == 'WINDOW'), None)
+                            if r is not None:
+                                win = w; area = a; region = r
+                                break
+                    if win:
+                        break
+                if win and area and region:
+                    with bpy.context.temp_override(window=win, area=area, region=region, scene=context.scene, view_layer=context.view_layer, active_object=arm):
+                        bpy.ops.object.mode_set(mode='POSE')
+                        switched = True
+            except Exception:
+                pass
+        if not switched:
+            self.report({'WARNING'}, 'Could not enter Pose Mode')
+            return {'CANCELLED'}
+        self.report({'INFO'}, f"Rig active: {arm.name}")
+        return {'FINISHED'}
+
+
+__all__.append("LIME_OT_delete_camera_rig")
+__all__.append("LIME_OT_pose_camera_rig")
 
 

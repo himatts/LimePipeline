@@ -57,40 +57,56 @@ class LIME_PT_render_settings(Panel):
         else:
             col = box.column(align=True)
             col.label(text="Viewport")
+            # One row: Noise Threshold, Samples, Denoise (checkbox without label)
+            row = col.row(align=True)
             try:
-                col.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
+                row.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
             except Exception:
                 pass
             try:
-                col.prop(cy, "preview_samples", text="Samples")
+                row.prop(cy, "preview_samples", text="Samples")
             except Exception:
                 pass
+            # Denoise toggle (prefer Cycles viewport prop; fallback to View Layer Cycles)
+            added = False
             try:
-                col.prop(cy, "use_preview_denoising", text="Denoise")
+                row.prop(cy, "use_preview_denoising", text="")
+                added = True
             except Exception:
+                pass
+            if not added:
                 try:
-                    col.prop(ctx.view_layer.cycles, "use_denoising", text="Prev Denoise")
+                    row.prop(ctx.view_layer.cycles, "use_denoising", text="")
+                    added = True
                 except Exception:
                     pass
+            if not added:
+                try:
+                    row.prop(cy, "use_denoising", text="")
+                except Exception:
+                    pass
+
             col.separator()
             col.label(text="Render")
+            # One row: Noise Threshold, Samples, Denoise (checkbox without label)
+            row = col.row(align=True)
             try:
-                col.prop(cy, "adaptive_threshold", text="Noise Threshold")
+                row.prop(cy, "adaptive_threshold", text="Noise Threshold")
             except Exception:
                 pass
             try:
-                col.prop(cy, "samples", text="Samples")
+                row.prop(cy, "samples", text="Samples")
             except Exception:
                 pass
-            done = False
+            added = False
             try:
-                col.prop(ctx.view_layer.cycles, "use_denoising", text="Denoise")
-                done = True
+                row.prop(ctx.view_layer.cycles, "use_denoising", text="")
+                added = True
             except Exception:
                 pass
-            if not done:
+            if not added:
                 try:
-                    col.prop(cy, "use_denoising", text="Denoise")
+                    row.prop(cy, "use_denoising", text="")
                 except Exception:
                     pass
 
@@ -99,9 +115,9 @@ class LIME_PT_render_settings(Panel):
         box.label(text="Color Management")
         vs = scene.view_settings
         row = box.row(align=True)
-        row.prop(vs, "view_transform", text="View Transform")
-        row = box.row(align=True)
-        row.prop(vs, "look", text="Look")
+        # Two dropdowns in one row; no labels (tooltips suffice)
+        row.prop(vs, "view_transform", text="")
+        row.prop(vs, "look", text="")
 
 
 class LIME_PT_render_cameras(Panel):
@@ -153,9 +169,16 @@ class LIME_PT_render_camera_list(Panel):
             return
         for cam in cams:
             row = layout.row(align=True)
+            # Left icon: delete camera + rig
+            del_op = row.operator("lime.delete_camera_rig", text="", icon='TRASH')
+            del_op.camera_name = cam.name
+            # Middle: set active camera (label button)
             icon = 'CHECKMARK' if scene.camera == cam else 'OUTLINER_DATA_CAMERA'
             op = row.operator("lime.set_active_camera", text=cam.name, icon=icon)
             op.camera_name = cam.name
+            # Right icon: go to rig pose mode
+            pose_op = row.operator("lime.pose_camera_rig", text="", icon='POSE_HLT')
+            pose_op.camera_name = cam.name
 
 
 class LIME_PT_render_outputs(Panel):
@@ -169,7 +192,8 @@ class LIME_PT_render_outputs(Panel):
         layout = self.layout
         wm = ctx.window_manager
         st = getattr(wm, 'lime_pipeline', None)
-        grid = layout.grid_flow(columns=2, even_columns=True, even_rows=True)
+        # Use two tight rows (align=True) to avoid the wide grid spacing
+        # and keep buttons visually grouped without extra margins.
 
         def _images_in(dirpath: Path) -> bool:
             try:
@@ -183,7 +207,8 @@ class LIME_PT_render_outputs(Panel):
             return False
 
         # PV
-        pv_col = grid.column(align=True)
+        row_top = layout.row(align=True)
+        pv_col = row_top.column(align=True)
         pv_dir = None
         try:
             hydrate_state_from_filepath(st)
@@ -200,7 +225,7 @@ class LIME_PT_render_outputs(Panel):
         op.ptype = 'PV'
 
         # REND
-        rd_col = grid.column(align=True)
+        rd_col = row_top.column(align=True)
         rd_dir = None
         try:
             hydrate_state_from_filepath(st)
@@ -216,14 +241,17 @@ class LIME_PT_render_outputs(Panel):
         op = btn.operator("lime.open_output_folder", text="Render", icon='FILE_FOLDER')
         op.ptype = 'REND'
 
+        # Second row
+        row_bottom = layout.row(align=True)
+
         # SB (placeholder disabled)
-        sb_col = grid.column(align=True)
+        sb_col = row_bottom.column(align=True)
         row = sb_col.row(align=True)
         row.enabled = False
         row.operator("lime.open_output_folder", text="Storyboard", icon='FILE_FOLDER')
 
         # ANIM (placeholder disabled)
-        an_col = grid.column(align=True)
+        an_col = row_bottom.column(align=True)
         row = an_col.row(align=True)
         row.enabled = False
         row.operator("lime.open_output_folder", text="Animation", icon='FILE_FOLDER')

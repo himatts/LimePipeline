@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 1, 1),
+    "version": (0, 1, 4),
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -64,6 +64,8 @@ from .ops.ops_save import (
     LIME_OT_save_as_with_template,
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
+    LIME_OT_delete_camera_rig,
+    LIME_OT_pose_camera_rig,
 )
 
 
@@ -109,6 +111,8 @@ classes = (
     LIME_OT_set_active_camera,
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
+    LIME_OT_delete_camera_rig,
+    LIME_OT_pose_camera_rig,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
 )

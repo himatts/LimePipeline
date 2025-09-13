@@ -5,8 +5,8 @@ import re
 
 import bpy
 
-from ..core.validate_scene import parse_shot_index
-from ..data import SHOT_TREE
+from ..core.validate_scene import parse_shot_index, get_shot_child_by_basename
+from ..data import SHOT_TREE, C_UTILS_CAM
 
 
 def _ensure_child(parent: bpy.types.Collection, name: str) -> bpy.types.Collection:
@@ -229,17 +229,180 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
         except Exception:
             pass
 
-    # Phase 3: remap parenting and constraints to point inside the duplicated shot
+    # Phase 3: remap parenting, constraints and common modifier targets to point inside the duplicated shot
+    # Preserve world transforms while reparenting/retargeting
+    from mathutils import Matrix
+
+    # Save desired world matrices from source objects (duplicates inherit same world initially)
+    desired_world: Dict[bpy.types.Object, Matrix] = {}
     for src_obj, dup_obj in obj_map.items():
+        try:
+            desired_world[dup_obj] = src_obj.matrix_world.copy()
+        except Exception:
+            pass
+
+    def _parent_ref_world_matrix(ob: bpy.types.Object) -> Matrix:
+        """Effective parent space in world coordinates (supports Object and Bone parenting)."""
+        try:
+            if ob is None:
+                return Matrix.Identity(4)
+        except Exception:
+            return Matrix.Identity(4)
+        p = ob.parent
+        if p is None:
+            return Matrix.Identity(4)
+        try:
+            if ob.parent_type == 'BONE' and getattr(ob, 'parent_bone', ''):
+                pb = p.pose.bones.get(ob.parent_bone)
+                if pb is not None:
+                    return p.matrix_world @ pb.matrix
+        except Exception:
+            pass
+        try:
+            return p.matrix_world
+        except Exception:
+            return Matrix.Identity(4)
+
+    # Known modifier object pointer attributes by type
+    _MOD_TARGET_ATTRS = {
+        'ARMATURE': ['object'],
+        'MIRROR': ['mirror_object'],
+        'ARRAY': ['offset_object'],
+        'SHRINKWRAP': ['target', 'auxiliary_target'],
+        'HOOK': ['object'],
+        'LATTICE': ['object'],
+        'CURVE': ['object'],
+        'SIMPLE_DEFORM': ['origin'],
+        'SURFACE_DEFORM': ['target'],
+        'MESH_DEFORM': ['object'],
+        'CAST': ['object'],
+        'BOOLEAN': ['object'],
+        'WARP': ['object_from', 'object_to'],
+    }
+
+    for src_obj, dup_obj in obj_map.items():
+        # Reparent within duplicated set if needed, preserving world transform
         if src_obj.parent and src_obj.parent in obj_map:
-            dup_obj.parent = obj_map[src_obj.parent]
-            dup_obj.parent_type = src_obj.parent_type
-        # Constraints remap
-        for con in dup_obj.constraints:
-            tgt = getattr(con, "target", None)
-            if tgt and tgt in obj_map:
-                con.target = obj_map[tgt]
+            try:
+                # Set new parent first
+                dup_obj.parent = obj_map[src_obj.parent]
+                dup_obj.parent_type = src_obj.parent_type
+                if src_obj.parent_type == 'BONE':
+                    dup_obj.parent_bone = src_obj.parent_bone
+            except Exception:
+                pass
+        # After parenting, restore world transform by adjusting parent inverse
+        try:
+            mw = desired_world.get(dup_obj)
+            if mw is not None:
+                pw = _parent_ref_world_matrix(dup_obj)
+                try:
+                    dup_obj.matrix_parent_inverse = pw.inverted() @ mw
+                except Exception:
+                    pass
+                try:
+                    dup_obj.matrix_world = mw
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Constraints remap (targets and Child Of inverse)
+        for con in list(getattr(dup_obj, 'constraints', []) or []):
+            try:
+                tgt = getattr(con, "target", None)
+                if tgt and tgt in obj_map:
+                    con.target = obj_map[tgt]
+                # Child Of: recompute inverse to preserve world matrix
+                if getattr(con, 'type', '') == 'CHILD_OF':
+                    try:
+                        mw = desired_world.get(dup_obj) or dup_obj.matrix_world
+                        pt = getattr(con, 'target', None)
+                        if pt is not None:
+                            # If subtarget (bone) exists, use bone world matrix
+                            sub = getattr(con, 'subtarget', '')
+                            if sub and getattr(pt, 'pose', None):
+                                pb = pt.pose.bones.get(sub)
+                                if pb is not None:
+                                    pw = pt.matrix_world @ pb.matrix
+                                else:
+                                    pw = pt.matrix_world
+                            else:
+                                pw = pt.matrix_world
+                            con.inverse_matrix = pw.inverted() @ mw
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # Modifier targets remap (best-effort common cases)
+        for mod in list(getattr(dup_obj, 'modifiers', []) or []):
+            try:
+                attrs = _MOD_TARGET_ATTRS.get(getattr(mod, 'type', ''), [])
+                for attr in attrs:
+                    try:
+                        o = getattr(mod, attr, None)
+                        if o and o in obj_map:
+                            setattr(mod, attr, obj_map[o])
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    # Phase 4: ensure camera names in destination shot follow SHOT_##_CAMERA_N convention
+    try:
+        cam_coll = get_shot_child_by_basename(dst_shot, C_UTILS_CAM)
+        if cam_coll is not None:
+            cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
+            if cameras:
+                # Stable ordering
+                try:
+                    cameras.sort(key=lambda o: o.name)
+                except Exception:
+                    pass
+                # Avoid name collisions: temp names first
+                temp_map = {}
+                for cam in cameras:
+                    base = f"__TMP_CAM__{cam.name}"
+                    tmp = base
+                    guard = 1
+                    try:
+                        while tmp in bpy.data.objects.keys():
+                            if bpy.data.objects[tmp] is cam:
+                                break
+                            guard += 1
+                            tmp = f"{base}_{guard}"
+                        cam.name = tmp
+                        if getattr(cam, 'data', None) is not None:
+                            try:
+                                cam.data.name = tmp + ".Data"
+                            except Exception:
+                                pass
+                        temp_map[cam] = tmp
+                    except Exception:
+                        temp_map[cam] = cam.name
+                # Final names
+                for i, cam in enumerate(cameras, 1):
+                    target = f"SHOT_{dst_index:02d}_CAMERA_{i}"
+                    final = target
+                    guard = 1
+                    try:
+                        while final in bpy.data.objects.keys() and bpy.data.objects[final] is not cam:
+                            guard += 1
+                            final = f"{target}_{guard}"
+                        cam.name = final
+                        if getattr(cam, 'data', None) is not None:
+                            try:
+                                cam.data.name = final + ".Data"
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
     return dst_shot
+
+
 
 
