@@ -131,3 +131,161 @@ def get_shot_child_by_basename(shot: bpy.types.Collection, base_name: str) -> Op
 
 
 
+def isolate_shots_temporarily(scene: bpy.types.Scene, target_shot: bpy.types.Collection | None, include_all: bool = False):
+    """Oculta temporalmente otros SHOTs mientras se procesa el SHOT objetivo.
+
+    Devuelve una función restore() que revierte el estado de visibilidad y exclusión.
+    Si include_all es True o target_shot es None, no hace nada y devuelve un no-op.
+    """
+    try:
+        if include_all or target_shot is None:
+            return lambda: None
+
+        def _find_layer_collection(layer: bpy.types.LayerCollection | None, coll: bpy.types.Collection | None):
+            if layer is None or coll is None:
+                return None
+            if layer.collection == coll:
+                return layer
+            for ch in getattr(layer, 'children', []) or []:
+                found = _find_layer_collection(ch, coll)
+                if found:
+                    return found
+            return None
+
+        def _iter_coll_subtree(root: bpy.types.Collection):
+            stack = [root]
+            while stack:
+                c = stack.pop()
+                yield c
+                try:
+                    stack.extend(list(c.children))
+                except Exception:
+                    pass
+
+        def _iter_layer_subtree(root_layer: bpy.types.LayerCollection | None):
+            if root_layer is None:
+                return
+            stack = [root_layer]
+            while stack:
+                lc = stack.pop()
+                yield lc
+                try:
+                    stack.extend(list(lc.children))
+                except Exception:
+                    pass
+
+        shots = list_shot_roots(scene)
+        others = [s for s, _ in shots if s != target_shot]
+
+        # Save and hide other shots (root level only)
+        saved_others_coll = []
+        for c in others:
+            try:
+                saved_others_coll.append((c, bool(getattr(c, 'hide_viewport', False)), bool(getattr(c, 'hide_render', False))))
+                c.hide_viewport = True
+            except Exception:
+                pass
+            try:
+                c.hide_render = True
+            except Exception:
+                pass
+
+        saved_others_layers = []
+        try:
+            vl = bpy.context.view_layer
+            base = vl.layer_collection if vl else None
+            for c in others:
+                lc = _find_layer_collection(base, c)
+                if lc is not None:
+                    saved_others_layers.append((lc, bool(getattr(lc, 'exclude', False)), bool(getattr(lc, 'hide_viewport', False))))
+                    try:
+                        lc.exclude = True
+                    except Exception:
+                        pass
+                    try:
+                        lc.hide_viewport = True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Ensure target shot subtree is visible/unexcluded
+        saved_target_coll = []
+        try:
+            for c in _iter_coll_subtree(target_shot):
+                saved_target_coll.append((c, bool(getattr(c, 'hide_viewport', False)), bool(getattr(c, 'hide_render', False))))
+                try:
+                    c.hide_viewport = False
+                except Exception:
+                    pass
+                try:
+                    c.hide_render = False
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        saved_target_layers = []
+        try:
+            vl = bpy.context.view_layer
+            base = vl.layer_collection if vl else None
+            target_lc = _find_layer_collection(base, target_shot)
+            if target_lc is not None:
+                for lc in _iter_layer_subtree(target_lc):
+                    saved_target_layers.append((lc, bool(getattr(lc, 'exclude', False)), bool(getattr(lc, 'hide_viewport', False))))
+                    try:
+                        lc.exclude = False
+                    except Exception:
+                        pass
+                    try:
+                        lc.hide_viewport = False
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        def _restore():
+            # Restore other shots
+            for c, hv, hr in saved_others_coll:
+                try:
+                    c.hide_viewport = hv
+                except Exception:
+                    pass
+                try:
+                    c.hide_render = hr
+                except Exception:
+                    pass
+            for lc, ex, hv in saved_others_layers:
+                try:
+                    lc.exclude = ex
+                except Exception:
+                    pass
+                try:
+                    lc.hide_viewport = hv
+                except Exception:
+                    pass
+            # Restore target shot subtree
+            for c, hv, hr in saved_target_coll:
+                try:
+                    c.hide_viewport = hv
+                except Exception:
+                    pass
+                try:
+                    c.hide_render = hr
+                except Exception:
+                    pass
+            for lc, ex, hv in saved_target_layers:
+                try:
+                    lc.exclude = ex
+                except Exception:
+                    pass
+                try:
+                    lc.hide_viewport = hv
+                except Exception:
+                    pass
+
+        return _restore
+    except Exception:
+        return lambda: None
+
+

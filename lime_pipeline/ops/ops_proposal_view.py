@@ -30,6 +30,11 @@ def _find_view3d_area_and_region(context):
     return None, None
 
 
+def _isolate_other_shots(scene, target_shot, include_all=False):
+    # Redirige a función deduplicada en validate_scene
+    return validate_scene.isolate_shots_temporarily(scene, target_shot, include_all)
+
+
 class LIME_OT_proposal_view_config(Operator):
     bl_idname = "lime.proposal_view_config"
     bl_label = "Proposal View Config"
@@ -38,18 +43,7 @@ class LIME_OT_proposal_view_config(Operator):
 
     @classmethod
     def poll(cls, ctx):
-        st = getattr(ctx.window_manager, "lime_pipeline", None)
-        if st is None:
-            return False
-        # Only when current file is saved and is a PV file
-        try:
-            is_saved = bool(bpy.data.filepath)
-        except Exception:
-            is_saved = False
-        if not is_saved:
-            return False
-        if detect_ptype_from_filename(bpy.data.filepath) != 'PV':
-            return False
+        # Siempre disponible
         return True
 
     def execute(self, context):
@@ -105,17 +99,6 @@ class LIME_OT_take_pv_shot(Operator):
 
     @classmethod
     def poll(cls, ctx):
-        st = getattr(ctx.window_manager, "lime_pipeline", None)
-        if st is None:
-            return False
-        try:
-            is_saved = bool(bpy.data.filepath)
-        except Exception:
-            is_saved = False
-        if not is_saved:
-            return False
-        if detect_ptype_from_filename(bpy.data.filepath) != 'PV':
-            return False
         shot = validate_scene.active_shot_context(ctx)
         if shot is None:
             return False
@@ -186,6 +169,7 @@ class LIME_OT_take_pv_shot(Operator):
 
         # Render OpenGL to file
         orig_path = scene.render.filepath
+        restore_vis = _isolate_other_shots(scene, shot, include_all=bool(getattr(st, 'consider_all_shots', False)))
         try:
             scene.render.filepath = str(image_path.with_suffix(''))
             if override is not None:
@@ -195,6 +179,10 @@ class LIME_OT_take_pv_shot(Operator):
         finally:
             scene.render.filepath = orig_path
             scene.camera = original_camera
+            try:
+                restore_vis()
+            except Exception:
+                pass
 
         self.report({'INFO'}, f"Capturado: {filename}")
         return {'FINISHED'}
@@ -208,17 +196,6 @@ class LIME_OT_take_all_pv_shots(Operator):
 
     @classmethod
     def poll(cls, ctx):
-        st = getattr(ctx.window_manager, "lime_pipeline", None)
-        if st is None:
-            return False
-        try:
-            is_saved = bool(bpy.data.filepath)
-        except Exception:
-            is_saved = False
-        if not is_saved:
-            return False
-        if detect_ptype_from_filename(bpy.data.filepath) != 'PV':
-            return False
         shots = validate_scene.list_shot_roots(ctx.scene)
         if not shots:
             return False
@@ -251,16 +228,23 @@ class LIME_OT_take_all_pv_shots(Operator):
                 self.report({'WARNING'}, f"Omitiendo {shot.name}: sin cámaras")
                 continue
             cameras.sort(key=lambda o: o.name)
-            for cam_index, cam_obj in enumerate(cameras, 1):
-                filename = f"{project_name}_PV_SH{shot_idx:02d}C{cam_index}_SC{sc_number:03d}_Rev_{rev}.png"
-                image_path = editables_dir / filename
-                scene.camera = cam_obj
-                orig_path = scene.render.filepath
+            restore_vis = _isolate_other_shots(scene, shot, include_all=bool(getattr(st, 'consider_all_shots', False)))
+            try:
+                for cam_index, cam_obj in enumerate(cameras, 1):
+                    filename = f"{project_name}_PV_SH{shot_idx:02d}C{cam_index}_SC{sc_number:03d}_Rev_{rev}.png"
+                    image_path = editables_dir / filename
+                    scene.camera = cam_obj
+                    orig_path = scene.render.filepath
+                    try:
+                        scene.render.filepath = str(image_path.with_suffix(''))
+                        bpy.ops.render.opengl(write_still=True, view_context=False)
+                    finally:
+                        scene.render.filepath = orig_path
+            finally:
                 try:
-                    scene.render.filepath = str(image_path.with_suffix(''))
-                    bpy.ops.render.opengl(write_still=True, view_context=False)
-                finally:
-                    scene.render.filepath = orig_path
+                    restore_vis()
+                except Exception:
+                    pass
 
         scene.camera = original_camera
         self.report({'INFO'}, "Capturas completadas para todos los SHOTs")

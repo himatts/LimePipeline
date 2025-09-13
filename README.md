@@ -6,10 +6,10 @@ De forma práctica, el add-on:
 - Centraliza la configuración del proyecto (raíz, tipo, revisión y escena) y genera nombres limpios y consistentes.
 - Asiste en el primer guardado, rutas objetivo y backups numerados.
 - Crea y gestiona estructuras de SHOT dentro de la escena, incluyendo instanciado y duplicado de shots con políticas claras.
-- Presenta dos paneles simples en el Sidebar para flujo de archivos y preparación interna de la escena.
+- Presenta paneles en el Sidebar para flujo de archivos y preparación interna de la escena.
 
 - Target: Blender 4.5 LTS
-- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Shots
+- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Shots, Render Configs, Stage
 - Preferencias: Edit > Preferences > Add-ons > Lime Pipeline
 
 ## Estructura del paquete `lime_pipeline/`
@@ -31,6 +31,7 @@ De forma práctica, el add-on:
 - `ui/`: paneles
   - `ui_project_org.py`: Project Organization (archivos)
   - `ui_shots.py`: Shots (escena/colecciones)
+  - `ui_render_configs.py`: Render Configs (siempre visible; incluye Proposal View y Renders)
 
 ## Instalación local para pruebas
 

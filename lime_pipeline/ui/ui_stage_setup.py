@@ -17,12 +17,14 @@ class LIME_PT_stage_setup(Panel):
 
     @classmethod
     def poll(cls, ctx):
-        return validate_scene.active_shot_context(ctx) is not None
+        # Siempre visible; se deshabilitarán acciones si no hay SHOT
+        return True
 
     def draw(self, ctx):
         layout = self.layout
         layout.label(text="Create scene elements")
         col = layout.column(align=True)
+        col.enabled = validate_scene.active_shot_context(ctx) is not None
         col.operator("lime.add_camera_rig", text="Create Camera (Rig)", icon='OUTLINER_DATA_CAMERA')
         col.operator("lime.import_layout", text="Import Layout", icon='APPEND_BLEND')
         # Utilities

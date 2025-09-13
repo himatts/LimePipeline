@@ -88,6 +88,36 @@ class LimePipelineState(PropertyGroup):
 
     selected_camera: EnumProperty(name="Camera", items=_camera_items, update=_on_selected_camera_update)
 
+    # Visibility behavior during renders and proposal views
+    consider_all_shots: BoolProperty(
+        name="Consider all SHOTs",
+        description=(
+            "If unchecked, other SHOTs will be temporarily hidden during render/capture "
+            "so only the target SHOT is visible."
+        ),
+        default=False,
+    )
+
+    # UI collapsible sections state for Render Configs panel
+    ui_rc_show_settings: BoolProperty(
+        name="Show Settings",
+        description="Show/Hide Resolution, Cycles and Color Management",
+        default=True,
+        options={'HIDDEN'},
+    )
+    ui_rc_show_cameras: BoolProperty(
+        name="Show Cameras",
+        description="Show/Hide camera list and Render button",
+        default=True,
+        options={'HIDDEN'},
+    )
+    ui_rc_show_outputs: BoolProperty(
+        name="Show Outputs",
+        description="Show/Hide output folders shortcuts",
+        default=True,
+        options={'HIDDEN'},
+    )
+
 
 def register():
     bpy.utils.register_class(LimePipelineState)

@@ -19,7 +19,7 @@ def _get_editables_dir(state) -> Path:
     hydrate_state_from_filepath(state)
     root_str = getattr(state, "project_root", "") or ""
     if not root_str:
-        raise RuntimeError("Project Root no configurado. Ve a Project Org y selecciona la carpeta raíz.")
+        raise RuntimeError("Project Root not configured. Go to Project Org and select the root folder.")
     root = Path(root_str)
     rev = (getattr(state, "rev_letter", "") or "").upper()
     if not rev or len(rev) != 1 or not ('A' <= rev <= 'Z'):
@@ -68,21 +68,21 @@ def _resolve_prj_rev_sc(state):
     return project_name, sc, (rev or "")
 
 
+def _isolate_other_shots(scene, target_shot, include_all=False):
+    # Redirige a función deduplicada en validate_scene
+    return validate_scene.isolate_shots_temporarily(scene, target_shot, include_all)
+
+
 class LIME_OT_render_config(Operator):
     bl_idname = "lime.render_config"
     bl_label = "Render Config"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Configura Cycles para renders consistentes y ajusta salida"
+    bl_description = "Configure Cycles for consistent renders and adjust output"
 
     @classmethod
     def poll(cls, ctx):
-        try:
-            is_saved = bool(bpy.data.filepath)
-        except Exception:
-            is_saved = False
-        if not is_saved:
-            return False
-        return detect_ptype_from_filename(bpy.data.filepath) == 'REND'
+        # Siempre disponible
+        return True
 
     def execute(self, context):
         scene = context.scene
@@ -218,7 +218,7 @@ class LIME_OT_render_config(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, "Render config aplicada (Cycles)")
+        self.report({'INFO'}, "Render config applied (Cycles)")
         return {'FINISHED'}
 
 
@@ -226,18 +226,10 @@ class LIME_OT_render_shot(Operator):
     bl_idname = "lime.render_shot"
     bl_label = "Render Shot"
     bl_options = {'REGISTER'}
-    bl_description = "Renderiza una imagen fija del SHOT y cámara seleccionados"
+    bl_description = "Render a still image for the selected SHOT and camera"
 
     @classmethod
     def poll(cls, ctx):
-        try:
-            is_saved = bool(bpy.data.filepath)
-        except Exception:
-            is_saved = False
-        if not is_saved:
-            return False
-        if detect_ptype_from_filename(bpy.data.filepath) != 'REND':
-            return False
         shot = validate_scene.active_shot_context(ctx)
         if shot is None:
             return False
@@ -254,12 +246,12 @@ class LIME_OT_render_shot(Operator):
 
         shot = validate_scene.active_shot_context(context)
         if shot is None:
-            self.report({'ERROR'}, "No hay SHOT activo")
+            self.report({'ERROR'}, "No active SHOT")
             return {'CANCELLED'}
 
         cam_name = getattr(st, "selected_camera", None)
         if not cam_name or cam_name == "NONE":
-            self.report({'ERROR'}, "Seleccione una cámara")
+            self.report({'ERROR'}, "Please select a camera")
             return {'CANCELLED'}
 
         cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
@@ -270,7 +262,7 @@ class LIME_OT_render_shot(Operator):
                     cam_obj = obj
                     break
         if cam_obj is None:
-            self.report({'ERROR'}, f"Cámara '{cam_name}' no encontrada")
+            self.report({'ERROR'}, f"Camera not found: '{cam_name}'")
             return {'CANCELLED'}
 
         project_name, sc_number, rev = _resolve_prj_rev_sc(st)
@@ -292,41 +284,45 @@ class LIME_OT_render_shot(Operator):
         image_path = editables_dir / filename
 
         original_camera = scene.camera
-        orig_path = scene.render.filepath
+        restore_vis = _isolate_other_shots(scene, shot, include_all=bool(getattr(st, 'consider_all_shots', False)))
         try:
             scene.camera = cam_obj
-            # Ensure extension handling and overwrite
-            try:
-                scene.render.use_file_extension = True
-                scene.render.use_overwrite = True
-            except Exception:
-                pass
-            # Ensure output includes filename + extension explicitly
-            # and normalize slashes for Blender on Windows
-            out_full = str(image_path).replace('\\', '/')
             # Ensure PNG format in case config wasn't applied
             try:
                 scene.render.image_settings.file_format = 'PNG'
                 scene.render.image_settings.color_mode = 'RGBA'
             except Exception:
                 pass
-            scene.render.filepath = out_full
-            restore_output = True
+            # Render to Render Result (do NOT write to disk automatically)
             try:
-                res = bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
-                # When INVOKE_DEFAULT is used, Blender may render asynchronously.
-                # Avoid restoring filepath immediately to prevent saving as ".png" in folder.
-                if res and 'CANCELLED' not in res:
-                    restore_output = False
-            except RuntimeError:
-                bpy.ops.render.render(write_still=True)
-            finally:
-                if restore_output:
-                    scene.render.filepath = orig_path
+                bpy.ops.render.render()
+            except Exception:
+                bpy.ops.render.render('INVOKE_DEFAULT')
+            # Schedule opening the Save dialog after render window returns focus to main window
+            def _open_dialog_later():
+                try:
+                    bpy.ops.lime.save_as_with_template('INVOKE_DEFAULT', ptype='REND')
+                except Exception:
+                    # Retry a bit later if context isn't ready yet
+                    return 0.2
+                return None
+            try:
+                import bpy.app as _app
+                _app.timers.register(_open_dialog_later, first_interval=0.05)
+            except Exception:
+                # As a last resort, try immediate invoke (may fail in render window)
+                try:
+                    bpy.ops.lime.save_as_with_template('INVOKE_DEFAULT', ptype='REND')
+                except Exception:
+                    pass
         finally:
             scene.camera = original_camera
+            try:
+                restore_vis()
+            except Exception:
+                pass
 
-        self.report({'INFO'}, f"Render guardado: {filename}")
+        self.report({'INFO'}, f"Render completed. Save dialog opened with: {filename}")
         return {'FINISHED'}
 
 
@@ -334,18 +330,10 @@ class LIME_OT_render_all(Operator):
     bl_idname = "lime.render_all"
     bl_label = "Render All"
     bl_options = {'REGISTER'}
-    bl_description = "Renderiza todas las cámaras de todos los SHOTs"
+    bl_description = "Render all cameras for all SHOTs"
 
     @classmethod
     def poll(cls, ctx):
-        try:
-            is_saved = bool(bpy.data.filepath)
-        except Exception:
-            is_saved = False
-        if not is_saved:
-            return False
-        if detect_ptype_from_filename(bpy.data.filepath) != 'REND':
-            return False
         shots = validate_scene.list_shot_roots(ctx.scene)
         if not shots:
             return False
@@ -354,6 +342,140 @@ class LIME_OT_render_all(Operator):
             if cam_coll and any(getattr(o, "type", None) == 'CAMERA' for o in cam_coll.objects):
                 return True
         return False
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        st = wm.lime_pipeline
+        scene = context.scene
+
+        project_name, sc_number, rev = _resolve_prj_rev_sc(st)
+        try:
+            editables_dir = _get_editables_dir(st)
+        except Exception as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
+
+        self._queue = []
+        self._consider_all = bool(getattr(st, 'consider_all_shots', False))
+        self._original_camera = scene.camera
+        self._orig_path = scene.render.filepath
+        self._current_restore = None
+        self._render_in_progress = False
+
+        shots = validate_scene.list_shot_roots(scene)
+        for shot, shot_idx in shots:
+            cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+            if not cam_coll:
+                continue
+            cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
+            if not cameras:
+                continue
+            cameras.sort(key=lambda o: o.name)
+            for cam_index, cam_obj in enumerate(cameras, 1):
+                filename = f"{project_name}_Render_SH{shot_idx:02d}C{cam_index}_SC{sc_number:03d}_Rev_{rev}.png"
+                out_full = str((editables_dir / filename)).replace('\\', '/')
+                self._queue.append((shot, cam_obj, out_full))
+
+        if not self._queue:
+            self.report({'WARNING'}, "No cameras to render")
+            return {'CANCELLED'}
+
+        self._idx = 0
+        self._timer = wm.event_timer_add(0.25, window=context.window)
+        wm.modal_handler_add(self)
+        self._start_next_render(context)
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+        if event.type == 'TIMER':
+            try:
+                running = bpy.app.is_job_running('RENDER')
+            except Exception:
+                running = False
+            if not running and self._render_in_progress:
+                # Restore filepath and visibility from previous item
+                try:
+                    context.scene.render.filepath = self._orig_path
+                except Exception:
+                    pass
+                try:
+                    if self._current_restore:
+                        self._current_restore()
+                        self._current_restore = None
+                except Exception:
+                    pass
+                self._render_in_progress = False
+                if self._idx >= len(self._queue):
+                    self._finish_batch(context)
+                    return {'FINISHED'}
+                self._start_next_render(context)
+        return {'PASS_THROUGH'}
+
+    def _start_next_render(self, context):
+        scene = context.scene
+        if self._idx >= len(self._queue):
+            return
+        shot, cam_obj, out_full = self._queue[self._idx]
+        self._idx += 1
+
+        # Isolate other shots for this render if requested
+        try:
+            if self._current_restore:
+                self._current_restore()
+        except Exception:
+            pass
+        self._current_restore = _isolate_other_shots(scene, shot, include_all=self._consider_all)
+
+        try:
+            scene.camera = cam_obj
+        except Exception:
+            pass
+        try:
+            scene.render.use_file_extension = True
+            scene.render.use_overwrite = True
+        except Exception:
+            pass
+        try:
+            scene.render.image_settings.file_format = 'PNG'
+            scene.render.image_settings.color_mode = 'RGBA'
+        except Exception:
+            pass
+        try:
+            scene.render.filepath = out_full
+        except Exception:
+            pass
+        try:
+            scene.render.display_mode = 'WINDOW'
+        except Exception:
+            pass
+        try:
+            bpy.ops.render.render('INVOKE_DEFAULT', write_still=True)
+            self._render_in_progress = True
+        except RuntimeError:
+            bpy.ops.render.render(write_still=True)
+            self._render_in_progress = True
+
+    def _finish_batch(self, context):
+        wm = context.window_manager
+        scene = context.scene
+        try:
+            scene.camera = self._original_camera
+        except Exception:
+            pass
+        try:
+            scene.render.filepath = self._orig_path
+        except Exception:
+            pass
+        try:
+            if self._current_restore:
+                self._current_restore()
+        except Exception:
+            pass
+        try:
+            wm.event_timer_remove(self._timer)
+        except Exception:
+            pass
+        self.report({'INFO'}, "Renders completed for all SHOTs")
 
     def execute(self, context):
         wm = context.window_manager
@@ -373,11 +495,11 @@ class LIME_OT_render_all(Operator):
         for shot, shot_idx in shots:
             cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
             if not cam_coll:
-                self.report({'WARNING'}, f"Omitiendo {shot.name}: sin colección de cámaras")
+                self.report({'WARNING'}, f"Skipping {shot.name}: no camera collection")
                 continue
             cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
             if not cameras:
-                self.report({'WARNING'}, f"Omitiendo {shot.name}: sin cámaras")
+                self.report({'WARNING'}, f"Skipping {shot.name}: no cameras")
                 continue
             cameras.sort(key=lambda o: o.name)
             for cam_index, cam_obj in enumerate(cameras, 1):
@@ -404,7 +526,7 @@ class LIME_OT_render_all(Operator):
                     scene.render.filepath = orig_path
 
         scene.camera = original_camera
-        self.report({'INFO'}, "Renders completados para todos los SHOTs")
+        self.report({'INFO'}, "Renders completed for all SHOTs")
         return {'FINISHED'}
 
 

@@ -18,14 +18,21 @@ class LIME_PT_shots(Panel):
     def draw(self, ctx):
         layout = self.layout
 
-        # Status block
+        # Selector de SHOTs sincronizado con Outliner
         box = layout.box()
         box.label(text="Shot Tools")
         active = validate_scene.active_shot_context(ctx)
-        if active is not None:
-            box.label(text=f"Active SHOT: {active.name}", icon='CHECKMARK')
+        shots = validate_scene.list_shot_roots(ctx.scene)
+        if not shots:
+            row = box.row()
+            row.enabled = False
+            row.label(text="No hay SHOTs", icon='INFO')
         else:
-            box.label(text="No SHOT context", icon='INFO')
+            for shot, idx in shots:
+                row = box.row(align=True)
+                icon = 'CHECKMARK' if active == shot else 'OUTLINER_COLLECTION'
+                op = row.operator("lime.activate_shot", text=shot.name, icon=icon)
+                op.shot_name = shot.name
 
         # Actions
         col = layout.column(align=True)

@@ -1,5 +1,6 @@
 import bpy
 from bpy.types import Operator
+from bpy.props import StringProperty
 
 from ..core import validate_scene
 from ..core.naming import resolve_project_name
@@ -79,6 +80,44 @@ class LIME_OT_duplicate_shot(Operator):
             self.report({'ERROR'}, str(ex))
             return {'CANCELLED'}
         self.report({'INFO'}, f"Duplicated {src.name} → SHOT {dst_idx:02d}")
+        return {'FINISHED'}
+
+class LIME_OT_activate_shot(Operator):
+    bl_idname = "lime.activate_shot"
+    bl_label = "Activate Shot"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    shot_name: StringProperty(name="Shot Name", default="")
+
+    def execute(self, context):
+        name = (self.shot_name or '').strip()
+        if not name:
+            self.report({'ERROR'}, "Nombre de SHOT inválido")
+            return {'CANCELLED'}
+        # Buscar la colección y activarla en el Outliner/View Layer
+        target = next((c for c in context.scene.collection.children if c.name == name), None)
+        if target is None:
+            self.report({'ERROR'}, f"SHOT no encontrado: {name}")
+            return {'CANCELLED'}
+        # Activar layer collection correspondiente
+        try:
+            def _find_layer(layer, wanted):
+                if layer.collection == wanted:
+                    return layer
+                for ch in layer.children:
+                    found = _find_layer(ch, wanted)
+                    if found:
+                        return found
+                return None
+
+            root_layer = context.view_layer.layer_collection
+            lc = _find_layer(root_layer, target)
+            if lc is not None:
+                context.view_layer.active_layer_collection = lc
+        except Exception:
+            pass
+
+        self.report({'INFO'}, f"Activo: {name}")
         return {'FINISHED'}
 
 
