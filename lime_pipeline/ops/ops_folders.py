@@ -7,7 +7,7 @@ import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty
 
-from ..core.paths import paths_for_type
+from ..core.paths import paths_for_type, get_ramv_dir
 from ..core.naming import hydrate_state_from_filepath
 
 
@@ -27,7 +27,7 @@ class LIME_OT_ensure_folders(Operator):
             self.report({'ERROR'}, "Set Project Root first")
             return {'CANCELLED'}
         root = Path(st.project_root)
-        ramv = root / r"2. Graphic & Media" / r"3. Rendering-Animation-Video"
+        ramv = get_ramv_dir(root)
         ramv.mkdir(parents=True, exist_ok=True)
         self.report({'INFO'}, f"Ensured: {ramv}")
         return {'FINISHED'}

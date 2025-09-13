@@ -15,8 +15,8 @@ from bpy.app.handlers import persistent
 from .prefs import LimePipelinePrefs
 from .props import register as register_props, unregister as unregister_props
 from .ui import LIME_PT_project_org
-from .ui import LIME_PT_shots
-from .ui import LIME_PT_render_configs
+from .ui import LIME_PT_shots, LIME_PT_shots_list, LIME_PT_shots_tools
+from .ui import LIME_PT_render_configs, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
 from .ops.ops_select_root import LIME_OT_pick_root
@@ -31,6 +31,7 @@ from .ops.ops_shots import (
     LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
     LIME_OT_activate_shot,
+    LIME_OT_delete_shot,
 )
 from .ops.ops_add_missing import (
     LIME_OT_add_missing_collections,
@@ -61,6 +62,7 @@ from .ops.ops_save import (
     LIME_OT_set_active_camera,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
+    LIME_OT_duplicate_active_camera,
 )
 
 
@@ -86,17 +88,25 @@ classes = (
     LIME_OT_stage_aux_light,
     LIME_PT_project_org,
     LIME_PT_shots,
+    LIME_PT_shots_list,
+    LIME_PT_shots_tools,
     LIME_PT_render_configs,
+    LIME_PT_render_settings,
+    LIME_PT_render_cameras,
+    LIME_PT_render_camera_list,
+    LIME_PT_render_outputs,
     LIME_PT_stage_setup,
     LIME_PT_image_save_as,
     LIME_OT_new_shot,
     LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
     LIME_OT_activate_shot,
+    LIME_OT_delete_shot,
     LIME_OT_add_missing_collections,
     LIME_OT_rev_prev,
     LIME_OT_rev_next,
     LIME_OT_set_active_camera,
+    LIME_OT_duplicate_active_camera,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
 )

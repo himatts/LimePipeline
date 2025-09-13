@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .naming import RE_PROJECT_DIR, make_filename, resolve_project_name, TOKENS_BY_PTYPE
-from .paths import paths_for_type
+from .paths import paths_for_type, get_ramv_dir
 
 
 def _glob_scene_exists(scenes_dir: Path, sc: int) -> bool:
@@ -64,7 +64,7 @@ def validate_all(state: Any, prefs: Any):
                 errors.append(f"Scene SC{sc:03d} already exists")
 
     # Critical directories must exist to proceed
-    ramv = root / r"2. Graphic & Media" / r"3. Rendering-Animation-Video"
+    ramv = get_ramv_dir(root)
     if not ramv.exists():
         errors.append("Critical directories missing; use 'Create missing folders'")
     if needs_sc and scenes and not scenes.exists():

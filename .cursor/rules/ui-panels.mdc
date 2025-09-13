@@ -1,0 +1,15 @@
+---
+description: UI rules for panels (fast draw, no IO, only layout)
+globs:
+  - "lime_pipeline/ui/**/*.py"
+alwaysApply: false
+---
+
+# View3D / Image Editor panels
+- `draw()` no IO/hydration, no state mutation; keep fast and deterministic.
+- Messages/tooltips in EN. Show warnings from `core.validate`.
+- Reuse properties from `WindowManager.lime_pipeline`; do not scan disk.
+
+# References
+@lime_pipeline/ui/ui_render_configs.py
+@lime_pipeline/ui/ui_project_org.py

@@ -31,7 +31,7 @@ def _find_view3d_area_and_region(context):
 
 
 def _isolate_other_shots(scene, target_shot, include_all=False):
-    # Redirige a función deduplicada en validate_scene
+    # Redirect to deduplicated function in validate_scene
     return validate_scene.isolate_shots_temporarily(scene, target_shot, include_all)
 
 
@@ -39,11 +39,11 @@ class LIME_OT_proposal_view_config(Operator):
     bl_idname = "lime.proposal_view_config"
     bl_label = "Proposal View Config"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Ajusta render y viewport para capturas estilo clay"
+    bl_description = "Adjust viewport for clay-style captures and set output"
 
     @classmethod
     def poll(cls, ctx):
-        # Siempre disponible
+        # Always available
         return True
 
     def execute(self, context):
@@ -58,7 +58,7 @@ class LIME_OT_proposal_view_config(Operator):
         scene.render.image_settings.file_format = 'PNG'
         scene.render.image_settings.color_mode = 'RGBA'
 
-        # Set output base path (folder); filenames se fijan por operador de captura
+        # Set output base path (folder); filenames are set by capture operator
         try:
             editables_dir = _get_editables_dir(st)
             scene.render.filepath = str(editables_dir) + "/"
@@ -87,7 +87,7 @@ class LIME_OT_proposal_view_config(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, "Preset de Proposal View aplicado")
+        self.report({'INFO'}, "Proposal View preset applied")
         return {'FINISHED'}
 
 
@@ -95,7 +95,7 @@ class LIME_OT_take_pv_shot(Operator):
     bl_idname = "lime.take_pv_shot"
     bl_label = "Take PV Shot"
     bl_options = {'REGISTER'}
-    bl_description = "Captura PNG del viewport desde la cámara seleccionada del SHOT activo"
+    bl_description = "Capture PNG from viewport using the selected camera in the active SHOT"
 
     @classmethod
     def poll(cls, ctx):
@@ -115,12 +115,12 @@ class LIME_OT_take_pv_shot(Operator):
 
         shot = validate_scene.active_shot_context(context)
         if shot is None:
-            self.report({'ERROR'}, "No hay SHOT activo")
+            self.report({'ERROR'}, "No active SHOT")
             return {'CANCELLED'}
 
         cam_name = getattr(st, "selected_camera", None)
         if not cam_name or cam_name == "NONE":
-            self.report({'ERROR'}, "Seleccione una cámara")
+            self.report({'ERROR'}, "Please select a camera")
             return {'CANCELLED'}
 
         cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
@@ -131,7 +131,7 @@ class LIME_OT_take_pv_shot(Operator):
                     cam_obj = obj
                     break
         if cam_obj is None:
-            self.report({'ERROR'}, f"Cámara '{cam_name}' no encontrada")
+            self.report({'ERROR'}, f"Camera not found: '{cam_name}'")
             return {'CANCELLED'}
 
         # Prepare naming
@@ -184,7 +184,7 @@ class LIME_OT_take_pv_shot(Operator):
             except Exception:
                 pass
 
-        self.report({'INFO'}, f"Capturado: {filename}")
+        self.report({'INFO'}, f"Captured: {filename}")
         return {'FINISHED'}
 
 
@@ -192,7 +192,7 @@ class LIME_OT_take_all_pv_shots(Operator):
     bl_idname = "lime.take_all_pv_shots"
     bl_label = "Take All PV Shots"
     bl_options = {'REGISTER'}
-    bl_description = "Captura PNG del viewport para todas las cámaras de todos los SHOTs"
+    bl_description = "Capture PNG from viewport for all cameras of all SHOTs"
 
     @classmethod
     def poll(cls, ctx):
@@ -221,11 +221,11 @@ class LIME_OT_take_all_pv_shots(Operator):
         for shot, shot_idx in shots:
             cam_coll = shot.children.get(C_UTILS_CAM)
             if not cam_coll:
-                self.report({'WARNING'}, f"Omitiendo {shot.name}: sin colección de cámaras")
+                self.report({'WARNING'}, f"Skipping {shot.name}: no camera collection")
                 continue
             cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
             if not cameras:
-                self.report({'WARNING'}, f"Omitiendo {shot.name}: sin cámaras")
+                self.report({'WARNING'}, f"Skipping {shot.name}: no cameras")
                 continue
             cameras.sort(key=lambda o: o.name)
             restore_vis = _isolate_other_shots(scene, shot, include_all=bool(getattr(st, 'consider_all_shots', False)))
@@ -247,22 +247,22 @@ class LIME_OT_take_all_pv_shots(Operator):
                     pass
 
         scene.camera = original_camera
-        self.report({'INFO'}, "Capturas completadas para todos los SHOTs")
+        self.report({'INFO'}, "Captures completed for all SHOTs")
         return {'FINISHED'}
 
 
 class LIME_OT_add_camera_rig(Operator):
     bl_idname = "lime.add_camera_rig"
-    bl_label = "Crear Cámara (Rig)"
+    bl_label = "Create Camera (Rig)"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Añade un rig de cámara a la colección 00_UTILS_CAM del SHOT activo"
+    bl_description = "Add a camera rig to the SHOT's 00_UTILS_CAM collection"
 
     rig_type: EnumProperty(
-        name="Tipo de Rig",
+        name="Rig Type",
         items=(
-            ('DOLLY', "Dolly", "Rig tipo Dolly"),
-            ('CRANE', "Crane", "Rig tipo Crane"),
-            ('2D', "2D", "Rig 2D"),
+            ('DOLLY', "Dolly", "Dolly rig"),
+            ('CRANE', "Crane", "Crane rig"),
+            ('2D', "2D", "2D rig"),
         ),
         default='DOLLY',
     )
@@ -275,15 +275,15 @@ class LIME_OT_add_camera_rig(Operator):
     def execute(self, context):
         shot = validate_scene.active_shot_context(context)
         if shot is None:
-            self.report({'ERROR'}, "No hay SHOT activo")
+            self.report({'ERROR'}, "No active SHOT")
             return {'CANCELLED'}
 
         cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
         if cam_coll is None:
-            self.report({'ERROR'}, "El SHOT activo no tiene colección de cámaras")
+            self.report({'ERROR'}, "Active SHOT has no camera collection")
             return {'CANCELLED'}
 
-        # Info previa: cantidad de cámaras existentes y número de SHOT
+        # Pre-info: number of existing cameras and SHOT number
         try:
             cams_before = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
             existing_cam_count = len(cams_before)
@@ -316,7 +316,7 @@ class LIME_OT_add_camera_rig(Operator):
         except Exception:
             pass
 
-        # Operador confirmado: object.build_camera_rig(mode=...)
+        # Confirmed operator: object.build_camera_rig(mode=...)
         created = False
         last_error = None
         mode = self.rig_type
@@ -325,7 +325,7 @@ class LIME_OT_add_camera_rig(Operator):
         else:
             mode_candidates = [mode]
 
-        # Localizar una VIEW_3D para ejecutar el operador
+        # Locate a VIEW_3D to run the operator
         win = None
         area = None
         region = None
@@ -342,11 +342,11 @@ class LIME_OT_add_camera_rig(Operator):
                 break
         print(f"[LimePV] View3D located: win={bool(win)}, area={bool(area)}, region={bool(region)}")
 
-        # Guardar lista de objetos antes para detectar nuevos (por nombre)
+        # Save objects before for detection of new ones (by name)
         before_objs = {obj.name for obj in bpy.data.objects}
         print(f"[LimePV] Objects before: {len(before_objs)}")
 
-        # Asegurar modo OBJECT en contexto 3D
+        # Ensure OBJECT mode in 3D context
         try:
             if win and area and region:
                 with bpy.context.temp_override(window=win, area=area, region=region, scene=context.scene, view_layer=context.view_layer):
@@ -356,10 +356,10 @@ class LIME_OT_add_camera_rig(Operator):
         except Exception:
             pass
 
-        # Verificar operador disponible
+        # Verify operator availability
         build_op = getattr(bpy.ops.object, 'build_camera_rig', None)
         if build_op is None:
-            last_error = "Operador object.build_camera_rig no encontrado"
+            last_error = "Operator object.build_camera_rig not found"
             print("[LimePV] build_camera_rig operator NOT found")
         else:
             print(f"[LimePV] build_camera_rig operator available, mode candidates={mode_candidates}")
@@ -380,14 +380,14 @@ class LIME_OT_add_camera_rig(Operator):
                     continue
 
         if not created:
-            msg = "No se pudo crear la cámara. ¿Está habilitado 'Add Camera Rigs'?"
+            msg = "Could not create camera. Is 'Add Camera Rigs' enabled?"
             if last_error:
                 msg += f" ({last_error})"
             self.report({'ERROR'}, msg)
             print(f"[LimePV] Creation failed: {msg}")
             return {'CANCELLED'}
 
-        # Renombrar única y directamente la(s) cámara(s) nuevas (sin re-link ni tocar rig)
+        # Rename only the new camera(s) directly (no relink or rig changes)
         try:
             after_names = {obj.name for obj in bpy.data.objects}
             new_obj_names = [name for name in after_names if name not in before_objs]
@@ -415,11 +415,11 @@ class LIME_OT_add_camera_rig(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, f"Cámara creada en {shot.name}/{C_UTILS_CAM}")
+        self.report({'INFO'}, f"Camera created in {shot.name}/{C_UTILS_CAM}")
         return {'FINISHED'}
 
     def invoke(self, context, event):
-        # Mostrar diálogo para seleccionar tipo de rig
+        # Show dialog to select rig type
         return context.window_manager.invoke_props_dialog(self)
 
 

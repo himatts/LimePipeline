@@ -5,6 +5,7 @@ from bpy.props import StringProperty
 from ..core import validate_scene
 from ..core.naming import resolve_project_name
 from ..scene.scene_utils import create_shot, instance_shot, duplicate_shot, ensure_shot_tree
+import bpy
 
 
 class LIME_OT_new_shot(Operator):
@@ -57,6 +58,64 @@ class LIME_OT_shot_instance(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_delete_shot(Operator):
+    bl_idname = "lime.delete_shot"
+    bl_label = "Delete Shot"
+    bl_description = "Delete the entire SHOT collection and its contents"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    shot_name: StringProperty(name="Shot Name", default="")
+
+    @classmethod
+    def poll(cls, ctx):
+        return True
+
+    def _remove_collection_recursive(self, coll: bpy.types.Collection):
+        # Remove all objects in this collection
+        try:
+            for obj in list(coll.objects):
+                try:
+                    bpy.data.objects.remove(obj, do_unlink=True)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # Recurse into children first
+        try:
+            for child in list(coll.children):
+                self._remove_collection_recursive(child)
+        except Exception:
+            pass
+        # Finally, remove the collection itself
+        try:
+            bpy.data.collections.remove(coll, do_unlink=True)
+        except Exception:
+            pass
+
+    def execute(self, context):
+        name = (self.shot_name or '').strip()
+        if not name:
+            self.report({'ERROR'}, "No SHOT name provided")
+            return {'CANCELLED'}
+        # Validate it's a shot root
+        shot_coll = bpy.data.collections.get(name)
+        if shot_coll is None:
+            self.report({'ERROR'}, f"SHOT not found: {name}")
+            return {'CANCELLED'}
+        shots = [c for c, _ in validate_scene.list_shot_roots(context.scene)]
+        if shot_coll not in shots:
+            self.report({'ERROR'}, f"Not a SHOT root: {name}")
+            return {'CANCELLED'}
+        # Remove recursively
+        try:
+            self._remove_collection_recursive(shot_coll)
+        except Exception as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f"Deleted SHOT: {name}")
+        return {'FINISHED'}
+
+
 class LIME_OT_duplicate_shot(Operator):
     bl_idname = "lime.duplicate_shot"
     bl_label = "Duplicate Shot"
@@ -92,14 +151,14 @@ class LIME_OT_activate_shot(Operator):
     def execute(self, context):
         name = (self.shot_name or '').strip()
         if not name:
-            self.report({'ERROR'}, "Nombre de SHOT inválido")
+            self.report({'ERROR'}, "Invalid SHOT name")
             return {'CANCELLED'}
-        # Buscar la colección y activarla en el Outliner/View Layer
+        # Find collection and activate in Outliner/View Layer
         target = next((c for c in context.scene.collection.children if c.name == name), None)
         if target is None:
-            self.report({'ERROR'}, f"SHOT no encontrado: {name}")
+            self.report({'ERROR'}, f"SHOT not found: {name}")
             return {'CANCELLED'}
-        # Activar layer collection correspondiente
+        # Activate corresponding layer collection
         try:
             def _find_layer(layer, wanted):
                 if layer.collection == wanted:
@@ -117,7 +176,7 @@ class LIME_OT_activate_shot(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, f"Activo: {name}")
+        self.report({'INFO'}, f"Active: {name}")
         return {'FINISHED'}
 
 

@@ -1,0 +1,24 @@
+---
+alwaysApply: true
+description: Lime Pipeline – Project Rules index (scoped rules referenced below)
+---
+# Lime Pipeline – Project Rules Index
+
+This file is a short index. The actual scoped rules live in separate files and are auto-attached by Cursor when relevant.
+
+## Scoped rules (auto-attached)
+- Core boundaries: @.cursor/rules/core-boundaries.mdc
+- UI panels: @.cursor/rules/ui-panels.mdc
+- Ops/operators: @.cursor/rules/ops-operators.mdc
+- Scene helpers: @.cursor/rules/scene-helpers.mdc
+
+## Global minimal architecture/invariants (always on)
+- See: @.cursor/rules/00-architecture-and-invariants.mdc
+
+## Templates & PR checklist (manual/agent requested)
+- Templates: @.cursor/rules/templates.mdc
+- PR checklist: @.cursor/rules/pr-checklist.mdc
+
+## Docs maintenance
+- Canonical rules live in this folder (`.cursor/rules/*`).
+- Update `README.md`, `ARCHITECTURE.md`, and `CONTRIBUTING.md` when visible behavior or structure changes.

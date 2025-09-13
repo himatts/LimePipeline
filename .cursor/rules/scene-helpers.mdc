@@ -1,0 +1,15 @@
+---
+description: Scene helpers (SHOT tree, duplication semantics)
+globs:
+  - "lime_pipeline/scene/**/*.py"
+alwaysApply: false
+---
+
+# Guidelines
+- Create/duplicate SHOT preserving `SH##_*` prefixes and color tags.
+- Duplicate camera/light data to isolate shots; remap parenting/constraints.
+- Keep object/data names in sync when renaming.
+
+# References
+@lime_pipeline/scene/scene_utils.py
+@lime_pipeline/data/templates.py

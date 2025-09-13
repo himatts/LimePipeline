@@ -1,0 +1,15 @@
+---
+description: Operators rules (naming, feedback, delegation to core/scene)
+globs:
+  - "lime_pipeline/ops/**/*.py"
+alwaysApply: false
+---
+
+# Conventions
+- Class prefix `LIME_OT_` and `bl_idname` prefixed `lime.*`.
+- Delegate naming/paths/validate to `core`; no RAMV literals or formatting duplication.
+- User feedback via `self.report({'ERROR'|'WARNING'|'INFO'}, msg)`.
+- Avoid silent `except`; log or report.
+
+# Templates (invoke manually when creating a new operator)
+- Use @templates for a starter skeleton.

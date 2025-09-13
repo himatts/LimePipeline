@@ -42,3 +42,7 @@ De forma práctica, el add-on:
 ## Licencia
 
 Pendiente de definir.
+
+## Reglas canónicas y mantenimiento de docs
+- El archivo canónico de reglas es: `.cursor/rules/limepipelinerules.mdc`.
+- Si cambias el comportamiento visible o la arquitectura, actualiza también: `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`.

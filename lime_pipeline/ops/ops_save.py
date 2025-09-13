@@ -192,10 +192,151 @@ class LIME_OT_save_as_with_template(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_duplicate_active_camera(Operator):
+    bl_idname = "lime.duplicate_active_camera"
+    bl_label = "Duplicate Camera"
+    bl_description = "Duplicate the active scene camera in place and remove all keyframes from the copy"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, ctx):
+        cam = getattr(getattr(ctx, 'scene', None), 'camera', None)
+        return cam is not None
+
+    def execute(self, context):
+        scene = context.scene
+        cam = scene.camera
+        if cam is None:
+            self.report({'ERROR'}, "No active camera in the scene")
+            return {'CANCELLED'}
+
+        try:
+            # Find rig root (top-most parent); if none, duplicate only the camera
+            root = cam
+            try:
+                while getattr(root, 'parent', None) is not None:
+                    root = root.parent
+            except Exception:
+                root = cam
+
+            # Collect hierarchy under root (including root)
+            if root is cam and not getattr(cam, 'children', None):
+                rig_objects = [cam]
+            else:
+                rig_objects = []
+                queue = [root]
+                seen = set()
+                while queue:
+                    ob = queue.pop(0)
+                    if ob in seen:
+                        continue
+                    seen.add(ob)
+                    rig_objects.append(ob)
+                    try:
+                        for ch in getattr(ob, 'children', []) or []:
+                            queue.append(ch)
+                    except Exception:
+                        pass
+
+            # Duplicate all objects and link to the same collections
+            original_to_copy = {}
+            for ob in rig_objects:
+                try:
+                    new_ob = ob.copy()
+                    if getattr(ob, 'data', None) is not None:
+                        try:
+                            new_ob.data = ob.data.copy()
+                        except Exception:
+                            pass
+                    # Link to the same collections; fallback to scene collection
+                    linked = False
+                    try:
+                        for c in list(getattr(ob, 'users_collection', []) or []):
+                            try:
+                                c.objects.link(new_ob)
+                                linked = True
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    if not linked:
+                        try:
+                            scene.collection.objects.link(new_ob)
+                        except Exception:
+                            pass
+                    original_to_copy[ob] = new_ob
+                except Exception:
+                    pass
+
+            # Restore parenting among duplicates
+            for ob, new_ob in list(original_to_copy.items()):
+                par = getattr(ob, 'parent', None)
+                if par is not None and par in original_to_copy:
+                    try:
+                        new_ob.parent = original_to_copy[par]
+                    except Exception:
+                        pass
+                    try:
+                        new_ob.parent_type = ob.parent_type
+                    except Exception:
+                        pass
+                    if getattr(ob, 'parent_type', None) == 'BONE':
+                        try:
+                            new_ob.parent_bone = ob.parent_bone
+                        except Exception:
+                            pass
+                    try:
+                        new_ob.matrix_parent_inverse = ob.matrix_parent_inverse.copy()
+                    except Exception:
+                        pass
+
+            # Retarget constraints inside the duplicated rig to use duplicates
+            for ob, new_ob in list(original_to_copy.items()):
+                try:
+                    for con in getattr(new_ob, 'constraints', []) or []:
+                        try:
+                            if hasattr(con, 'target') and con.target in original_to_copy:
+                                con.target = original_to_copy[con.target]
+                        except Exception:
+                            pass
+                        try:
+                            if hasattr(con, 'object') and con.object in original_to_copy:
+                                con.object = original_to_copy[con.object]
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # Clear animation on duplicates (object and data)
+            for new_ob in list(original_to_copy.values()):
+                try:
+                    if getattr(new_ob, 'animation_data', None):
+                        new_ob.animation_data_clear()
+                except Exception:
+                    pass
+                try:
+                    data = getattr(new_ob, 'data', None)
+                    if data is not None and getattr(data, 'animation_data', None):
+                        data.animation_data_clear()
+                except Exception:
+                    pass
+
+            # Report
+            if root is cam and len(original_to_copy) == 1:
+                self.report({'INFO'}, f"Duplicated camera: {original_to_copy[cam].name}")
+            else:
+                self.report({'INFO'}, f"Duplicated camera rig with {len(original_to_copy)} objects")
+            return {'FINISHED'}
+        except Exception as ex:
+            self.report({'ERROR'}, str(ex))
+            return {'CANCELLED'}
+
+
 __all__ = [
     "LIME_OT_set_active_camera",
     "LIME_OT_render_invoke",
     "LIME_OT_save_as_with_template",
+    "LIME_OT_duplicate_active_camera",
 ]
 
 

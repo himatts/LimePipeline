@@ -193,10 +193,14 @@ def hydrate_state_from_filepath(state, force: bool = False) -> None:
             if info.get('sc') is not None and (force or current_sc == 0):
                 state.sc_number = int(info['sc'])
 
-        # Deduce project_root from folder structure: <root>/2. Graphic & Media/3. Rendering-Animation-Video/...
+        # Deduce project_root from folder structure using canonical RAMV segments
+        try:
+            from .paths import RAMV_DIR_1
+        except Exception:
+            RAMV_DIR_1 = '2. Graphic & Media'
         gm = None
         for parent in blend_path.parents:
-            if parent.name == '2. Graphic & Media':
+            if parent.name == RAMV_DIR_1:
                 gm = parent
                 break
         if gm is not None and (force or not getattr(state, 'project_root', None)):

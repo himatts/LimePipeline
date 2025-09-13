@@ -98,22 +98,18 @@ class LimePipelineState(PropertyGroup):
         default=False,
     )
 
-    # UI collapsible sections state for Render Configs panel
-    ui_rc_show_settings: BoolProperty(
-        name="Show Settings",
-        description="Show/Hide Resolution, Cycles and Color Management",
+    # (Removed) UI collapsible flags for Render Configs; now using subpanels
+
+    # UI collapsible sections for Shots panel
+    ui_shots_show_list: BoolProperty(
+        name="Show Shot List",
+        description="Show/Hide the list of SHOTs",
         default=True,
         options={'HIDDEN'},
     )
-    ui_rc_show_cameras: BoolProperty(
-        name="Show Cameras",
-        description="Show/Hide camera list and Render button",
-        default=True,
-        options={'HIDDEN'},
-    )
-    ui_rc_show_outputs: BoolProperty(
-        name="Show Outputs",
-        description="Show/Hide output folders shortcuts",
+    ui_shots_show_tools: BoolProperty(
+        name="Show Shot Tools",
+        description="Show/Hide the shot tools section",
         default=True,
         options={'HIDDEN'},
     )

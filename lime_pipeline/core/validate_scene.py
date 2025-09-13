@@ -99,13 +99,14 @@ def can_create_new_shot(scene: bpy.types.Scene) -> Tuple[bool, str]:
 def can_instance_shot(ctx) -> Tuple[bool, str]:
     if active_shot_context(ctx) is not None:
         return True, ""
-    return False, "Active una colección dentro de un 'SHOT ##' para instanciar."
+    return False, "Activate a collection inside a 'SHOT ##' to instance."
 
 
 def can_duplicate_shot(ctx) -> Tuple[bool, str]:
     if active_shot_context(ctx) is not None:
         return True, ""
-    return False, "Active una colección dentro de un 'SHOT ##' para duplicar."
+    return False, "Activate a collection inside a 'SHOT ##' to duplicate."
+
 
 def get_shot_child_by_basename(shot: bpy.types.Collection, base_name: str) -> Optional[bpy.types.Collection]:
     """Return direct child collection of shot whose name matches base_name ignoring numeric suffixes.
@@ -132,10 +133,10 @@ def get_shot_child_by_basename(shot: bpy.types.Collection, base_name: str) -> Op
 
 
 def isolate_shots_temporarily(scene: bpy.types.Scene, target_shot: bpy.types.Collection | None, include_all: bool = False):
-    """Oculta temporalmente otros SHOTs mientras se procesa el SHOT objetivo.
+    """Temporarily hide other SHOTs while processing the target shot.
 
-    Devuelve una función restore() que revierte el estado de visibilidad y exclusión.
-    Si include_all es True o target_shot es None, no hace nada y devuelve un no-op.
+    Returns a restore() function that reverts visibility/exclusion state.
+    If include_all is True or target_shot is None, it's a no-op.
     """
     try:
         if include_all or target_shot is None:

@@ -1,0 +1,18 @@
+---
+description: PR checklist and test guidance for Lime Pipeline
+globs:
+alwaysApply: false
+---
+
+# PR Checklist
+- UI/messages in EN
+- No duplicated literals for paths/constants (use core helpers)
+- No duplicated logic; reuse `core`/`scene`
+- No IO in `draw()`; no silent `except`
+- Typed public functions; short "why" docstrings
+- Bump `bl_info["version"]` if user-facing behavior changes
+- Docs updated (README, ARCHITECTURE, CONTRIBUTING)
+
+# Tests
+- Unit (core): naming, paths, validate
+- Optional smoke: Blender headless for key flows

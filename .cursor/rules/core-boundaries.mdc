@@ -1,0 +1,16 @@
+---
+description: Core module rules (no hard bpy, naming/paths/validate are canonical)
+globs:
+  - "lime_pipeline/core/**/*.py"
+alwaysApply: false
+---
+
+# Core rules
+- Do not import `bpy` at module level; local imports inside functions only.
+- Constants/regex live here. Reuse `core.naming` + `core.paths` + `core.validate`; avoid duplication.
+- Public functions: typed + short docstrings.
+
+# Canonical helpers
+@lime_pipeline/core/naming.py
+@lime_pipeline/core/paths.py
+@lime_pipeline/core/validate.py

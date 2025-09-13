@@ -36,13 +36,13 @@ class LIME_OT_import_layout(Operator):
                 context.window.workspace = existing_ws
             except Exception:
                 pass
-            self.report({'INFO'}, f"El Workspace '{TARGET_WORKSPACE_NAME}' ya existe; activado.")
+            self.report({'INFO'}, f"Workspace '{TARGET_WORKSPACE_NAME}' already exists; activated.")
             return {'FINISHED'}
 
         # Resolve library path
         lib_path = self._library_path(context)
         if lib_path is None or not lib_path.exists():
-            self.report({'ERROR'}, f"No se encontró la librería: {lib_path}")
+            self.report({'ERROR'}, f"Library not found: {lib_path}")
             return {'CANCELLED'}
 
         # Append the workspace from the .blend
@@ -54,13 +54,13 @@ class LIME_OT_import_layout(Operator):
                 link=False,
             )
         except Exception as ex:
-            self.report({'ERROR'}, f"Error al importar Workspace: {ex}")
+            self.report({'ERROR'}, f"Error importing Workspace: {ex}")
             return {'CANCELLED'}
 
         # Verify and activate
         ws = bpy.data.workspaces.get(TARGET_WORKSPACE_NAME)
         if ws is None:
-            self.report({'ERROR'}, "El Workspace no se encontró tras importar.")
+            self.report({'ERROR'}, "Workspace not found after import.")
             return {'CANCELLED'}
 
         try:
@@ -68,7 +68,7 @@ class LIME_OT_import_layout(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, f"Importado el Workspace '{TARGET_WORKSPACE_NAME}'.")
+        self.report({'INFO'}, f"Imported Workspace '{TARGET_WORKSPACE_NAME}'.")
         return {'FINISHED'}
 
 
