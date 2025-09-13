@@ -9,7 +9,8 @@ alwaysApply: true
 
 # Architecture (high-level)
 - Modules: core, data, scene, ops, ui.
-- UI/messages in English; future-friendly for Blender i18n.
+- UI/messages in English; future-friendly for Blender i18n. Code, comments, identifiers in English.
+- Prefer native Blender UI elements; avoid custom widgets/drawing unless necessary.
 
 # Invariants (single source of truth)
 - Project root matches `^[A-Z]{2}-\d{5}\s+(.+)$`

@@ -114,6 +114,8 @@ class LIME_OT_save_as_with_template(Operator):
 
     ptype: StringProperty(name="Project Type", default="REND")
     filepath: StringProperty(name="File Path", subtype='FILE_PATH')
+    # Image name captured at invoke-time from the Image Editor
+    image_name: StringProperty(name="Image Name", default="")
 
     def _build_suggested_path(self, context) -> str:
         wm = context.window_manager
@@ -150,6 +152,15 @@ class LIME_OT_save_as_with_template(Operator):
             # Still attempt to open the browser; user can choose a path
             self.filepath = str(Path.home() / "render.png")
             self.report({'WARNING'}, str(ex))
+        # Remember the image currently displayed in the Image Editor (panel lives there)
+        try:
+            if getattr(context, 'area', None) and getattr(context.area, 'type', '') == 'IMAGE_EDITOR':
+                sp = getattr(context, 'space_data', None)
+                img = getattr(sp, 'image', None) if sp else None
+                if img is not None:
+                    self.image_name = img.name
+        except Exception:
+            self.image_name = self.image_name or ""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
@@ -159,17 +170,58 @@ class LIME_OT_save_as_with_template(Operator):
         if not path:
             self.report({'ERROR'}, "No file path provided")
             return {'CANCELLED'}
-        # Prefer Render Result, then Viewer Node, then active image in any Image Editor
-        img = bpy.data.images.get("Render Result") or bpy.data.images.get("Viewer Node")
+        # Strategy to choose the correct image to save:
+        # 1) Use the image captured at invoke-time (from Image Editor panel)
+        # 2) Look for an Image Editor in the current window showing an image (prefer Render Result/Viewer Node)
+        # 3) Fallback to the latest Render Result.* or Viewer Node.* in bpy.data.images
+
+        img = None
+
+        # 1) Use captured name from invoke
+        name = (getattr(self, 'image_name', '') or '').strip()
+        if name:
+            img = bpy.data.images.get(name)
+
+        # 2) Search current window Image Editors if needed
         if img is None:
-            # Try active image
             try:
+                preferred = None
+                any_image = None
                 for area in context.window.screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         sp = area.spaces.active
-                        if sp and getattr(sp, 'image', None) is not None:
-                            img = sp.image
+                        im = getattr(sp, 'image', None) if sp else None
+                        if im is None:
+                            continue
+                        if any_image is None:
+                            any_image = im
+                        # Prefer Render Result / Viewer Node
+                        if im.name.startswith("Render Result") or im.name.startswith("Viewer Node"):
+                            preferred = im
                             break
+                img = preferred or any_image or None
+            except Exception:
+                img = None
+
+        # 3) Fallback to latest by prefix in bpy.data.images
+        if img is None:
+            try:
+                def _latest_by_prefix(prefix: str):
+                    candidates = [im for im in bpy.data.images if getattr(im, 'name', '').startswith(prefix)]
+                    if not candidates:
+                        return None
+                    def _suffix_num(nm: str) -> int:
+                        # Parse trailing .###; base name with no numeric suffix ranks lower
+                        parts = nm.rsplit('.', 1)
+                        if len(parts) == 2 and parts[1].isdigit():
+                            try:
+                                return int(parts[1])
+                            except Exception:
+                                return -1
+                        return -1
+                    candidates.sort(key=lambda im: _suffix_num(im.name))
+                    return candidates[-1]
+                img = _latest_by_prefix("Render Result") or _latest_by_prefix("Viewer Node")
             except Exception:
                 img = None
         if img is None:
@@ -338,5 +390,101 @@ __all__ = [
     "LIME_OT_save_as_with_template",
     "LIME_OT_duplicate_active_camera",
 ]
+
+
+class LIME_OT_rename_shot_cameras(Operator):
+    bl_idname = "lime.rename_shot_cameras"
+    bl_label = "Rename Cameras"
+    bl_description = "Renames cameras in the active SHOT's camera collection to keep sequential order"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, ctx):
+        shot = validate_scene.active_shot_context(ctx)
+        if shot is None:
+            return False
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        if cam_coll is None:
+            return False
+        cams = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
+        return len(cams) > 0
+
+    def execute(self, context):
+        shot = validate_scene.active_shot_context(context)
+        if shot is None:
+            self.report({'ERROR'}, "No active SHOT")
+            return {'CANCELLED'}
+
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        if cam_coll is None:
+            self.report({'ERROR'}, "Active SHOT has no camera collection")
+            return {'CANCELLED'}
+
+        # Gather cameras in the SHOT camera collection
+        cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
+        if not cameras:
+            self.report({'WARNING'}, "No cameras found in SHOT camera collection")
+            return {'CANCELLED'}
+
+        # Stable ordering based on name; fallback to id if needed
+        try:
+            cameras.sort(key=lambda o: o.name)
+        except Exception:
+            pass
+
+        # Determine shot numeric index for naming
+        try:
+            shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+        except Exception:
+            shot_idx = 0
+
+        # First pass: move all to unique temporary names to avoid collisions
+        temp_names = {}
+        for cam in cameras:
+            base_tmp = f"__TMP_RENAME__{cam.name}"
+            tmp = base_tmp
+            suffix = 1
+            try:
+                while tmp in bpy.data.objects.keys():
+                    suffix += 1
+                    tmp = f"{base_tmp}_{suffix}"
+                cam.name = tmp
+                if getattr(cam, "data", None) is not None:
+                    try:
+                        cam.data.name = tmp + ".Data"
+                    except Exception:
+                        pass
+                temp_names[cam] = tmp
+            except Exception:
+                temp_names[cam] = cam.name
+
+        # Second pass: assign target sequential names
+        renamed = 0
+        for idx, cam in enumerate(cameras, 1):
+            target = f"SHOT_{shot_idx:02d}_CAMERA_{idx}"
+            final = target
+            guard = 1
+            try:
+                # Avoid collisions with unrelated objects
+                while final in bpy.data.objects.keys():
+                    if bpy.data.objects[final] is cam:
+                        break
+                    guard += 1
+                    final = f"{target}_{guard}"
+                cam.name = final
+                if getattr(cam, "data", None) is not None:
+                    try:
+                        cam.data.name = final + ".Data"
+                    except Exception:
+                        pass
+                renamed += 1
+            except Exception:
+                pass
+
+        self.report({'INFO'}, f"Renamed {renamed} cameras in {shot.name}")
+        return {'FINISHED'}
+
+
+__all__.append("LIME_OT_rename_shot_cameras")
 
 

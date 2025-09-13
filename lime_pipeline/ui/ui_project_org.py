@@ -73,7 +73,7 @@ class LIME_PT_project_org(Panel):
         row_fn.alignment = 'LEFT'
         row_fn.label(text=(filename or ""))
 
-        # Status box (checks/avisos)
+        # Status box (checks/warnings)
         box_status = layout.box()
         box_status.label(text="Status")
         icon = 'CHECKMARK' if ok else 'ERROR'
@@ -102,5 +102,4 @@ class LIME_PT_project_org(Panel):
         row = box3.row(align=True)
         row.operator("lime.ensure_folders", text="Create Folders", icon='FILE_NEW')
         row.operator("lime.open_folder", text="Open Folder", icon='FILE_FOLDER')
-
 

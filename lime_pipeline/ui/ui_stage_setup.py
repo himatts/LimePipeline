@@ -17,7 +17,7 @@ class LIME_PT_stage_setup(Panel):
 
     @classmethod
     def poll(cls, ctx):
-        # Siempre visible; se deshabilitarán acciones si no hay SHOT
+        # Always visible; actions are disabled if there is no active SHOT
         return True
 
     def draw(self, ctx):
@@ -35,3 +35,4 @@ class LIME_PT_stage_setup(Panel):
 __all__ = [
     "LIME_PT_stage_setup",
 ]
+

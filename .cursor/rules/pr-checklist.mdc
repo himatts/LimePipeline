@@ -5,7 +5,8 @@ alwaysApply: false
 ---
 
 # PR Checklist
-- UI/messages in EN
+- UI/messages in EN. Code, comments, identifiers in English.
+- Prefer native Blender UI elements; avoid custom GPU drawing unless strictly necessary.
 - No duplicated literals for paths/constants (use core helpers)
 - No duplicated logic; reuse `core`/`scene`
 - No IO in `draw()`; no silent `except`

@@ -9,12 +9,12 @@ class LIME_PT_image_save_as(Panel):
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
     bl_category = CAT
-    bl_label = "Save as:"
+    bl_label = "Save As"
     bl_idname = "LIME_PT_image_save_as"
 
     @classmethod
     def poll(cls, ctx):
-        # Mostrar cuando hay una imagen en el editor (p.ej., Render Result)
+        # Show only when there is an image in the editor (e.g., Render Result)
         try:
             sp = ctx.space_data
             return getattr(sp, 'image', None) is not None

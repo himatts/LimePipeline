@@ -115,11 +115,16 @@ class LIME_PT_render_cameras(Panel):
         layout = self.layout
         scene = ctx.scene
 
-        # Controls: single row so buttons quedan pegados
+        # Controls: single row so buttons are tightly grouped
         row = layout.row(align=True)
         row.enabled = validate_scene.active_shot_context(ctx) is not None
         row.operator("lime.add_camera_rig", text="Create Camera (Rig)", icon='OUTLINER_DATA_CAMERA')
         row.operator("lime.duplicate_active_camera", text="", icon='DUPLICATE')
+
+        # Rename cameras in active SHOT's camera collection
+        row = layout.row(align=True)
+        row.enabled = validate_scene.active_shot_context(ctx) is not None
+        row.operator("lime.rename_shot_cameras", text="Rename Cameras", icon='FILE_REFRESH')
 
         row = layout.row(align=True)
         row.enabled = False
@@ -231,5 +236,3 @@ __all__ = [
     "LIME_PT_render_camera_list",
     "LIME_PT_render_outputs",
 ]
-
-
