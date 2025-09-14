@@ -570,7 +570,9 @@ class LIME_TB_PT_noisy_movement(Panel):
         else:
             remove_op.object_name = ""
 
-        layout.operator('lime.tb_noise_apply_to_selected', icon='PLUS')
+        row = layout.row(align=True)
+        row.operator('lime.tb_noise_apply_to_selected', icon='PLUS')
+        row.operator('lime.tb_noise_remove_selected', icon='REMOVE')
 
 
 __all__ += [

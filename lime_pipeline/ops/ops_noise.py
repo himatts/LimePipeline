@@ -265,7 +265,7 @@ class LIME_TB_OT_noise_apply_to_selected(Operator):
 class LIME_TB_OT_noise_remove_from_object(Operator):
     bl_idname = "lime.tb_noise_remove_from_object"
     bl_label = "Remove from Noise"
-    bl_description = "Remove this object's link to the active noise (mute matching modifiers)."
+    bl_description = "Remove this object's link to the active noise (delete matching modifiers)."
 
     object_name: bpy.props.StringProperty(options={'HIDDEN'})
 
@@ -288,7 +288,7 @@ class LIME_TB_OT_noise_remove_from_object(Operator):
             for m in list(getattr(fc, "modifiers", []) or []):
                 try:
                     if m.type == 'NOISE' and m.name == noise_name:
-                        m.mute = True
+                        fc.modifiers.remove(m)
                         removed += 1
                 except Exception:
                     pass
@@ -301,7 +301,51 @@ class LIME_TB_OT_noise_remove_from_object(Operator):
                 it.name = o.name
         except Exception:
             pass
-        self.report({'INFO'}, f"Muted {removed} modifiers on {obj.name}")
+        self.report({'INFO'}, f"Removed {removed} modifiers from {obj.name}")
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_noise_remove_selected(Operator):
+    bl_idname = "lime.tb_noise_remove_selected"
+    bl_label = "Remove Selected Objects from Active Noise"
+    bl_description = "Delete all Noise modifiers with the active noise name from the current selection."
+
+    def execute(self, context):
+        scene = context.scene
+        col = getattr(scene, "lime_tb_noise_profiles", None)
+        idx = getattr(scene, "lime_tb_noise_active", -1)
+        if col is None or not (0 <= idx < len(col)):
+            self.report({'WARNING'}, "No active noise")
+            return {'CANCELLED'}
+        noise_name = col[idx].name
+        objs = context.selected_objects or []
+        if not objs:
+            self.report({'WARNING'}, "No selected objects")
+            return {'CANCELLED'}
+        total_removed = 0
+        for obj in objs:
+            ad = getattr(obj, "animation_data", None)
+            act = getattr(ad, "action", None) if ad else None
+            if act is None:
+                continue
+            for fc in list(getattr(act, "fcurves", []) or []):
+                for m in list(getattr(fc, "modifiers", []) or []):
+                    try:
+                        if m.type == 'NOISE' and m.name == noise_name:
+                            fc.modifiers.remove(m)
+                            total_removed += 1
+                    except Exception:
+                        pass
+        # Refresh affected cache
+        try:
+            aff = scene.lime_tb_noise_affected
+            aff.clear()
+            for o in _objects_with_noise(noise_name):
+                it = aff.add()
+                it.name = o.name
+        except Exception:
+            pass
+        self.report({'INFO'}, f"Removed {total_removed} modifiers from selected objects")
         return {'FINISHED'}
 
 
@@ -495,6 +539,7 @@ __all__ = [
     "LIME_TB_OT_noise_sync",
     "LIME_TB_OT_noise_apply_to_selected",
     "LIME_TB_OT_noise_remove_from_object",
+    "LIME_TB_OT_noise_remove_selected",
     "LIME_TB_OT_noise_rename_profile",
     "LIME_TB_OT_noise_group_randomize",
     "LIME_TB_OT_noise_group_copy",
