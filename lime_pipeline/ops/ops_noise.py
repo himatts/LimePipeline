@@ -508,7 +508,7 @@ class LIME_TB_OT_noise_group_paste(Operator):
 class LIME_TB_OT_noise_delete_profile(Operator):
     bl_idname = "lime.tb_noise_delete_profile"
     bl_label = "Delete Noise"
-    bl_description = "Remove the active noise profile from the list (does not modify scene modifiers)."
+    bl_description = "Delete the active noise profile and remove its Noise modifiers from all objects."
 
     def execute(self, context):
         scene = context.scene
@@ -519,18 +519,34 @@ class LIME_TB_OT_noise_delete_profile(Operator):
         if not (0 <= idx < len(col)):
             return {'CANCELLED'}
         name = col[idx].name
+        # Remove matching modifiers from all objects
+        removed = 0
+        for obj in bpy.data.objects:
+            ad = getattr(obj, "animation_data", None)
+            act = getattr(ad, "action", None) if ad else None
+            if act is None:
+                continue
+            for fc in list(getattr(act, "fcurves", []) or []):
+                for m in list(getattr(fc, "modifiers", []) or []):
+                    try:
+                        if m.type == 'NOISE' and m.name == name:
+                            fc.modifiers.remove(m)
+                            removed += 1
+                    except Exception:
+                        pass
+        # Remove profile from collection
         col.remove(idx)
         # Adjust active index
         if idx >= len(col):
             scene.lime_tb_noise_active = len(col) - 1
         else:
             scene.lime_tb_noise_active = idx
-        # Clear affected cache since active may have changed
+        # Clear affected cache and leave empty
         try:
             scene.lime_tb_noise_affected.clear()
         except Exception:
             pass
-        self.report({'INFO'}, f"Deleted noise profile '{name}' from list")
+        self.report({'INFO'}, f"Deleted noise '{name}' and removed {removed} modifiers")
         return {'FINISHED'}
 
 
