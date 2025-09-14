@@ -1,4 +1,5 @@
 import bpy
+import random
 from bpy.types import Operator
 
 
@@ -353,6 +354,113 @@ class LIME_TB_OT_noise_rename_profile(Operator):
         return {'FINISHED'}
 
 
+class LIME_TB_OT_noise_group_randomize(Operator):
+    bl_idname = "lime.tb_noise_group_randomize"
+    bl_label = "Randomize Group Values"
+    bl_description = "Assign random values to Strength, Scale and Phase for X/Y/Z of this group."
+
+    group: bpy.props.EnumProperty(items=[('loc', 'Location', ''), ('rot', 'Rotation', ''), ('scl', 'Scale', '')])
+
+    # Simple ranges; adjust in last operator panel if invoked
+    strength_min: bpy.props.FloatProperty(name="Strength Min", default=-1.0)
+    strength_max: bpy.props.FloatProperty(name="Strength Max", default=1.0)
+    scale_min: bpy.props.FloatProperty(name="Scale Min", default=0.25, min=0.0)
+    scale_max: bpy.props.FloatProperty(name="Scale Max", default=2.0, min=0.0)
+    phase_min: bpy.props.FloatProperty(name="Phase Min", default=-3.1416)
+    phase_max: bpy.props.FloatProperty(name="Phase Max", default=3.1416)
+
+    def execute(self, context):
+        scene = context.scene
+        col = getattr(scene, "lime_tb_noise_profiles", None)
+        idx = getattr(scene, "lime_tb_noise_active", -1)
+        if col is None or not (0 <= idx < len(col)):
+            self.report({'WARNING'}, "No active noise")
+            return {'CANCELLED'}
+        prof = col[idx]
+        g = self.group
+        # Helper to set triplets
+        def set_triplet(prop_suffix: str, min_v: float, max_v: float):
+            setattr(prof, f"{g}_x_{prop_suffix}", random.uniform(min_v, max_v))
+            setattr(prof, f"{g}_y_{prop_suffix}", random.uniform(min_v, max_v))
+            setattr(prof, f"{g}_z_{prop_suffix}", random.uniform(min_v, max_v))
+
+        set_triplet('strength', self.strength_min, self.strength_max)
+        set_triplet('scale', self.scale_min, self.scale_max)
+        set_triplet('phase', self.phase_min, self.phase_max)
+        self.report({'INFO'}, f"Randomized {g} values")
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_noise_group_copy(Operator):
+    bl_idname = "lime.tb_noise_group_copy"
+    bl_label = "Copy Group Values"
+    bl_description = "Copy Strength, Scale and Phase for X/Y/Z of this group to clipboard."
+
+    group: bpy.props.EnumProperty(items=[('loc', 'Location', ''), ('rot', 'Rotation', ''), ('scl', 'Scale', '')])
+
+    def execute(self, context):
+        scene = context.scene
+        wm = context.window_manager
+        col = getattr(scene, "lime_tb_noise_profiles", None)
+        idx = getattr(scene, "lime_tb_noise_active", -1)
+        if col is None or not (0 <= idx < len(col)):
+            self.report({'WARNING'}, "No active noise")
+            return {'CANCELLED'}
+        prof = col[idx]
+        g = self.group
+        vals = [
+            getattr(prof, f"{g}_x_strength"), getattr(prof, f"{g}_y_strength"), getattr(prof, f"{g}_z_strength"),
+            getattr(prof, f"{g}_x_scale"),    getattr(prof, f"{g}_y_scale"),    getattr(prof, f"{g}_z_scale"),
+            getattr(prof, f"{g}_x_phase"),    getattr(prof, f"{g}_y_phase"),    getattr(prof, f"{g}_z_phase"),
+        ]
+        try:
+            wm.lime_tb_noise_clip_values = vals
+            wm.lime_tb_noise_clip_valid = True
+        except Exception:
+            self.report({'ERROR'}, "Clipboard properties not available")
+            return {'CANCELLED'}
+        self.report({'INFO'}, f"Copied {g} values")
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_noise_group_paste(Operator):
+    bl_idname = "lime.tb_noise_group_paste"
+    bl_label = "Paste Group Values"
+    bl_description = "Paste Strength, Scale and Phase from clipboard into this group."
+
+    group: bpy.props.EnumProperty(items=[('loc', 'Location', ''), ('rot', 'Rotation', ''), ('scl', 'Scale', '')])
+
+    def execute(self, context):
+        scene = context.scene
+        wm = context.window_manager
+        col = getattr(scene, "lime_tb_noise_profiles", None)
+        idx = getattr(scene, "lime_tb_noise_active", -1)
+        if col is None or not (0 <= idx < len(col)):
+            self.report({'WARNING'}, "No active noise")
+            return {'CANCELLED'}
+        if not getattr(wm, 'lime_tb_noise_clip_valid', False):
+            self.report({'WARNING'}, "Clipboard is empty")
+            return {'CANCELLED'}
+        vals = list(getattr(wm, 'lime_tb_noise_clip_values', []))
+        if len(vals) != 9:
+            self.report({'WARNING'}, "Clipboard has unexpected format")
+            return {'CANCELLED'}
+        prof = col[idx]
+        g = self.group
+        # Assign in same order as copied
+        try:
+            prof[f"{g}_x_strength"], prof[f"{g}_y_strength"], prof[f"{g}_z_strength"], \
+            prof[f"{g}_x_scale"], prof[f"{g}_y_scale"], prof[f"{g}_z_scale"], \
+            prof[f"{g}_x_phase"], prof[f"{g}_y_phase"], prof[f"{g}_z_phase"] = vals
+        except Exception:
+            # Fallback explicit sets in case item assignment unsupported
+            setattr(prof, f"{g}_x_strength", vals[0]); setattr(prof, f"{g}_y_strength", vals[1]); setattr(prof, f"{g}_z_strength", vals[2])
+            setattr(prof, f"{g}_x_scale", vals[3]);    setattr(prof, f"{g}_y_scale", vals[4]);    setattr(prof, f"{g}_z_scale", vals[5])
+            setattr(prof, f"{g}_x_phase", vals[6]);    setattr(prof, f"{g}_y_phase", vals[7]);    setattr(prof, f"{g}_z_phase", vals[8])
+        self.report({'INFO'}, f"Pasted {g} values")
+        return {'FINISHED'}
+
+
 class LIME_TB_OT_noise_delete_profile(Operator):
     bl_idname = "lime.tb_noise_delete_profile"
     bl_label = "Delete Noise"
@@ -388,5 +496,8 @@ __all__ = [
     "LIME_TB_OT_noise_apply_to_selected",
     "LIME_TB_OT_noise_remove_from_object",
     "LIME_TB_OT_noise_rename_profile",
+    "LIME_TB_OT_noise_group_randomize",
+    "LIME_TB_OT_noise_group_copy",
+    "LIME_TB_OT_noise_group_paste",
     "LIME_TB_OT_noise_delete_profile",
 ]

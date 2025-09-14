@@ -6,6 +6,7 @@ from bpy.props import (
     StringProperty,
     IntProperty,
     FloatProperty,
+    FloatVectorProperty,
     CollectionProperty,
     PointerProperty,
 )
@@ -428,6 +429,9 @@ def register_noise_props():
     bpy.types.Scene.lime_tb_noise_active = IntProperty(name="Active Noise", default=-1, update=_on_active_noise_changed)
     bpy.types.Scene.lime_tb_noise_affected = CollectionProperty(type=LimeTBNoiseAffectedItem)
     bpy.types.Scene.lime_tb_noise_affected_index = IntProperty(name="Affected Index", default=-1, options={'HIDDEN'})
+    # Clipboard (WindowManager)
+    bpy.types.WindowManager.lime_tb_noise_clip_values = FloatVectorProperty(size=9, options={'HIDDEN', 'SKIP_SAVE'})
+    bpy.types.WindowManager.lime_tb_noise_clip_valid = BoolProperty(options={'HIDDEN'}, default=False)
 
 
 def unregister_noise_props():
@@ -449,6 +453,15 @@ def unregister_noise_props():
     ):
         try:
             bpy.utils.unregister_class(cls)
+        except Exception:
+            pass
+    # Clipboard cleanup
+    for attr in (
+        'lime_tb_noise_clip_values',
+        'lime_tb_noise_clip_valid',
+    ):
+        try:
+            delattr(bpy.types.WindowManager, attr)
         except Exception:
             pass
 
@@ -493,7 +506,16 @@ class LIME_TB_PT_noisy_movement(Panel):
         # Sections: Location / Rotation / Scale
         def draw_group(container, label_prefix: str, key: str):
             col = container.column(align=True)
-            col.label(text=label_prefix)
+            header = col.row(align=True)
+            header.label(text=label_prefix)
+            header.alignment = 'RIGHT'
+            # Header tools: randomize, copy, paste
+            rnd = header.operator('lime.tb_noise_group_randomize', text='', icon='RNDCURVE')
+            rnd.group = key
+            cpy = header.operator('lime.tb_noise_group_copy', text='', icon='COPYDOWN')
+            cpy.group = key
+            pst = header.operator('lime.tb_noise_group_paste', text='', icon='PASTEDOWN')
+            pst.group = key
             # Axis toggles
             row = col.row(align=True)
             row.prop(prof, f"{key}_x_enabled", toggle=True)
