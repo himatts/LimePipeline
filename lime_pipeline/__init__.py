@@ -1,7 +1,7 @@
 ﻿bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 1, 6),  # Camera List now uses UIList with in-row actions
+    "version": (0, 1, 8),  # Add 3D Model Organizer panel with sTEPper import button
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -19,6 +19,7 @@ from .ui import LIME_PT_shots, LIME_PT_shots_list, LIME_PT_shots_tools
 from .ui import LIME_PT_render_configs, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
+from .ui import LIME_PT_model_organizer, LIME_OT_group_selection_empty
 from .ui import (
     LIME_TB_PT_root,
     LIME_TB_OT_placeholder,
@@ -35,6 +36,7 @@ from .ops.ops_backup import LIME_OT_create_backup
 from .ops.ops_tooltips import LIME_OT_show_text
 from .ops.ops_tooling_presets import LIME_OT_apply_preset_placeholder
 from .ops.animation_params import LIME_TB_OT_apply_keyframe_style
+from .ops.ops_step_clean import LIME_OT_clean_step
 from .ops.ops_noise import (
     LIME_TB_OT_noise_add_profile,
     LIME_TB_OT_noise_sync,
@@ -101,6 +103,7 @@ classes = (
     LIME_OT_create_backup,
     LIME_OT_show_text,
     LIME_OT_apply_preset_placeholder,
+    LIME_OT_clean_step,
     LIME_OT_proposal_view_config,
     LIME_OT_take_pv_shot,
     LIME_OT_take_all_pv_shots,
@@ -111,6 +114,7 @@ classes = (
     LIME_OT_render_all,
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
+    LIME_OT_group_selection_empty,
     LIME_PT_project_org,
     LIME_PT_shots,
     LIME_PT_shots_list,
@@ -122,6 +126,7 @@ classes = (
     LIME_PT_render_outputs,
     LIME_PT_stage_setup,
     LIME_PT_image_save_as,
+    LIME_PT_model_organizer,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_OT_apply_keyframe_style,
@@ -154,12 +159,54 @@ classes = (
 
 
 def register():
+    # Helpful log to ensure the source path being loaded (detect duplicates/stale installs)
+    try:
+        print(f"[Lime Pipeline] Loading addon from: {__file__}")
+    except Exception:
+        pass
+
     register_props()
     from .ui import register_anim_params_props, register_noise_props
     register_anim_params_props()
     register_noise_props()
     register_camera_list_props()
     register_shot_list_props()
+
+    # Defensive: ensure correct panel categories before registration in case of stale reloads
+    try:
+        pipeline_panels = (
+            LIME_PT_project_org,
+            LIME_PT_shots,
+            LIME_PT_shots_list,
+            LIME_PT_shots_tools,
+            LIME_PT_render_configs,
+            LIME_PT_render_settings,
+            LIME_PT_render_cameras,
+            LIME_PT_render_camera_list,
+            LIME_PT_render_outputs,
+            LIME_PT_stage_setup,
+            LIME_PT_model_organizer,
+        )
+        toolbox_panels = (
+            LIME_TB_PT_root,
+            LIME_TB_PT_animation_params,
+            LIME_TB_PT_noisy_movement,
+        )
+        for cls in pipeline_panels:
+            try:
+                if getattr(cls, 'bl_space_type', None) == 'VIEW_3D':
+                    cls.bl_category = 'Lime Pipeline'
+            except Exception:
+                pass
+        for cls in toolbox_panels:
+            try:
+                if getattr(cls, 'bl_space_type', None) == 'VIEW_3D':
+                    cls.bl_category = 'Lime Toolbox'
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     for cls in classes:
         bpy.utils.register_class(cls)
     # Register load handler to hydrate state on file load
