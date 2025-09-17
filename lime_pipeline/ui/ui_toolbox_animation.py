@@ -477,11 +477,6 @@ class LIME_TB_PT_noisy_movement(Panel):
         layout = self.layout
         scene = ctx.scene
 
-        # Header actions
-        row = layout.row(align=True)
-        row.operator('lime.tb_noise_add_profile', text='Add Noise', icon='ADD')
-        row.operator('lime.tb_noise_sync', text='Refresh', icon='FILE_REFRESH')
-
         row = layout.row(align=True)
         row.template_list("LIME_TB_UL_noise_names", "", scene, "lime_tb_noise_profiles", scene, "lime_tb_noise_active", rows=6)
         col_btns = row.column(align=True)

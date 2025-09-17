@@ -129,6 +129,12 @@ class LIME_OT_clean_step(Operator):
         except Exception:
             pass
 
+        # Recenter origin to center of mass for cleaned geometry
+        try:
+            bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS', center='MEDIAN')
+        except Exception:
+            pass
+
         # Clear materials on targets and count cleared slots
         mats_cleared_slots = 0
         try:
@@ -241,3 +247,4 @@ class LIME_OT_clean_step(Operator):
 
 
 __all__ = ["LIME_OT_clean_step"]
+

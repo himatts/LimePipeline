@@ -19,7 +19,7 @@ from .ui import LIME_PT_shots, LIME_PT_shots_list, LIME_PT_shots_tools
 from .ui import LIME_PT_render_configs, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
-from .ui import LIME_PT_model_organizer, LIME_OT_group_selection_empty
+from .ui import LIME_PT_model_organizer, LIME_OT_group_selection_empty, LIME_OT_move_controller, LIME_OT_apply_scene_deltas
 from .ui import (
     LIME_TB_PT_root,
     LIME_TB_OT_placeholder,
@@ -37,6 +37,7 @@ from .ops.ops_tooltips import LIME_OT_show_text
 from .ops.ops_tooling_presets import LIME_OT_apply_preset_placeholder
 from .ops.animation_params import LIME_TB_OT_apply_keyframe_style
 from .ops.ops_step_clean import LIME_OT_clean_step
+from .ops.ops_dimensions import LIME_OT_dimension_envelope
 from .ops.ops_noise import (
     LIME_TB_OT_noise_add_profile,
     LIME_TB_OT_noise_sync,
@@ -104,6 +105,7 @@ classes = (
     LIME_OT_show_text,
     LIME_OT_apply_preset_placeholder,
     LIME_OT_clean_step,
+    LIME_OT_dimension_envelope,
     LIME_OT_proposal_view_config,
     LIME_OT_take_pv_shot,
     LIME_OT_take_all_pv_shots,
@@ -115,6 +117,8 @@ classes = (
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
     LIME_OT_group_selection_empty,
+    LIME_OT_move_controller,
+    LIME_OT_apply_scene_deltas,
     LIME_PT_project_org,
     LIME_PT_shots,
     LIME_PT_shots_list,

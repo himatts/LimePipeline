@@ -6,10 +6,32 @@ from bpy.props import BoolProperty
 CAT = "Lime Pipeline"
 
 
+_LOCATION_EPSILON = 1e-4
+
+
+def _objects_with_location_offset(scene):
+    offenders = []
+    if scene is None:
+        return offenders
+    for obj in getattr(scene, 'objects', []) or []:
+        if obj is None:
+            continue
+        if getattr(obj, 'type', None) == 'EMPTY':
+            continue
+        if getattr(obj, 'library', None) is not None:
+            continue
+        loc = getattr(obj, 'location', None)
+        if loc is None:
+            continue
+        if any(abs(coord) > _LOCATION_EPSILON for coord in loc):
+            offenders.append(obj)
+    return offenders
+
+
 class LIME_OT_group_selection_empty(Operator):
     """Create an empty centered on the selection bounds and preserve transforms."""
     bl_idname = "lime.group_selection_empty"
-    bl_label = "Group Selection (Empty)"
+    bl_label = "Create Controller"
     bl_description = "Create an empty at the combined bounds center and parent selected objects to it."
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -168,9 +190,14 @@ class LIME_OT_group_selection_empty(Operator):
         cube.parent = empty
         cube.matrix_parent_inverse = parent_inverse.copy()
 
-        # Selection feedback
+        # Apply transforms to deltas on the new controller
         for obj in list(context.selected_objects):
             obj.select_set(False)
+        empty.select_set(True)
+        context.view_layer.objects.active = empty
+        bpy.ops.object.transforms_to_deltas(mode='ALL', reset_values=True)
+
+        # Selection feedback
         for obj in selection:
             obj.select_set(True)
         empty.select_set(True)
@@ -179,6 +206,94 @@ class LIME_OT_group_selection_empty(Operator):
         if self.debug:
             print("[Lime][GroupSelectionEmpty] ---- Done ----")
         self.report({'INFO'}, f"Created empty '{empty.name}' and bounds cube for the selection.")
+        return {'FINISHED'}
+
+
+
+
+class LIME_OT_move_controller(Operator):
+    """Move a controller empty to the 3D cursor without moving its children."""
+    bl_idname = "lime.move_controller"
+    bl_label = "Move Controller"
+    bl_description = "Move the selected controller empty to the 3D cursor while keeping children in place."
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        controller = context.active_object
+        if controller is None or controller.type != 'EMPTY':
+            self.report({'WARNING'}, "Select a controller empty to move.")
+            return {'CANCELLED'}
+
+        cursor_location = context.scene.cursor.location.copy()
+        children = list(controller.children)
+        child_world_matrices = {child: child.matrix_world.copy() for child in children}
+
+        controller.matrix_world.translation = cursor_location
+
+        for child in children:
+            child.matrix_world = child_world_matrices[child]
+
+        controller.select_set(True)
+        context.view_layer.objects.active = controller
+        self.report({'INFO'}, f"Moved controller '{controller.name}' to the 3D cursor.")
+        return {'FINISHED'}
+
+
+class LIME_OT_apply_scene_deltas(Operator):
+    """Apply transforms to deltas for objects with non-zero location."""
+    bl_idname = "lime.apply_scene_deltas"
+    bl_label = "Apply Deltas"
+    bl_description = "Move transforms into deltas for objects whose location is not zero."
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scene = context.scene
+        offenders = _objects_with_location_offset(scene)
+        if not offenders:
+            self.report({'INFO'}, "All scene objects already have zero location.")
+            return {'CANCELLED'}
+
+        prev_sel = list(context.selected_objects or [])
+        prev_active = context.view_layer.objects.active
+
+        try:
+            if context.mode != 'OBJECT':
+                context.view_layer.objects.active = offenders[0]
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except Exception:
+            pass
+
+        try:
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            for obj in offenders:
+                obj.select_set(True)
+            context.view_layer.objects.active = offenders[0]
+        except Exception:
+            pass
+
+        success = True
+        try:
+            bpy.ops.object.transforms_to_deltas(mode='ALL', reset_values=True)
+        except Exception:
+            success = False
+
+        try:
+            for obj in context.selected_objects:
+                obj.select_set(False)
+            for obj in prev_sel:
+                if obj and obj.name in bpy.data.objects:
+                    bpy.data.objects[obj.name].select_set(True)
+            if prev_active and prev_active.name in bpy.data.objects:
+                context.view_layer.objects.active = bpy.data.objects[prev_active.name]
+        except Exception:
+            pass
+
+        if not success:
+            self.report({'ERROR'}, "Failed to apply transforms to deltas.")
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, f"Applied transforms to deltas on {len(offenders)} object(s).")
         return {'FINISHED'}
 
 
@@ -193,22 +308,27 @@ class LIME_PT_model_organizer(Panel):
     def draw(self, ctx):
         layout = self.layout
 
-        box = layout.box()
-        box.label(text="Importers")
-        # Directly invoke the sTEPper operator if installed
-        # This shows a standard operator button; Blender will handle missing-operator errors.
-        row = box.row(align=True)
-        row.operator("import_scene.occ_import_step", text="Import STEP (.step)", icon='IMPORT')
+        layout.operator("import_scene.occ_import_step", text="Import STEP (.step)", icon='IMPORT')
+        layout.operator("lime.clean_step", text="Clean .STEP", icon='FILE_REFRESH')
 
-        box = layout.box()
-        box.label(text="Cleanup")
-        row = box.row(align=True)
-        row.operator("lime.clean_step", text="Clean .STEP", icon='FILE_REFRESH')
-        row = box.row(align=True)
-        row.operator("lime.group_selection_empty", text="Group Selection (Empty)", icon='OUTLINER_OB_EMPTY')
+        offsets = _objects_with_location_offset(ctx.scene)
+        status_row = layout.row()
+        if offsets:
+            status_row.label(text=f"Offsets detected: {len(offsets)} object(s)", icon='ERROR')
+        else:
+            status_row.label(text="All object locations zeroed", icon='CHECKMARK')
+        apply_row = layout.row()
+        apply_row.enabled = bool(offsets)
+        apply_row.operator("lime.apply_scene_deltas", text="Apply Deltas", icon='FILE_TICK')
 
+        layout.operator("lime.group_selection_empty", text="Create Controller", icon='OUTLINER_OB_EMPTY')
+        layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
+        layout.operator("lime.dimension_envelope", text="Dimension Envelope", icon='MESH_CUBE')
 
 __all__ = [
     "LIME_OT_group_selection_empty",
+    "LIME_OT_move_controller",
+    "LIME_OT_apply_scene_deltas",
     "LIME_PT_model_organizer",
 ]
+
