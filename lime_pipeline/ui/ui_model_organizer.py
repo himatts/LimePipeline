@@ -154,11 +154,12 @@ class LIME_OT_group_selection_empty(Operator):
         cursor.location = cube.location.copy()
 
         # Create the grouping empty at cursor
-        empty_name = "Selection Group" if len(selection) > 1 else f"{selection[0].name} Group"
-        empty = bpy.data.objects.new(empty_name, None)
+        empty = bpy.data.objects.new("CONTROLLER", None)
         base_collection.objects.link(empty)
         empty.empty_display_type = 'PLAIN_AXES'
         empty.location = cursor.location
+        empty.show_in_front = True
+        empty.show_name = True
 
         # If any selected object has an external parent (not within the selection), parent the empty to it
         anchor_parent = None
@@ -297,6 +298,69 @@ class LIME_OT_apply_scene_deltas(Operator):
         return {'FINISHED'}
 
 
+
+
+def _set_scene_units(context, *, system: str, length_unit: str) -> bool:
+    scene = context.scene
+    if scene is None:
+        return False
+    settings = scene.unit_settings
+    settings.system = system
+    try:
+        settings.length_unit = length_unit
+    except Exception:
+        pass
+    return True
+
+
+class LIME_OT_set_units_centimeters(Operator):
+    """Switch the scene measurement units to centimeters."""
+
+    bl_idname = "lime.set_units_centimeters"
+    bl_label = "Set Units to Centimeters"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Set the scene measurement units to centimeters."
+
+    def execute(self, context):
+        if not _set_scene_units(context, system='METRIC', length_unit='CENTIMETERS'):
+            self.report({'ERROR'}, "Unable to set scene units to centimeters.")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Scene units set to centimeters.")
+        return {'FINISHED'}
+
+
+class LIME_OT_set_units_millimeters(Operator):
+    """Switch the scene measurement units to millimeters."""
+
+    bl_idname = "lime.set_units_millimeters"
+    bl_label = "Set Units to Millimeters"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Set the scene measurement units to millimeters."
+
+    def execute(self, context):
+        if not _set_scene_units(context, system='METRIC', length_unit='MILLIMETERS'):
+            self.report({'ERROR'}, "Unable to set scene units to millimeters.")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Scene units set to millimeters.")
+        return {'FINISHED'}
+
+
+class LIME_OT_set_units_inches(Operator):
+    """Switch the scene measurement units to inches."""
+
+    bl_idname = "lime.set_units_inches"
+    bl_label = "Set Units to Inches"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Set the scene measurement units to inches."
+
+    def execute(self, context):
+        if not _set_scene_units(context, system='IMPERIAL', length_unit='INCHES'):
+            self.report({'ERROR'}, "Unable to set scene units to inches.")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Scene units set to inches.")
+        return {'FINISHED'}
+
+
 class LIME_PT_model_organizer(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -323,12 +387,20 @@ class LIME_PT_model_organizer(Panel):
 
         layout.operator("lime.group_selection_empty", text="Create Controller", icon='OUTLINER_OB_EMPTY')
         layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
-        layout.operator("lime.dimension_envelope", text="Dimension Envelope", icon='MESH_CUBE')
+        layout.operator("lime.dimension_envelope", text="Dimension Checker", icon='MESH_CUBE')
+
+        unit_row = layout.row(align=True)
+        unit_row.operator("lime.set_units_centimeters", text="cm")
+        unit_row.operator("lime.set_units_millimeters", text="mm")
+        unit_row.operator("lime.set_units_inches", text="in")
 
 __all__ = [
     "LIME_OT_group_selection_empty",
     "LIME_OT_move_controller",
     "LIME_OT_apply_scene_deltas",
+    "LIME_OT_set_units_centimeters",
+    "LIME_OT_set_units_millimeters",
+    "LIME_OT_set_units_inches",
     "LIME_PT_model_organizer",
 ]
 

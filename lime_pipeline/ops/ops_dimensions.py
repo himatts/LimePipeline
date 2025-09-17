@@ -12,6 +12,14 @@ EDGE_INDEX_FOR_AXIS = {
     'Z': 8,
 }
 
+DIMENSION_COLLECTION_NAME = "Dimension Checker"
+DIMENSION_HELPER_SUFFIX = "Dimension Checker"
+
+DIM_MEASUREMENT_SCALE_PROP = "lp_dimension_measure_scale"
+
+_OVERLAY_GUARD_STATE: bool | None = None
+_OVERLAY_GUARD_SCALE: float | None = None
+
 def _find_existing_envelope(scene: bpy.types.Scene) -> bpy.types.Object | None:
     for obj in scene.objects:
         try:
@@ -110,15 +118,50 @@ def _compute_world_aabb(context: bpy.types.Context, objects: list[bpy.types.Obje
         return None
     return min_corner, max_corner
 
+def _ensure_dimension_collection(scene: bpy.types.Scene) -> bpy.types.Collection:
+    collection = bpy.data.collections.get(DIMENSION_COLLECTION_NAME)
+    if collection is None:
+        collection = bpy.data.collections.new(DIMENSION_COLLECTION_NAME)
+    scene_root = getattr(scene, "collection", None)
+    if scene_root is not None:
+        try:
+            already_linked = any(child is collection for child in scene_root.children)
+        except Exception:
+            already_linked = True
+        if not already_linked:
+            try:
+                scene_root.children.link(collection)
+            except Exception:
+                pass
+    return collection
+
 def _ensure_envelope_object(scene: bpy.types.Scene, selection: list[bpy.types.Object]) -> bpy.types.Object:
+    target_collection = _ensure_dimension_collection(scene)
     envelope = _find_existing_envelope(scene)
     if envelope is not None:
         if envelope.data is None or envelope.type != 'MESH':
             mesh = bpy.data.meshes.new("LP_DimensionEnvelopeMesh")
             envelope.data = mesh
+        if target_collection is not None:
+            try:
+                existing_collections = list(getattr(envelope, "users_collection", []) or [])
+            except Exception:
+                existing_collections = []
+            if target_collection not in existing_collections:
+                try:
+                    target_collection.objects.link(envelope)
+                except Exception:
+                    pass
+            for collection in existing_collections:
+                if collection is target_collection:
+                    continue
+                try:
+                    collection.objects.unlink(envelope)
+                except Exception:
+                    continue
         return envelope
     mesh = bpy.data.meshes.new("LP_DimensionEnvelopeMesh")
-    envelope = bpy.data.objects.new("LP_DimensionEnvelope", mesh)
+    envelope = bpy.data.objects.new(DIMENSION_HELPER_SUFFIX, mesh)
     envelope.hide_render = True
     envelope.show_in_front = True
     try:
@@ -126,17 +169,12 @@ def _ensure_envelope_object(scene: bpy.types.Scene, selection: list[bpy.types.Ob
     except Exception:
         pass
     envelope[DIM_ENVELOPE_PROP] = True
-    target_collection = None
-    for obj in selection:
-        collections = getattr(obj, "users_collection", None)
-        if collections:
-            target_collection = collections[0]
-            break
-    if target_collection is None:
-        target_collection = scene.collection
-    try:
-        target_collection.objects.link(envelope)
-    except Exception:
+    if target_collection is not None:
+        try:
+            target_collection.objects.link(envelope)
+        except Exception:
+            pass
+    else:
         try:
             scene.collection.objects.link(envelope)
         except Exception:
@@ -199,34 +237,94 @@ def _remove_existing_labels(envelope: bpy.types.Object) -> None:
         except Exception:
             continue
 
-def _enable_viewport_overlays(context: bpy.types.Context, measurement_scale: float | None = None) -> None:
-    wm = context.window_manager
-    for window in getattr(wm, 'windows', []) or []:
-        screen = getattr(window, 'screen', None)
+def _iter_view3d_overlays(context: bpy.types.Context | None):
+    ctx = context or bpy.context
+    wm = getattr(ctx, "window_manager", None) if ctx else None
+    if wm is None:
+        try:
+            wm = bpy.context.window_manager
+        except Exception:
+            wm = None
+    if wm is None:
+        return
+    for window in getattr(wm, "windows", []) or []:
+        screen = getattr(window, "screen", None)
         if screen is None:
             continue
-        for area in getattr(screen, 'areas', []) or []:
-            if getattr(area, 'type', '') != 'VIEW_3D':
+        for area in getattr(screen, "areas", []) or []:
+            if getattr(area, "type", "") != "VIEW_3D":
                 continue
-            for space in getattr(area, 'spaces', []) or []:
-                if getattr(space, 'type', '') != 'VIEW_3D':
+            for space in getattr(area, "spaces", []) or []:
+                if getattr(space, "type", "") != "VIEW_3D":
                     continue
-                overlay = getattr(space, 'overlay', None)
-                if overlay is None:
-                    continue
-                try:
-                    overlay.show_extra_edge_length = True
-                except Exception:
-                    pass
-                try:
-                    overlay.show_text = True
-                except Exception:
-                    pass
-                if measurement_scale is not None:
-                    try:
-                        overlay.measurement_scale = measurement_scale
-                    except Exception:
-                        pass
+                overlay = getattr(space, "overlay", None)
+                if overlay is not None:
+                    yield overlay
+
+
+def _set_measure_overlay(context: bpy.types.Context | None, enable: bool, measurement_scale: float | None) -> None:
+    for overlay in _iter_view3d_overlays(context):
+        try:
+            overlay.show_extra_edge_length = enable
+        except Exception:
+            pass
+        try:
+            overlay.show_text = enable
+        except Exception:
+            pass
+        if enable and measurement_scale is not None:
+            try:
+                overlay.measurement_scale = measurement_scale
+            except Exception:
+                pass
+
+
+def _install_overlay_guard(context: bpy.types.Context | None, enable: bool, measurement_scale: float | None) -> None:
+    global _OVERLAY_GUARD_STATE, _OVERLAY_GUARD_SCALE
+    handlers = bpy.app.handlers.depsgraph_update_post
+    if enable:
+        _OVERLAY_GUARD_SCALE = measurement_scale
+        _OVERLAY_GUARD_STATE = None
+        if _lp_overlay_guard not in handlers:
+            handlers.append(_lp_overlay_guard)
+        _set_measure_overlay(context, True, measurement_scale)
+    else:
+        _OVERLAY_GUARD_STATE = None
+        _OVERLAY_GUARD_SCALE = None
+        try:
+            handlers.remove(_lp_overlay_guard)
+        except ValueError:
+            pass
+        _set_measure_overlay(context, False, None)
+
+
+def _lp_overlay_guard(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph | None = None) -> None:
+    global _OVERLAY_GUARD_STATE, _OVERLAY_GUARD_SCALE
+    ctx = bpy.context
+    if ctx is None:
+        return
+    view_layer = getattr(ctx, "view_layer", None)
+    layer_objects = getattr(view_layer, "objects", None) if view_layer else None
+    active = getattr(layer_objects, "active", None) if layer_objects else None
+    has_envelope = bool(active and active.get(DIM_ENVELOPE_PROP))
+    if has_envelope:
+        scale = active.get(DIM_MEASUREMENT_SCALE_PROP, _OVERLAY_GUARD_SCALE if _OVERLAY_GUARD_SCALE is not None else 1.0)
+    else:
+        scale = None
+    if has_envelope == _OVERLAY_GUARD_STATE and (not has_envelope or scale == _OVERLAY_GUARD_SCALE):
+        return
+    _OVERLAY_GUARD_STATE = has_envelope
+    if has_envelope:
+        _OVERLAY_GUARD_SCALE = scale
+        _set_measure_overlay(ctx, True, scale)
+    else:
+        _OVERLAY_GUARD_SCALE = None
+        _set_measure_overlay(ctx, False, None)
+
+
+def disable_dimension_overlay_guard() -> None:
+    _install_overlay_guard(None, False, None)
+
 
 def _select_measurement_edges(context: bpy.types.Context, envelope: bpy.types.Object) -> None:
     mesh = envelope.data
@@ -269,12 +367,12 @@ def _select_measurement_edges(context: bpy.types.Context, envelope: bpy.types.Ob
             pass
 
 class LIME_OT_dimension_envelope(bpy.types.Operator):
-    """Create or update a wireframe bounding box with viewport edge measurements."""
+    """Create or update a dimension checker bounding box with viewport edge measurements."""
 
     bl_idname = "lime.dimension_envelope"
-    bl_label = "Create Dimension Envelope"
+    bl_label = "Dimension Checker"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Generate a bounding box helper and enable edge-length overlays for the selected objects."
+    bl_description = "Generate a Dimension Checker helper and enable edge-length overlays for the selected objects."
 
     measurement_scale: FloatProperty(
         name="Measurement Overlay Scale",
@@ -304,7 +402,10 @@ class LIME_OT_dimension_envelope(bpy.types.Operator):
         min_corner, max_corner = bounds
         size, center = _update_envelope_geometry(envelope, min_corner, max_corner)
         _remove_existing_labels(envelope)
-        _enable_viewport_overlays(context, self.measurement_scale)
+        display_label = selection[0].name if len(selection) == 1 else "Group"
+        envelope.name = f"{display_label} {DIMENSION_HELPER_SUFFIX}"
+        envelope[DIM_MEASUREMENT_SCALE_PROP] = self.measurement_scale
+        _install_overlay_guard(context, True, self.measurement_scale)
         view_layer = context.view_layer
         for obj in view_layer.objects:
             try:
@@ -321,9 +422,10 @@ class LIME_OT_dimension_envelope(bpy.types.Operator):
         except Exception:
             pass
         _select_measurement_edges(context, envelope)
-        self.report({'INFO'}, "Dimension envelope updated.")
+        self.report({'INFO'}, "Dimension checker updated.")
         return {'FINISHED'}
 
 __all__ = [
     "LIME_OT_dimension_envelope",
+    "disable_dimension_overlay_guard",
 ]

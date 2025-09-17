@@ -12,7 +12,15 @@ from .ui_render_configs import (
 )
 from .ui_stage_setup import LIME_PT_stage_setup
 from .ui_image_editor_save import LIME_PT_image_save_as
-from .ui_model_organizer import LIME_PT_model_organizer, LIME_OT_group_selection_empty, LIME_OT_move_controller, LIME_OT_apply_scene_deltas
+from .ui_model_organizer import (
+    LIME_PT_model_organizer,
+    LIME_OT_group_selection_empty,
+    LIME_OT_move_controller,
+    LIME_OT_apply_scene_deltas,
+    LIME_OT_set_units_centimeters,
+    LIME_OT_set_units_millimeters,
+    LIME_OT_set_units_inches,
+)
 from .ui_toolbox import LIME_TB_PT_root, LIME_TB_OT_placeholder
 from .ui_toolbox_animation import (
     LIME_TB_PT_animation_params,
@@ -43,6 +51,9 @@ __all__ = [
     "LIME_OT_group_selection_empty",
     "LIME_OT_move_controller",
     "LIME_OT_apply_scene_deltas",
+    "LIME_OT_set_units_centimeters",
+    "LIME_OT_set_units_millimeters",
+    "LIME_OT_set_units_inches",
     "LIME_TB_PT_root",
     "LIME_TB_OT_placeholder",
     "LIME_TB_PT_animation_params",
