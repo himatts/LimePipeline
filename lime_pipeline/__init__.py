@@ -1,7 +1,7 @@
-﻿bl_info = {
+bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 1, 8),  # Add 3D Model Organizer panel with sTEPper import button
+    "version": (0, 1, 9),  # Add Dimension Utilities panel with measurement presets
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -24,9 +24,8 @@ from .ui import (
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
-    LIME_OT_set_units_centimeters,
-    LIME_OT_set_units_millimeters,
-    LIME_OT_set_units_inches,
+    LIME_PT_dimension_utilities,
+    LIME_OT_set_unit_preset,
 )
 from .ui import (
     LIME_TB_PT_root,
@@ -127,9 +126,7 @@ classes = (
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
-    LIME_OT_set_units_centimeters,
-    LIME_OT_set_units_millimeters,
-    LIME_OT_set_units_inches,
+    LIME_OT_set_unit_preset,
     LIME_PT_project_org,
     LIME_PT_shots,
     LIME_PT_shots_list,
@@ -142,6 +139,7 @@ classes = (
     LIME_PT_stage_setup,
     LIME_PT_image_save_as,
     LIME_PT_model_organizer,
+    LIME_PT_dimension_utilities,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_OT_apply_keyframe_style,
@@ -201,6 +199,7 @@ def register():
             LIME_PT_render_outputs,
             LIME_PT_stage_setup,
             LIME_PT_model_organizer,
+            LIME_PT_dimension_utilities,
         )
         toolbox_panels = (
             LIME_TB_PT_root,

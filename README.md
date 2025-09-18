@@ -7,11 +7,11 @@ De forma práctica, el add-on:
 - Asiste en el primer guardado, rutas objetivo y backups numerados.
 - Crea y gestiona estructuras de SHOT dentro de la escena, incluyendo instanciado y duplicado de shots con políticas claras.
 - Presenta paneles en el Sidebar para flujo de archivos y preparación interna de la escena.
-- Permite medir selecciones con un cubo envolvente y longitudes nativas en el Viewport.
+- Permite medir selecciones con el Dimension Checker desde el panel Dimension Utilities, incluyendo presets de unidades.
 
 - Target: Blender 4.5 LTS
-- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Shots, Render Configs, Stage, 3D Model Organizer
-- Preferencias: Edit > Preferences > Add-ons > Lime Pipeline
+- Paneles: View3D > Sidebar (N) > Lime Pipeline > Project Organization, Shots, Render Configs, Stage, 3D Model Organizer, Dimension Utilities
+- Preferencias: Edit > Preferences > Add-ons > Lime Pipeline (incluye el toggle "Enable Dimension Utilities")
 
 ## Estructura del paquete `lime_pipeline/`
 
@@ -34,6 +34,7 @@ De forma práctica, el add-on:
   - `ui_shots.py`: Shots (escena/colecciones)
   - `ui_render_configs.py`: Render Configs (siempre visible; incluye Proposal View y Renders)
   - `ui_model_organizer.py`: 3D Model Organizer (importacion STEP via sTEPper, utilidades de limpieza y medicion de dimensiones en el Viewport)
+  - `ui_dimension_utilities.py`: Dimension Utilities (Dimension Checker y presets de unidades)
 
 ## Instalación local para pruebas
 

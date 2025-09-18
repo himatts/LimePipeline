@@ -44,6 +44,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ### ui (panels)
 - Files: `ui/*`
 - Responsibilities:
+- Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI and measurement unit presets (mm/cm/m/in/ft).
   - Layout and user interactions; no heavy IO
 - Rules:
   - Prefer Blender native subpanels for sections (parent/child panels) instead of manual collapsible boxes

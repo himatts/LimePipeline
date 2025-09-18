@@ -300,67 +300,6 @@ class LIME_OT_apply_scene_deltas(Operator):
 
 
 
-def _set_scene_units(context, *, system: str, length_unit: str) -> bool:
-    scene = context.scene
-    if scene is None:
-        return False
-    settings = scene.unit_settings
-    settings.system = system
-    try:
-        settings.length_unit = length_unit
-    except Exception:
-        pass
-    return True
-
-
-class LIME_OT_set_units_centimeters(Operator):
-    """Switch the scene measurement units to centimeters."""
-
-    bl_idname = "lime.set_units_centimeters"
-    bl_label = "Set Units to Centimeters"
-    bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Set the scene measurement units to centimeters."
-
-    def execute(self, context):
-        if not _set_scene_units(context, system='METRIC', length_unit='CENTIMETERS'):
-            self.report({'ERROR'}, "Unable to set scene units to centimeters.")
-            return {'CANCELLED'}
-        self.report({'INFO'}, "Scene units set to centimeters.")
-        return {'FINISHED'}
-
-
-class LIME_OT_set_units_millimeters(Operator):
-    """Switch the scene measurement units to millimeters."""
-
-    bl_idname = "lime.set_units_millimeters"
-    bl_label = "Set Units to Millimeters"
-    bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Set the scene measurement units to millimeters."
-
-    def execute(self, context):
-        if not _set_scene_units(context, system='METRIC', length_unit='MILLIMETERS'):
-            self.report({'ERROR'}, "Unable to set scene units to millimeters.")
-            return {'CANCELLED'}
-        self.report({'INFO'}, "Scene units set to millimeters.")
-        return {'FINISHED'}
-
-
-class LIME_OT_set_units_inches(Operator):
-    """Switch the scene measurement units to inches."""
-
-    bl_idname = "lime.set_units_inches"
-    bl_label = "Set Units to Inches"
-    bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Set the scene measurement units to inches."
-
-    def execute(self, context):
-        if not _set_scene_units(context, system='IMPERIAL', length_unit='INCHES'):
-            self.report({'ERROR'}, "Unable to set scene units to inches.")
-            return {'CANCELLED'}
-        self.report({'INFO'}, "Scene units set to inches.")
-        return {'FINISHED'}
-
-
 class LIME_PT_model_organizer(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -389,31 +328,10 @@ class LIME_PT_model_organizer(Panel):
         layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
 
 
-        dim_col = layout.column()
-        dim_col.label(text="Dimension Checker")
-        state = getattr(ctx.window_manager, "lime_pipeline", None)
-        if state is not None:
-            dim_col.prop(state, "dimension_orientation_mode", text="Orientation Mode")
-            lock_row = dim_col.row()
-            lock_row.enabled = state.dimension_orientation_mode == 'PCA3D'
-            lock_row.prop(state, "dimension_lock_z_up", text="Lock Z-Up")
-        op = dim_col.operator("lime.dimension_envelope", text="Dimension Checker", icon='MESH_CUBE')
-        if state is not None:
-            op.orientation_mode = state.dimension_orientation_mode
-            op.lock_z_up = state.dimension_lock_z_up
-
-        unit_row = layout.row(align=True)
-        unit_row.operator("lime.set_units_centimeters", text="cm")
-        unit_row.operator("lime.set_units_millimeters", text="mm")
-        unit_row.operator("lime.set_units_inches", text="in")
-
 __all__ = [
     "LIME_OT_group_selection_empty",
     "LIME_OT_move_controller",
     "LIME_OT_apply_scene_deltas",
-    "LIME_OT_set_units_centimeters",
-    "LIME_OT_set_units_millimeters",
-    "LIME_OT_set_units_inches",
     "LIME_PT_model_organizer",
 ]
 

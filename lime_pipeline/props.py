@@ -19,6 +19,14 @@ PROJECT_TYPES = [
     ('TMP',  "Temporal",       "Tmp under Revision",    5),
 ]
 
+UNIT_PRESET_ITEMS = [
+    ('MM', "Millimeters (mm)", "Apply metric millimeters.", 0),
+    ('CM', "Centimeters (cm)", "Apply metric centimeters.", 1),
+    ('M', "Meters (m)", "Apply metric meters.", 2),
+    ('IN', "Inches (in)", "Apply imperial inches.", 3),
+    ('FT', "Feet (ft)", "Apply imperial feet.", 4),
+]
+
 
 def _on_selected_camera_update(self, context):
     try:
@@ -126,6 +134,14 @@ class LimePipelineState(PropertyGroup):
         default=False,
     )
 
+
+    dimension_units_preset: EnumProperty(
+        name="Units Preset",
+        description="Last applied measurement unit preset for Dimension Utilities.",
+        items=UNIT_PRESET_ITEMS,
+        default='MM',
+        options={'HIDDEN'},
+    )
 
 def register():
     bpy.utils.register_class(LimePipelineState)

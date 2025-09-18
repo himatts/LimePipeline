@@ -40,6 +40,11 @@ class LimePipelinePrefs(AddonPreferences):
             "If set, 'lime_pipeline_lib.blend' is read from here"
         ),
     )
+    enable_dimension_utilities: BoolProperty(
+        name="Enable Dimension Utilities",
+        description="Toggle the Dimension Utilities panel (Dimension Checker and measurement presets).",
+        default=True,
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -51,6 +56,7 @@ class LimePipelinePrefs(AddonPreferences):
         col.prop(self, "path_warn_len")
         col.prop(self, "path_block_len")
         col.prop(self, "remember_last_rev")
+        col.prop(self, "enable_dimension_utilities")
         col.separator()
         col.prop(self, "libraries_override_dir")
 
