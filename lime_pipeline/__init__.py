@@ -21,11 +21,13 @@ from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
 from .ui import (
     LIME_PT_model_organizer,
+    LIME_PT_dimension_utilities,
+    LIME_OT_set_unit_preset,
+)
+from .ops.ops_model_organizer import (
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
-    LIME_PT_dimension_utilities,
-    LIME_OT_set_unit_preset,
 )
 from .ui import (
     LIME_TB_PT_root,
