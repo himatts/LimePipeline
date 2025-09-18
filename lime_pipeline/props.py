@@ -8,6 +8,7 @@ from bpy.props import (
     PointerProperty,
 )
 
+from .ops.ops_dimensions import DEFAULT_ORIENTATION_MODE, ORIENTATION_MODE_ITEMS
 
 PROJECT_TYPES = [
     ('BASE', "3D Base Model", "Single base .blend, no SC", 0),
@@ -113,6 +114,17 @@ class LimePipelineState(PropertyGroup):
         default=True,
         options={'HIDDEN'},
     )
+    dimension_orientation_mode: EnumProperty(
+        name="Dimension Orientation",
+        description="Preferred orientation mode for the Dimension Checker.",
+        items=ORIENTATION_MODE_ITEMS,
+        default=DEFAULT_ORIENTATION_MODE,
+    )
+    dimension_lock_z_up: BoolProperty(
+        name="Dimension Lock Z-Up",
+        description="Force global Z upright when using PCA orientations.",
+        default=False,
+    )
 
 
 def register():
@@ -123,5 +135,4 @@ def register():
 def unregister():
     del bpy.types.WindowManager.lime_pipeline
     bpy.utils.unregister_class(LimePipelineState)
-
 

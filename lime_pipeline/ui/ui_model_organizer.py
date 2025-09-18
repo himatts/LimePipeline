@@ -387,7 +387,20 @@ class LIME_PT_model_organizer(Panel):
 
         layout.operator("lime.group_selection_empty", text="Create Controller", icon='OUTLINER_OB_EMPTY')
         layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
-        layout.operator("lime.dimension_envelope", text="Dimension Checker", icon='MESH_CUBE')
+
+
+        dim_col = layout.column()
+        dim_col.label(text="Dimension Checker")
+        state = getattr(ctx.window_manager, "lime_pipeline", None)
+        if state is not None:
+            dim_col.prop(state, "dimension_orientation_mode", text="Orientation Mode")
+            lock_row = dim_col.row()
+            lock_row.enabled = state.dimension_orientation_mode == 'PCA3D'
+            lock_row.prop(state, "dimension_lock_z_up", text="Lock Z-Up")
+        op = dim_col.operator("lime.dimension_envelope", text="Dimension Checker", icon='MESH_CUBE')
+        if state is not None:
+            op.orientation_mode = state.dimension_orientation_mode
+            op.lock_z_up = state.dimension_lock_z_up
 
         unit_row = layout.row(align=True)
         unit_row.operator("lime.set_units_centimeters", text="cm")
