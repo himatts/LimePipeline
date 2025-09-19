@@ -39,6 +39,25 @@ def _on_selected_camera_update(self, context):
         pass
 
 
+def _on_auto_select_hierarchy_update(self, context):
+    try:
+        from .ops.ops_model_organizer import enable_auto_select_hierarchy, disable_auto_select_hierarchy
+        if getattr(self, "auto_select_hierarchy", False):
+            enable_auto_select_hierarchy()
+        else:
+            disable_auto_select_hierarchy()
+    except Exception:
+        pass
+
+
+
+class LimeRenderPresetSlot(PropertyGroup):
+    name: StringProperty(name="Name", default="")
+    is_empty: BoolProperty(name="Is Empty", default=True, options={'HIDDEN'})
+    data_version: IntProperty(name="Data Version", default=1, options={'HIDDEN'})
+    data_json: StringProperty(name="Data", default="", options={'HIDDEN'})
+
+
 class LimePipelineState(PropertyGroup):
     project_root: StringProperty(name="Project Root", subtype='DIR_PATH', description="Select the project root folder named 'XX-##### Project Name'")
     project_type: EnumProperty(name="Project Type", items=PROJECT_TYPES, default='REND', description="Type of project work: affects naming and target folders")
@@ -107,6 +126,13 @@ class LimePipelineState(PropertyGroup):
         default=False,
     )
 
+    auto_select_hierarchy: BoolProperty(
+        name="Auto Select Children",
+        description="Selecting an object will also select all of its descendants.",
+        default=False,
+        update=_on_auto_select_hierarchy_update,
+    )
+
     # (Removed) UI collapsible flags for Render Configs; now using subpanels
 
     # UI collapsible sections for Shots panel
@@ -144,6 +170,7 @@ class LimePipelineState(PropertyGroup):
     )
 
 def register():
+    bpy.utils.register_class(LimeRenderPresetSlot)
     bpy.utils.register_class(LimePipelineState)
     bpy.types.WindowManager.lime_pipeline = PointerProperty(type=LimePipelineState)
 
@@ -151,4 +178,14 @@ def register():
 def unregister():
     del bpy.types.WindowManager.lime_pipeline
     bpy.utils.unregister_class(LimePipelineState)
+    bpy.utils.unregister_class(LimeRenderPresetSlot)
+
+__all__ = [
+    "LimeRenderPresetSlot",
+    "LimePipelineState",
+    "register",
+    "unregister",
+]
+
+
 

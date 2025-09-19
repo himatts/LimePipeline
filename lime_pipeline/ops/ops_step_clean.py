@@ -1,3 +1,5 @@
+import re
+
 import bpy
 from bpy.types import Operator
 
@@ -34,6 +36,21 @@ def _collect_descendant_geometry(root):
         if ch:
             stack.extend(ch)
     return out
+
+
+def _normalize_name_to_upper_snake(name):
+    if not name:
+        return 'OBJECT'
+    value = name.strip()
+    if not value:
+        value = 'OBJECT'
+    value = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', value)
+    value = re.sub(r'[\s-]+', '_', value)
+    value = re.sub(r'[^0-9A-Za-z_]', '_', value)
+    value = re.sub(r'__+', '_', value).strip('_')
+    if not value:
+        value = 'OBJECT'
+    return value.upper()
 
 
 def _detect_step_roots(context):
@@ -99,6 +116,18 @@ class LIME_OT_clean_step(Operator):
         if not geom:
             self.report({'WARNING'}, "Clean .STEP: No geometry found under detected roots")
             return {'CANCELLED'}
+
+        renamed = 0
+        for o in geom:
+            base_name = _normalize_name_to_upper_snake(o.name)
+            candidate = base_name
+            suffix = 1
+            while candidate in bpy.data.objects and bpy.data.objects[candidate] is not o:
+                candidate = f"{base_name}_{suffix}"
+                suffix += 1
+            if o.name != candidate:
+                o.name = candidate
+                renamed += 1
 
         # Ensure object mode and select only targets
         _ensure_object_mode(context, geom[0])
@@ -242,7 +271,7 @@ class LIME_OT_clean_step(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, f"Clean .STEP: objects={processed}, slots_cleared={mats_cleared_slots}, materials_removed={removed_materials}, empties_removed={empties_removed}")
+        self.report({'INFO'}, f"Clean .STEP: objects={processed}, slots_cleared={mats_cleared_slots}, materials_removed={removed_materials}, empties_removed={empties_removed}, renamed={renamed}")
         return {'FINISHED'}
 
 

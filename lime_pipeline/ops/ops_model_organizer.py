@@ -1,11 +1,182 @@
 """Operators for the 3D Model Organizer panel."""
 
 import bpy
+import colorsys
 from bpy.types import Operator
 from bpy.props import BoolProperty
 
 
 _LOCATION_EPSILON = 1e-4
+_GOLDEN_RATIO_CONJUGATE = 0.61803398875
+_PARENT_SATURATION = 1.0
+_FIRST_CHILD_SATURATION = 0.75
+_SATURATION_FALLOFF = 0.15
+_MIN_SATURATION = 0.0
+_GEOMETRY_TYPES = {
+    'MESH',
+    'CURVE',
+    'SURFACE',
+    'META',
+    'FONT',
+    'GPENCIL',
+    'VOLUME',
+    'LATTICE',
+    'POINTCLOUD',
+}
+
+
+def _hsv_to_rgba(h, s, v):
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return (r, g, b, 1.0)
+
+
+def _set_object_color(obj, rgba):
+    try:
+        obj.color = rgba
+    except Exception:
+        return False
+    return True
+
+
+def _is_geometry(obj):
+    obj_type = getattr(obj, "type", None)
+    return obj_type in _GEOMETRY_TYPES
+
+
+
+def _nearest_geometry_parent(obj):
+    parent = getattr(obj, "parent", None)
+    while parent is not None and not _is_geometry(parent):
+        parent = getattr(parent, "parent", None)
+    return parent
+
+
+
+def _root_geometry(obj):
+    current = obj
+    parent = _nearest_geometry_parent(current)
+    while parent is not None:
+        current = parent
+        parent = _nearest_geometry_parent(current)
+    return current
+
+
+
+def _iter_geometry_descendants(obj):
+    for child in getattr(obj, "children", []):
+        if child is None:
+            continue
+        if _is_geometry(child):
+            yield child
+        yield from _iter_geometry_descendants(child)
+
+
+
+def _saturation_for_depth(depth):
+    if depth <= 0:
+        return _PARENT_SATURATION
+    saturation = _FIRST_CHILD_SATURATION - (depth - 1) * _SATURATION_FALLOFF
+    if saturation < _MIN_SATURATION:
+        return _MIN_SATURATION
+    return saturation
+
+
+_AUTO_SELECT_HANDLER_ACTIVE = False
+_AUTO_SELECT_GUARD = False
+_AUTO_SELECT_LAST_SELECTION = set()
+
+
+def _iter_all_descendants(obj):
+    for child in getattr(obj, "children", []):
+        if child is None:
+            continue
+        yield child
+        yield from _iter_all_descendants(child)
+
+
+def _auto_select_hierarchy_handler(scene):
+    global _AUTO_SELECT_GUARD, _AUTO_SELECT_LAST_SELECTION
+    if _AUTO_SELECT_GUARD:
+        return
+    try:
+        context = bpy.context
+    except Exception:
+        return
+    if context is None:
+        return
+    wm = getattr(context, "window_manager", None)
+    if wm is None:
+        return
+    state = getattr(wm, "lime_pipeline", None)
+    if state is None or not getattr(state, "auto_select_hierarchy", False):
+        return
+    if getattr(context, "mode", "OBJECT") != 'OBJECT':
+        return
+    try:
+        selected = list(getattr(context, "selected_objects", []) or [])
+    except Exception:
+        selected = []
+    selection_ids = {obj.as_pointer() for obj in selected}
+    if not selected:
+        _AUTO_SELECT_LAST_SELECTION = selection_ids
+        return
+    if selection_ids == _AUTO_SELECT_LAST_SELECTION:
+        return
+
+    additions = []
+    for obj in selected:
+        for child in _iter_all_descendants(obj):
+            if child is None:
+                continue
+            try:
+                if not child.select_get():
+                    additions.append(child)
+            except Exception:
+                continue
+
+    if not additions:
+        _AUTO_SELECT_LAST_SELECTION = selection_ids
+        return
+
+    _AUTO_SELECT_GUARD = True
+    try:
+        for child in additions:
+            try:
+                child.select_set(True)
+            except Exception:
+                pass
+        try:
+            selected_after = list(getattr(context, "selected_objects", []) or [])
+        except Exception:
+            selected_after = selected
+        _AUTO_SELECT_LAST_SELECTION = {obj.as_pointer() for obj in selected_after}
+    finally:
+        _AUTO_SELECT_GUARD = False
+
+
+def enable_auto_select_hierarchy():
+    global _AUTO_SELECT_HANDLER_ACTIVE, _AUTO_SELECT_LAST_SELECTION
+    if _AUTO_SELECT_HANDLER_ACTIVE:
+        return True
+    if _auto_select_hierarchy_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(_auto_select_hierarchy_handler)
+    _AUTO_SELECT_HANDLER_ACTIVE = True
+    _AUTO_SELECT_LAST_SELECTION = set()
+    return True
+
+
+def disable_auto_select_hierarchy():
+    global _AUTO_SELECT_HANDLER_ACTIVE, _AUTO_SELECT_LAST_SELECTION, _AUTO_SELECT_GUARD
+    if _auto_select_hierarchy_handler in bpy.app.handlers.depsgraph_update_post:
+        try:
+            bpy.app.handlers.depsgraph_update_post.remove(_auto_select_hierarchy_handler)
+        except ValueError:
+            pass
+    _AUTO_SELECT_HANDLER_ACTIVE = False
+    _AUTO_SELECT_LAST_SELECTION = set()
+    _AUTO_SELECT_GUARD = False
+    return True
+
 
 
 def objects_with_location_offset(scene):
@@ -51,8 +222,19 @@ class LIME_OT_group_selection_empty(Operator):
             self.report({'WARNING'}, "Select at least one object to group.")
             return {'CANCELLED'}
 
-        # Cache world transforms to restore after parenting
-        original_matrices = {obj: obj.matrix_world.copy() for obj in selection}
+        # Identify top-level parents to avoid breaking existing hierarchies
+        selection_ids = {obj.as_pointer() for obj in selection}
+        top_level_selection = []
+        for obj in selection:
+            parent = getattr(obj, "parent", None)
+            parent_id = parent.as_pointer() if parent is not None else None
+            if parent_id not in selection_ids:
+                top_level_selection.append(obj)
+        if not top_level_selection:
+            top_level_selection = selection.copy()
+
+        # Cache world transforms to restore after parenting top-level objects only
+        original_matrices = {obj: obj.matrix_world.copy() for obj in top_level_selection}
 
         # Compute world-space AABB using evaluated geometry (includes modifiers)
         depsgraph = context.evaluated_depsgraph_get()
@@ -119,6 +301,7 @@ class LIME_OT_group_selection_empty(Operator):
         size_x = max(max_x - min_x, 1e-6)
         size_y = max(max_y - min_y, 1e-6)
         size_z = max(max_z - min_z, 1e-6)
+        controller_size = sorted((size_x, size_y, size_z))[1] * 0.5  # Use half the middle axis length for controller size
         center = Vector(((min_x + max_x) * 0.5, (min_y + max_y) * 0.5, (min_z + max_z) * 0.5))
 
         if self.debug:
@@ -145,6 +328,7 @@ class LIME_OT_group_selection_empty(Operator):
         empty = bpy.data.objects.new("CONTROLLER", None)
         base_collection.objects.link(empty)
         empty.empty_display_type = 'PLAIN_AXES'
+        empty.empty_display_size = controller_size
         empty.location = cursor.location
         empty.show_in_front = True
         empty.show_name = True
@@ -164,7 +348,7 @@ class LIME_OT_group_selection_empty(Operator):
             empty.matrix_world.translation = center
 
         parent_inverse = empty.matrix_world.inverted_safe()
-        for obj in selection:
+        for obj in top_level_selection:
             obj.parent = empty
             obj.matrix_parent_inverse = parent_inverse.copy()
             # Restore original world transform to avoid any drift
@@ -282,9 +466,97 @@ class LIME_OT_apply_scene_deltas(Operator):
         return {'FINISHED'}
 
 
+
+class LIME_OT_colorize_parent_groups(Operator):
+    """Assign viewport colors to parent-child hierarchies for quick inspection."""
+
+    bl_idname = "lime.colorize_parent_groups"
+    bl_label = "Color Parent Groups"
+    bl_description = "Assign viewport colors to parents and their children to visualize hierarchies."
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        selection = list(context.selected_objects or [])
+        if not selection and context.active_object:
+            selection = [context.active_object]
+        if not selection:
+            self.report({'WARNING'}, "Select at least one object to colorize.")
+            return {'CANCELLED'}
+
+        geometry_objects = {obj for obj in selection if _is_geometry(obj)}
+        for obj in selection:
+            if not _is_geometry(obj):
+                geometry_objects.update(_iter_geometry_descendants(obj))
+
+        geometry_objects = {obj for obj in geometry_objects if obj is not None and obj.name in bpy.data.objects}
+        if not geometry_objects:
+            self.report({'WARNING'}, "Select at least one geometry object to colorize.")
+            return {'CANCELLED'}
+
+        root_map = {}
+        for obj in geometry_objects:
+            root = _root_geometry(obj)
+            if root is None:
+                continue
+            root_map[root.as_pointer()] = root
+
+        roots = list(root_map.values())
+        if not roots:
+            self.report({'WARNING'}, "No geometry hierarchies found to colorize.")
+            return {'CANCELLED'}
+
+        roots.sort(key=lambda item: item.name.lower())
+
+        colored_objects = 0
+        for index, root in enumerate(roots):
+            hue = (index * _GOLDEN_RATIO_CONJUGATE) % 1.0
+            colored_objects += self._apply_group_colors(root, hue)
+
+        if colored_objects == 0:
+            self.report({'WARNING'}, "No geometry objects were colorized.")
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, f"Assigned colors to {len(roots)} hierarchy(ies) covering {colored_objects} object(s).")
+        return {'FINISHED'}
+
+    def _apply_group_colors(self, root, hue):
+        stack = [(root, 0)]
+        visited = set()
+        colored = 0
+
+        while stack:
+            obj, depth = stack.pop()
+            if obj is None:
+                continue
+
+            obj_id = obj.as_pointer()
+            if obj_id in visited:
+                continue
+            visited.add(obj_id)
+
+            if _is_geometry(obj):
+                saturation = _saturation_for_depth(depth)
+                color = _hsv_to_rgba(hue, saturation, 1.0)
+                if _set_object_color(obj, color):
+                    colored += 1
+
+            for child in getattr(obj, "children", []):
+                if child is None:
+                    continue
+                if getattr(child, "type", None) == 'EMPTY':
+                    stack.append((child, depth))
+                elif _is_geometry(child):
+                    stack.append((child, depth + 1))
+
+        return colored
+
+
 __all__ = [
     "objects_with_location_offset",
     "LIME_OT_group_selection_empty",
     "LIME_OT_move_controller",
     "LIME_OT_apply_scene_deltas",
+    "LIME_OT_colorize_parent_groups",
+    "enable_auto_select_hierarchy",
+    "disable_auto_select_hierarchy",
 ]

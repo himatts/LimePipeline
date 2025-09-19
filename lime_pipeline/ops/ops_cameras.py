@@ -751,6 +751,110 @@ class LIME_OT_pose_camera_rig(Operator):
         return {'FINISHED'}
 
 
+
+
+
+class LIME_OT_sync_camera_list(Operator):
+    bl_idname = 'lime.sync_camera_list'
+    bl_label = 'Refresh Cameras'
+    bl_description = 'Refresh the camera list from the current .blend'
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        items = getattr(scene, 'lime_render_cameras', None)
+        if items is None:
+            self.report({'ERROR'}, 'Camera list storage not available')
+            return {'CANCELLED'}
+        try:
+            items.clear()
+            cams = [o for o in bpy.data.objects if getattr(o, 'type', None) == 'CAMERA']
+            cams.sort(key=lambda o: o.name)
+            for cam in cams:
+                it = items.add()
+                it.name = cam.name
+            try:
+                active_name = getattr(scene.camera, 'name', '') if getattr(scene, 'camera', None) else ''
+                if active_name:
+                    for i, it in enumerate(items):
+                        if it.name == active_name:
+                            scene.lime_render_cameras_index = i
+                            break
+            except Exception:
+                pass
+        except Exception:
+            self.report({'WARNING'}, 'Could not refresh camera list')
+            return {'CANCELLED'}
+        self.report({'INFO'}, f'Cameras: {len(items)}')
+        return {'FINISHED'}
+
+
+__all__.append('LIME_OT_sync_camera_list')
+
+
+class LIME_OT_add_camera_rig_and_sync(Operator):
+    bl_idname = 'lime.add_camera_rig_and_sync'
+    bl_label = 'Add Camera (Rig) and Refresh'
+    bl_description = 'Create a camera rig using Lime operator and refresh the list'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        try:
+            bpy.ops.lime.add_camera_rig('INVOKE_DEFAULT')
+        except Exception:
+            try:
+                bpy.ops.lime.add_camera_rig()
+            except Exception:
+                self.report({'ERROR'}, 'Failed to add camera rig')
+                return {'CANCELLED'}
+        try:
+            bpy.ops.lime.sync_camera_list()
+        except Exception:
+            pass
+        try:
+            import bpy as _bpy3
+            def _delayed_sync():
+                try:
+                    _bpy3.ops.lime.sync_camera_list()
+                except Exception:
+                    pass
+                return None
+            _bpy3.app.timers.register(_delayed_sync, first_interval=0.1)
+        except Exception:
+            pass
+        return {'FINISHED'}
+
+
+__all__.append('LIME_OT_add_camera_rig_and_sync')
+
+
+class LIME_OT_delete_camera_rig_and_sync(Operator):
+    bl_idname = 'lime.delete_camera_rig_and_sync'
+    bl_label = 'Delete Camera (Rig) and Refresh'
+    bl_description = 'Delete the selected camera rig and refresh the list'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    camera_name: StringProperty(name='Camera Name', default='')
+
+    def execute(self, context):
+        name = (self.camera_name or '').strip()
+        if not name:
+            self.report({'WARNING'}, 'No camera selected')
+            return {'CANCELLED'}
+        try:
+            bpy.ops.lime.delete_camera_rig(camera_name=name)
+        except Exception:
+            self.report({'ERROR'}, f'Failed to delete camera rig: {name}')
+            return {'CANCELLED'}
+        try:
+            bpy.ops.lime.sync_camera_list()
+        except Exception:
+            pass
+        return {'FINISHED'}
+
+
+__all__.append('LIME_OT_delete_camera_rig_and_sync')
+
 __all__.append("LIME_OT_delete_camera_rig")
 __all__.append("LIME_OT_pose_camera_rig")
 

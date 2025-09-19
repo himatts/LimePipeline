@@ -1,6 +1,8 @@
 import bpy
 from bpy.types import AddonPreferences
-from bpy.props import StringProperty, IntProperty, BoolProperty
+from bpy.props import StringProperty, IntProperty, BoolProperty, CollectionProperty
+
+from .props import LimeRenderPresetSlot
 
 
 ADDON_PKG = __package__
@@ -45,6 +47,9 @@ class LimePipelinePrefs(AddonPreferences):
         description="Toggle the Dimension Utilities panel (Dimension Checker and measurement presets).",
         default=True,
     )
+    global_render_presets: CollectionProperty(type=LimeRenderPresetSlot, options={'HIDDEN'})
+    defaults_render_presets: CollectionProperty(type=LimeRenderPresetSlot, options={'HIDDEN'})
+
 
     def draw(self, context):
         layout = self.layout

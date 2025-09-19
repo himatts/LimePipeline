@@ -29,10 +29,16 @@ class LIME_PT_model_organizer(Panel):
             status_row.label(text="All object locations zeroed", icon='CHECKMARK')
         apply_row = layout.row()
         apply_row.enabled = bool(offsets)
-        apply_row.operator("lime.apply_scene_deltas", text="Apply Deltas", icon='FILE_TICK')
+        apply_row.operator("lime.apply_scene_deltas", text="Apply Deltas", icon='DRIVER_DISTANCE')
+
+        state = getattr(ctx.window_manager, "lime_pipeline", None)
+        if state is not None:
+            toggle_row = layout.row(align=True)
+            toggle_row.prop(state, "auto_select_hierarchy", text="Auto Select Children", toggle=True, icon='SELECT_SET')
 
         layout.operator("lime.group_selection_empty", text="Create Controller", icon='OUTLINER_OB_EMPTY')
         layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
+        layout.operator("lime.colorize_parent_groups", text="Color Parent Groups", icon='COLOR')
 
 
 __all__ = [

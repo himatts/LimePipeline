@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 1, 9),  # Add Dimension Utilities panel with measurement presets
+    "version": (0, 2, 0),  # Render presets management (global + defaults)
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -16,7 +16,7 @@ from .prefs import LimePipelinePrefs
 from .props import register as register_props, unregister as unregister_props
 from .ui import LIME_PT_project_org
 from .ui import LIME_PT_shots, LIME_PT_shots_list, LIME_PT_shots_tools
-from .ui import LIME_PT_render_configs, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
+from .ui import LIME_PT_render_configs, LIME_PT_render_preset_actions, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
 from .ui import (
@@ -28,6 +28,7 @@ from .ops.ops_model_organizer import (
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
+    LIME_OT_colorize_parent_groups,
 )
 from .ui import (
     LIME_TB_PT_root,
@@ -43,7 +44,15 @@ from .ops.ops_folders import LIME_OT_open_output_folder
 from .ops.ops_create_file import LIME_OT_create_file
 from .ops.ops_backup import LIME_OT_create_backup
 from .ops.ops_tooltips import LIME_OT_show_text
-from .ops.ops_tooling_presets import LIME_OT_apply_preset_placeholder
+from .ops.ops_render_presets import (
+    LIME_OT_render_preset_save,
+    LIME_OT_render_preset_apply,
+    LIME_OT_render_preset_clear,
+    LIME_OT_render_preset_reset_all,
+    LIME_OT_render_preset_restore_defaults,
+    LIME_OT_render_preset_update_defaults,
+    ensure_preset_slots,
+)
 from .ops.animation_params import LIME_TB_OT_apply_keyframe_style
 from .ops.ops_step_clean import LIME_OT_clean_step
 from .ops.ops_dimensions import LIME_OT_dimension_envelope, disable_dimension_overlay_guard
@@ -91,13 +100,16 @@ from .ops.ops_rev import (
     LIME_OT_rev_prev,
     LIME_OT_rev_next,
 )
-from .ops.ops_save import (
+from .ops.ops_cameras import (
     LIME_OT_set_active_camera,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
+    LIME_OT_sync_camera_list,
+    LIME_OT_add_camera_rig_and_sync,
     LIME_OT_delete_camera_rig,
+    LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
 )
 
@@ -112,7 +124,12 @@ classes = (
     LIME_OT_create_file,
     LIME_OT_create_backup,
     LIME_OT_show_text,
-    LIME_OT_apply_preset_placeholder,
+    LIME_OT_render_preset_save,
+    LIME_OT_render_preset_apply,
+    LIME_OT_render_preset_clear,
+    LIME_OT_render_preset_reset_all,
+    LIME_OT_render_preset_restore_defaults,
+    LIME_OT_render_preset_update_defaults,
     LIME_OT_clean_step,
     LIME_OT_dimension_envelope,
     LIME_OT_proposal_view_config,
@@ -128,12 +145,14 @@ classes = (
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
+    LIME_OT_colorize_parent_groups,
     LIME_OT_set_unit_preset,
     LIME_PT_project_org,
     LIME_PT_shots,
     LIME_PT_shots_list,
     LIME_PT_shots_tools,
     LIME_PT_render_configs,
+    LIME_PT_render_preset_actions,
     LIME_PT_render_settings,
     LIME_PT_render_cameras,
     LIME_PT_render_camera_list,
@@ -166,7 +185,10 @@ classes = (
     LIME_OT_set_active_camera,
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
+    LIME_OT_sync_camera_list,
+    LIME_OT_add_camera_rig_and_sync,
     LIME_OT_delete_camera_rig,
+    LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
@@ -187,6 +209,14 @@ def register():
     register_camera_list_props()
     register_shot_list_props()
 
+    try:
+        st = getattr(bpy.context.window_manager, "lime_pipeline", None)
+        if st and getattr(st, "auto_select_hierarchy", False):
+            from .ops.ops_model_organizer import enable_auto_select_hierarchy
+            enable_auto_select_hierarchy()
+    except Exception:
+        pass
+
     # Defensive: ensure correct panel categories before registration in case of stale reloads
     try:
         pipeline_panels = (
@@ -195,6 +225,7 @@ def register():
             LIME_PT_shots_list,
             LIME_PT_shots_tools,
             LIME_PT_render_configs,
+            LIME_PT_render_preset_actions,
             LIME_PT_render_settings,
             LIME_PT_render_cameras,
             LIME_PT_render_camera_list,
@@ -229,6 +260,11 @@ def register():
     if _on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_on_load_post)
 
+    try:
+        ensure_preset_slots(bpy.context, ensure_scene=True)
+    except Exception:
+        pass
+
 
 
 def unregister():
@@ -240,6 +276,11 @@ def unregister():
     unregister_noise_props()
     unregister_camera_list_props()
     unregister_shot_list_props()
+    try:
+        from .ops.ops_model_organizer import disable_auto_select_hierarchy
+        disable_auto_select_hierarchy()
+    except Exception:
+        pass
     unregister_props()
     try:
         bpy.app.handlers.load_post.remove(_on_load_post)
@@ -261,6 +302,15 @@ def _on_load_post(dummy):
         hydrate_state_from_filepath(st, force=True)
     except Exception:
         pass
+    try:
+        ensure_preset_slots(bpy.context, ensure_scene=True)
+    except Exception:
+        pass
+
+
+
+
+
 
 
 

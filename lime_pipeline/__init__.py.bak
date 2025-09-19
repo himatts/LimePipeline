@@ -59,7 +59,7 @@ from .ops.ops_rev import (
     LIME_OT_rev_prev,
     LIME_OT_rev_next,
 )
-from .ops.ops_save import (
+from .ops.ops_cameras import (
     LIME_OT_set_active_camera,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
