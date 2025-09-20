@@ -16,8 +16,9 @@ class LIME_PT_render_configs(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Render Configs"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_idname = "LIME_PT_render_configs"
-    bl_order = 2
+    bl_order = 3
 
     def draw(self, ctx):
         layout = self.layout
@@ -63,7 +64,9 @@ class LIME_PT_render_preset_actions(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Preset Maintenance"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_parent_id = "LIME_PT_render_configs"
+    bl_order = 2
 
     def draw(self, ctx):
         layout = self.layout
@@ -78,104 +81,105 @@ class LIME_PT_render_settings(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Settings"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_parent_id = "LIME_PT_render_configs"
+    bl_order = 0
 
     def draw(self, ctx):
         layout = self.layout
         scene = ctx.scene
-
-        header = layout.box()
-        header.label(text="Render Overview")
-        row = header.row(align=True)
-        row.prop(scene.render, "engine", text="")
-        row.prop(scene.render, "use_persistent_data", text="Persistent Data")
-        row.prop(scene.render, "resolution_percentage")
-        fr_text = f"{scene.render.fps}/{scene.render.fps_base}" if scene.render.fps_base != 1.0 else str(scene.render.fps)
-        row.menu('RENDER_MT_framerate_presets', text=fr_text)
-
-        box = layout.box()
-        box.label(text="Resolution")
-        row = box.row(align=True)
-        row.prop(scene.render, "resolution_x", text="X")
-        row.prop(scene.render, "resolution_y", text="Y")
-
-        box = layout.box()
-        box.label(text="Cycles")
+        render = scene.render
         cy = getattr(scene, 'cycles', None)
+
+        box = layout.box()
+        box.label(text="Render Settings")
+        row = box.row(align=True)
+        row.prop(render, "engine", text="")
+
         if cy is None:
             col = box.column()
             col.enabled = False
             col.label(text="Cycles not available", icon='INFO')
         else:
             col = box.column(align=True)
-            col.label(text="Viewport")
-            # One row: Noise Threshold, Samples, Denoise (checkbox without label)
-            row = col.row(align=True)
+            viewport_row = col.row(align=True)
             try:
-                row.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
+                viewport_row.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
             except Exception:
                 pass
             try:
-                row.prop(cy, "preview_samples", text="Samples")
+                viewport_row.prop(cy, "preview_samples", text="Samples")
             except Exception:
                 pass
             added = False
             try:
-                row.prop(cy, "use_preview_denoising", text="")
+                viewport_row.prop(cy, "use_preview_denoising", text="")
                 added = True
             except Exception:
                 pass
             if not added:
                 try:
-                    row.prop(ctx.view_layer.cycles, "use_denoising", text="")
+                    viewport_row.prop(ctx.view_layer.cycles, "use_denoising", text="")
                     added = True
                 except Exception:
                     pass
             if not added:
                 try:
-                    row.prop(cy, "use_denoising", text="")
+                    viewport_row.prop(cy, "use_denoising", text="")
                 except Exception:
                     pass
 
             col.separator()
-            col.label(text="Render")
-            row = col.row(align=True)
+            render_row = col.row(align=True)
             try:
-                row.prop(cy, "adaptive_threshold", text="Noise Threshold")
+                render_row.prop(cy, "adaptive_threshold", text="Noise Threshold")
             except Exception:
                 pass
             try:
-                row.prop(cy, "samples", text="Samples")
+                render_row.prop(cy, "samples", text="Samples")
             except Exception:
                 pass
             added = False
             try:
-                row.prop(ctx.view_layer.cycles, "use_denoising", text="")
+                render_row.prop(ctx.view_layer.cycles, "use_denoising", text="")
                 added = True
             except Exception:
                 pass
             if not added:
                 try:
-                    row.prop(cy, "use_denoising", text="")
+                    render_row.prop(cy, "use_denoising", text="")
                 except Exception:
                     pass
 
-        # Color Management
-        box = layout.box()
-        box.label(text="Color Management")
+        checkbox_row = box.row(align=True)
+        checkbox_row.prop(render, "use_persistent_data", text="Persistent Data")
+        checkbox_row.prop(render, "film_transparent", text="Transparent Film")
+
+        output_box = layout.box()
+        output_box.label(text="Output Properties")
+        row = output_box.row(align=True)
+        row.prop(render, "resolution_x", text="X")
+        row.prop(render, "resolution_y", text="Y")
+
+        row = output_box.row(align=True)
+        row.prop(render, "resolution_percentage", text="Scale")
+        row.prop(render, "resolution_percentage", text="", slider=True)
+
+        color_box = layout.box()
+        color_box.label(text="Color Management")
         vs = scene.view_settings
-        row = box.row(align=True)
-        # Two dropdowns in one row; no labels (tooltips suffice)
+        row = color_box.row(align=True)
         row.prop(vs, "view_transform", text="")
         row.prop(vs, "look", text="")
-
 
 class LIME_PT_render_outputs(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Output Files"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_parent_id = "LIME_PT_render_configs"
+    bl_order = 1
 
     def draw(self, ctx):
         layout = self.layout

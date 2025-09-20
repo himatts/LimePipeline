@@ -13,7 +13,8 @@ class LIME_PT_model_organizer(Panel):
     bl_category = CAT
     bl_label = "3D Model Organizer"
     bl_idname = "LIME_PT_model_organizer"
-    bl_order = 50
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 0
 
     def draw(self, ctx):
         layout = self.layout

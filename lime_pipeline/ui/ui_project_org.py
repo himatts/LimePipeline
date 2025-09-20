@@ -11,7 +11,8 @@ class LIME_PT_project_org(Panel):
     bl_category = CAT
     bl_label = "Project Organization"
     bl_idname = "LIME_PT_project_org"
-    bl_order = 0
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 2
 
     def draw(self, ctx):
         wm = ctx.window_manager

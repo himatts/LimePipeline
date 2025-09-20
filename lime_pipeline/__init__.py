@@ -114,7 +114,7 @@ from .ops.ops_cameras import (
 )
 
 
-classes = (
+NON_PANEL_CLASSES = (
     LimePipelinePrefs,
     LIME_TB_OT_placeholder,
     LIME_OT_pick_root,
@@ -147,22 +147,6 @@ classes = (
     LIME_OT_apply_scene_deltas,
     LIME_OT_colorize_parent_groups,
     LIME_OT_set_unit_preset,
-    LIME_PT_project_org,
-    LIME_PT_shots,
-    LIME_PT_shots_list,
-    LIME_PT_shots_tools,
-    LIME_PT_render_configs,
-    LIME_PT_render_preset_actions,
-    LIME_PT_render_settings,
-    LIME_PT_render_cameras,
-    LIME_PT_render_camera_list,
-    LIME_PT_render_outputs,
-    LIME_PT_stage_setup,
-    LIME_PT_image_save_as,
-    LIME_PT_model_organizer,
-    LIME_PT_dimension_utilities,
-    LIME_TB_PT_animation_params,
-    LIME_TB_PT_noisy_movement,
     LIME_TB_OT_apply_keyframe_style,
     LIME_TB_OT_noise_add_profile,
     LIME_TB_OT_noise_sync,
@@ -194,8 +178,61 @@ classes = (
     LIME_OT_save_as_with_template,
 )
 
+PIPELINE_PANEL_CLASSES = (
+    LIME_PT_model_organizer,
+    LIME_PT_dimension_utilities,
+    LIME_PT_project_org,
+    LIME_PT_render_configs,
+    LIME_PT_render_preset_actions,
+    LIME_PT_render_settings,
+    LIME_PT_render_outputs,
+    LIME_PT_shots,
+    LIME_PT_shots_list,
+    LIME_PT_shots_tools,
+    LIME_PT_stage_setup,
+    LIME_PT_render_cameras,
+    LIME_PT_render_camera_list,
+)
+
+OTHER_PANEL_CLASSES = (
+    LIME_PT_image_save_as,
+)
+
+TOOLBOX_CATEGORY_PANELS = (
+    LIME_TB_PT_root,
+    LIME_TB_PT_animation_params,
+    LIME_TB_PT_noisy_movement,
+)
+
+TOOLBOX_PANEL_CLASSES = (
+    LIME_TB_PT_root,
+    LIME_TB_PT_animation_params,
+    LIME_TB_PT_noisy_movement,
+)
+
+def _panel_is_child(cls) -> bool:
+    return bool(getattr(cls, 'bl_parent_id', '') or '')
+
+
+def _panel_order(cls, default: int = 0) -> int:
+    try:
+        value = getattr(cls, 'bl_order', default)
+    except Exception:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _panel_sort_tuple(cls):
+    return (_panel_order(cls), getattr(cls, 'bl_label', '') or '', cls.__name__)
+
+
+REGISTERED_CLASSES = []
 
 def register():
+    global REGISTERED_CLASSES
     # Helpful log to ensure the source path being loaded (detect duplicates/stale installs)
     try:
         print(f"[Lime Pipeline] Loading addon from: {__file__}")
@@ -217,35 +254,21 @@ def register():
     except Exception:
         pass
 
-    # Defensive: ensure correct panel categories before registration in case of stale reloads
+    pipeline_root_panels = [cls for cls in PIPELINE_PANEL_CLASSES if not _panel_is_child(cls)]
+    pipeline_children = {}
+    for cls in PIPELINE_PANEL_CLASSES:
+        parent_id = getattr(cls, 'bl_parent_id', '') or ''
+        if parent_id:
+            pipeline_children.setdefault(parent_id, []).append(cls)
+
     try:
-        pipeline_panels = (
-            LIME_PT_project_org,
-            LIME_PT_shots,
-            LIME_PT_shots_list,
-            LIME_PT_shots_tools,
-            LIME_PT_render_configs,
-            LIME_PT_render_preset_actions,
-            LIME_PT_render_settings,
-            LIME_PT_render_cameras,
-            LIME_PT_render_camera_list,
-            LIME_PT_render_outputs,
-            LIME_PT_stage_setup,
-            LIME_PT_model_organizer,
-            LIME_PT_dimension_utilities,
-        )
-        toolbox_panels = (
-            LIME_TB_PT_root,
-            LIME_TB_PT_animation_params,
-            LIME_TB_PT_noisy_movement,
-        )
-        for cls in pipeline_panels:
+        for cls in pipeline_root_panels:
             try:
                 if getattr(cls, 'bl_space_type', None) == 'VIEW_3D':
                     cls.bl_category = 'Lime Pipeline'
             except Exception:
                 pass
-        for cls in toolbox_panels:
+        for cls in TOOLBOX_CATEGORY_PANELS:
             try:
                 if getattr(cls, 'bl_space_type', None) == 'VIEW_3D':
                     cls.bl_category = 'Lime Toolbox'
@@ -254,8 +277,32 @@ def register():
     except Exception:
         pass
 
-    for cls in classes:
+    REGISTERED_CLASSES = []
+    for cls in NON_PANEL_CLASSES:
         bpy.utils.register_class(cls)
+        REGISTERED_CLASSES.append(cls)
+
+    for parent_cls in sorted(pipeline_root_panels, key=_panel_sort_tuple):
+        bpy.utils.register_class(parent_cls)
+        REGISTERED_CLASSES.append(parent_cls)
+        parent_id = getattr(parent_cls, 'bl_idname', '') or parent_cls.__name__
+        for child_cls in sorted(pipeline_children.get(parent_id, ()), key=_panel_sort_tuple):
+            bpy.utils.register_class(child_cls)
+            REGISTERED_CLASSES.append(child_cls)
+
+    remaining = [cls for cls in PIPELINE_PANEL_CLASSES if cls not in REGISTERED_CLASSES]
+    for cls in sorted(remaining, key=_panel_sort_tuple):
+        bpy.utils.register_class(cls)
+        REGISTERED_CLASSES.append(cls)
+
+    for cls in OTHER_PANEL_CLASSES:
+        bpy.utils.register_class(cls)
+        REGISTERED_CLASSES.append(cls)
+
+    for cls in TOOLBOX_PANEL_CLASSES:
+        bpy.utils.register_class(cls)
+        REGISTERED_CLASSES.append(cls)
+
     # Register load handler to hydrate state on file load
     if _on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_on_load_post)
@@ -265,12 +312,15 @@ def register():
     except Exception:
         pass
 
-
-
 def unregister():
+    global REGISTERED_CLASSES
     disable_dimension_overlay_guard()
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    for cls in reversed(REGISTERED_CLASSES):
+        try:
+            bpy.utils.unregister_class(cls)
+        except Exception:
+            pass
+    REGISTERED_CLASSES = []
     from .ui import unregister_anim_params_props, unregister_noise_props
     unregister_anim_params_props()
     unregister_noise_props()
@@ -306,6 +356,7 @@ def _on_load_post(dummy):
         ensure_preset_slots(bpy.context, ensure_scene=True)
     except Exception:
         pass
+
 
 
 

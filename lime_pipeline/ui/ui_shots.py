@@ -20,8 +20,9 @@ class LIME_PT_shots(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Shots"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_idname = "LIME_PT_shots"
-    bl_order = 1
+    bl_order = 4
 
     def draw(self, ctx):
         # Container panel: subpanels handle content
@@ -33,8 +34,10 @@ class LIME_PT_shots_list(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Shot List"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_idname = "LIME_PT_shots_list"
     bl_parent_id = "LIME_PT_shots"
+    bl_order = 0
 
     def draw(self, ctx):
         layout = self.layout
@@ -60,8 +63,10 @@ class LIME_PT_shots_tools(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Shot Tools"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_idname = "LIME_PT_shots_tools"
     bl_parent_id = "LIME_PT_shots"
+    bl_order = 1
 
     def draw(self, ctx):
         layout = self.layout

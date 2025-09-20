@@ -12,8 +12,9 @@ class LIME_PT_stage_setup(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Stage"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_idname = "LIME_PT_stage_setup"
-    bl_order = 3
+    bl_order = 5
 
     @classmethod
     def poll(cls, ctx):

@@ -20,7 +20,9 @@ class LIME_PT_render_cameras(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Cameras"
-    bl_order = 3
+    bl_idname = "LIME_PT_render_cameras"
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 6
 
     def draw(self, ctx):
         layout = self.layout
@@ -50,7 +52,9 @@ class LIME_PT_render_camera_list(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Camera List"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_parent_id = "LIME_PT_render_cameras"
+    bl_order = 0
 
     def draw(self, ctx):
         layout = self.layout

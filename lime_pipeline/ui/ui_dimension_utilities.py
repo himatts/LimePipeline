@@ -113,7 +113,8 @@ class LIME_PT_dimension_utilities(Panel):
     bl_category = CAT
     bl_label = "Dimension Utilities"
     bl_idname = "LIME_PT_dimension_utilities"
-    bl_order = 55
+    bl_options = {"DEFAULT_CLOSED"}
+    bl_order = 1
 
     @classmethod
     def poll(cls, ctx):
