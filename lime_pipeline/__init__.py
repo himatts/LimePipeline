@@ -36,6 +36,10 @@ from .ui import (
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
 )
+from .ui import (
+    LIME_TB_PT_alpha_manager,
+    LIME_TB_UL_alpha_events,
+)
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_shot_list_props, unregister_shot_list_props
 from .ops.ops_select_root import LIME_OT_pick_root
@@ -68,6 +72,11 @@ from .ops.ops_noise import (
     LIME_TB_OT_noise_group_copy,
     LIME_TB_OT_noise_group_paste,
 )
+from .ops.ops_alpha_manager import (
+    register_alpha_props,
+    unregister_alpha_props,
+)
+
 from .ops.ops_shots import (
     LIME_OT_new_shot,
     LIME_OT_shot_instance,
@@ -117,6 +126,7 @@ from .ops.ops_cameras import (
 NON_PANEL_CLASSES = (
     LimePipelinePrefs,
     LIME_TB_OT_placeholder,
+    LIME_TB_UL_alpha_events,
     LIME_OT_pick_root,
     LIME_OT_ensure_folders,
     LIME_OT_open_folder,
@@ -202,12 +212,14 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_root,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
+    LIME_TB_PT_alpha_manager,
 )
 
 TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_root,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
+    LIME_TB_PT_alpha_manager,
 )
 
 def _panel_is_child(cls) -> bool:
@@ -243,6 +255,7 @@ def register():
     from .ui import register_anim_params_props, register_noise_props
     register_anim_params_props()
     register_noise_props()
+    register_alpha_props()
     register_camera_list_props()
     register_shot_list_props()
 
@@ -324,6 +337,7 @@ def unregister():
     from .ui import unregister_anim_params_props, unregister_noise_props
     unregister_anim_params_props()
     unregister_noise_props()
+    unregister_alpha_props()
     unregister_camera_list_props()
     unregister_shot_list_props()
     try:

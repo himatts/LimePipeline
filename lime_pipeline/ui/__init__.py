@@ -31,6 +31,10 @@ from .ui_toolbox_animation import (
     register_noise_props,
     unregister_noise_props,
 )
+from .ui_alpha_manager import (
+    LIME_TB_PT_alpha_manager,
+    LIME_TB_UL_alpha_events,
+)
 
 __all__ = [
     "LIME_PT_project_org",
@@ -56,6 +60,8 @@ __all__ = [
     "LIME_TB_OT_placeholder",
     "LIME_TB_PT_animation_params",
     "LIME_TB_PT_noisy_movement",
+    "LIME_TB_PT_alpha_manager",
+    "LIME_TB_UL_alpha_events",
 ]
 
 
