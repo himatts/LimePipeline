@@ -102,6 +102,7 @@ from .ops.ops_renders import (
     LIME_OT_render_all,
 )
 from .ops.ops_stage import (
+    LIME_OT_duplicate_scene_sequential,
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
 )
@@ -150,6 +151,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_render_config,
     LIME_OT_render_shot,
     LIME_OT_render_all,
+    LIME_OT_duplicate_scene_sequential,
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
     LIME_OT_group_selection_empty,

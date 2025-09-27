@@ -40,6 +40,17 @@ class LIME_PT_model_organizer(Panel):
         layout.operator("lime.group_selection_empty", text="Create Controller", icon='OUTLINER_OB_EMPTY')
         layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
         layout.operator("lime.colorize_parent_groups", text="Color Parent Groups", icon='COLOR')
+        layout.separator()
+        layout.operator("lime.apply_object_alpha_mix", text="Alpha Material Config", icon='SHADING_RENDERED')
+        layout.separator()
+        col = layout.column(align=True)
+        # Link ocupa todo el ancho
+        col.operator("wm.link", text="Link Project", icon='LINKED')
+        # Update, Override y Relocate juntos en la siguiente fila
+        ops_row = col.row(align=True)
+        ops_row.operator("wm.lib_reload", text="Update", icon='FILE_REFRESH')
+        ops_row.operator("lime.make_library_override", text="Override", icon='LIBRARY_DATA_OVERRIDE')
+        ops_row.operator("wm.lib_relocate", text="Relocate", icon='ZOOM_ALL')
 
 
 __all__ = [

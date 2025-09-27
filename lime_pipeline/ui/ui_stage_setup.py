@@ -23,6 +23,8 @@ class LIME_PT_stage_setup(Panel):
 
     def draw(self, ctx):
         layout = self.layout
+        layout.operator("lime.duplicate_scene_sequential", text="Duplicate Shot Scene", icon='SCENE_DATA')
+        layout.separator()
         layout.label(text="Create scene elements")
         col = layout.column(align=True)
         col.enabled = validate_scene.active_shot_context(ctx) is not None
