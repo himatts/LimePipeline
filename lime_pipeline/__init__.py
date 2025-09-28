@@ -94,12 +94,8 @@ from .ops.ops_add_missing import (
 from .ops.ops_import_layout import (
     LIME_OT_import_layout,
 )
-from .ops.ops_stage_duplicate_scene import (
+from .ops.ops_duplicate_scene import (
     LIME_OT_duplicate_scene_sequential,
-)
-from .ops.ops_stage import (
-    LIME_OT_stage_main_light,
-    LIME_OT_stage_aux_light,
 )
 from .ops.ops_rev import (
     LIME_OT_rev_prev,
@@ -146,8 +142,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_add_camera_rig,
     LIME_OT_import_layout,
     LIME_OT_duplicate_scene_sequential,
-    LIME_OT_stage_main_light,
-    LIME_OT_stage_aux_light,
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
