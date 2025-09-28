@@ -96,11 +96,6 @@ from .ops.ops_proposal_view import (
 from .ops.ops_import_layout import (
     LIME_OT_import_layout,
 )
-from .ops.ops_renders import (
-    LIME_OT_render_config,
-    LIME_OT_render_shot,
-    LIME_OT_render_all,
-)
 from .ops.ops_stage import (
     LIME_OT_duplicate_scene_sequential,
     LIME_OT_stage_main_light,
@@ -110,10 +105,12 @@ from .ops.ops_rev import (
     LIME_OT_rev_prev,
     LIME_OT_rev_next,
 )
+from .ops.ops_save_templates import (
+    LIME_OT_save_as_with_template,
+)
 from .ops.ops_cameras import (
     LIME_OT_set_active_camera,
     LIME_OT_render_invoke,
-    LIME_OT_save_as_with_template,
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
     LIME_OT_sync_camera_list,
@@ -148,9 +145,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_take_all_pv_shots,
     LIME_OT_add_camera_rig,
     LIME_OT_import_layout,
-    LIME_OT_render_config,
-    LIME_OT_render_shot,
-    LIME_OT_render_all,
     LIME_OT_duplicate_scene_sequential,
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
