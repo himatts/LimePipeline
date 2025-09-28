@@ -163,7 +163,8 @@ class LIME_PT_render_settings(Panel):
 
         row = output_box.row(align=True)
         row.prop(render, "resolution_percentage", text="Scale")
-        row.prop(render, "resolution_percentage", text="", slider=True)
+        row.prop(render, "fps", text="FPS")
+        row.menu("RENDER_MT_framerate_presets", text="", icon='DOWNARROW_HLT')
 
         color_box = layout.box()
         color_box.label(text="Color Management")

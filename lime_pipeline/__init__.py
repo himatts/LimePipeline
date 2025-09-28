@@ -122,6 +122,9 @@ from .ops.ops_cameras import (
     LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
 )
+from .ops.ops_library_override import (
+    LIME_OT_make_library_override,
+)
 
 
 NON_PANEL_CLASSES = (
@@ -186,6 +189,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_pose_camera_rig,
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
+    LIME_OT_make_library_override,
 )
 
 PIPELINE_PANEL_CLASSES = (

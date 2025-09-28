@@ -21,13 +21,7 @@ OBJECT_BAKE_FRAMES_PROP = "_lp_alpha_bake_frames"
 OBJECT_BAKED_FLAG_PROP = "_lp_alpha_baked"
 DEFAULT_EVENT_NAME = "Fade"
 DEFAULT_EVENT_DURATION = 24
-CURVE_ITEMS = [
-    ('LINEAR', 'Linear', 'Use linear interpolation between start and end.', 'IPO_LINEAR', 0),
-    ('BEZIER', 'Bezier', 'Use bezier interpolation.', 'IPO_BEZIER', 1),
-    ('EASE_IN', 'Ease In', 'Slow start, fast finish.', 'IPO_SINE', 2),
-    ('EASE_OUT', 'Ease Out', 'Fast start, slow finish.', 'IPO_BACK', 3),
-    ('EASE_IN_OUT', 'Ease In/Out', 'Slow start and end.', 'IPO_EASE_IN_OUT', 4),
-]
+# Simplified to only support LINEAR interpolation for simplicity
 FRAME_TOLERANCE = 1e-4
 
 # Debug toggle (set to True to get verbose prints)
@@ -64,7 +58,7 @@ def _unique_event_name(scene: bpy.types.Scene, name: str, exclude: PropertyGroup
     existing = {evt.name for evt in events if evt is not exclude}
     if name not in existing:
         return name
-    suffix = 2
+    suffix = 1  # Start with 01 instead of 02
     while True:
         candidate = f"{name} {suffix:02d}"
         if candidate not in existing:
@@ -126,35 +120,7 @@ def _write_event_keyframes(fc: bpy.types.FCurve, start: int, end: int) -> None:
     fc.update()
 
 
-def _apply_curve_settings(fc: bpy.types.FCurve | None, curve: str) -> None:
-    if fc is None:
-        return
-    kfs = fc.keyframe_points
-    if not kfs:
-        return
-    if curve == 'LINEAR':
-        for kp in kfs:
-            kp.interpolation = 'LINEAR'
-    else:
-        for kp in kfs:
-            kp.interpolation = 'BEZIER'
-            if hasattr(kp, 'easing'):
-                kp.easing = 'AUTO'
-        if hasattr(kfs[0], 'easing'):
-            if curve == 'EASE_IN':
-                kfs[0].easing = 'EASE_IN'
-            elif curve == 'EASE_OUT':
-                kfs[0].easing = 'EASE_OUT'
-            elif curve == 'EASE_IN_OUT':
-                kfs[0].easing = 'EASE_OUT'
-        if len(kfs) > 1 and hasattr(kfs[-1], 'easing'):
-            if curve == 'EASE_IN':
-                kfs[-1].easing = 'EASE_IN'
-            elif curve == 'EASE_OUT':
-                kfs[-1].easing = 'EASE_OUT'
-            elif curve == 'EASE_IN_OUT':
-                kfs[-1].easing = 'EASE_IN'
-    fc.update()
+# Curve settings removed - only LINEAR interpolation is supported
 
 
 def ensure_event_tracks(scene: bpy.types.Scene | None, event: 'LimeTBAlphaEvent', reset_keys: bool = False) -> None:
@@ -174,7 +140,11 @@ def ensure_event_tracks(scene: bpy.types.Scene | None, event: 'LimeTBAlphaEvent'
         fc.keyframe_points[0].co.x = float(event.frame_start)
         fc.keyframe_points[-1].co.x = float(event.frame_end)
         fc.update()
-    _apply_curve_settings(fc, event.curve)
+    # Ensure keyframes are set with LINEAR interpolation
+    for kp in fc.keyframe_points:
+        kp.interpolation = 'LINEAR'
+    fc.update()
+
     # Touch scene tag so fcurves update
     try:
         scene.animation_data.action.use_fake_user = scene.animation_data.action.use_fake_user
@@ -207,10 +177,15 @@ def create_event(scene: bpy.types.Scene, name: str | None = None) -> 'LimeTBAlph
     new_event.name = _unique_event_name(scene, base_name, exclude=new_event)
     existing_slugs = {evt.slug for evt in events if evt is not new_event and getattr(evt, "slug", "")}
     new_event.slug = _slugify(new_event.name, existing_slugs)
-    current = int(scene.frame_current)
-    new_event.frame_start = current
-    new_event.frame_end = current + DEFAULT_EVENT_DURATION
-    new_event.curve = 'LINEAR'
+    # For the first event, always start at frame 1 for better UX
+    # For subsequent events, start at current frame
+    if not events:
+        new_event.frame_start = 1
+        new_event.frame_end = 1 + DEFAULT_EVENT_DURATION
+    else:
+        current = int(scene.frame_current)
+        new_event.frame_start = current
+        new_event.frame_end = current + DEFAULT_EVENT_DURATION
     new_event.invert = False
     ensure_event_tracks(scene, new_event, reset_keys=True)
     return new_event
@@ -224,7 +199,6 @@ def duplicate_event(scene: bpy.types.Scene, event: 'LimeTBAlphaEvent') -> 'LimeT
     new_event.slug = _slugify(new_event.name, existing_slugs)
     new_event.frame_start = event.frame_start
     new_event.frame_end = event.frame_end
-    new_event.curve = event.curve
     new_event.invert = event.invert
     ensure_event_tracks(scene, new_event, reset_keys=True)
     src_fc = _get_event_fcurve(scene, _prop_name(event.slug))
@@ -241,7 +215,6 @@ def duplicate_event(scene: bpy.types.Scene, event: 'LimeTBAlphaEvent') -> 'LimeT
             if hasattr(dst, 'easing') and hasattr(kp, 'easing'):
                 dst.easing = kp.easing
         dst_fc.update()
-    _apply_curve_settings(dst_fc, new_event.curve)
     return new_event
 
 
@@ -399,7 +372,7 @@ def rebuild_object_driver(scene: bpy.types.Scene, obj: bpy.types.Object) -> None
     except Exception:
         pass
     if not valid_events:
-        obj.color[3] = 0.0
+        obj.color[3] = 1.0  # Restore object to fully visible when no fades are active
         return
     fcurve = obj.driver_add('color', 3)
     drv = fcurve.driver
@@ -436,8 +409,13 @@ def rebuild_object_driver(scene: bpy.types.Scene, obj: bpy.types.Object) -> None
 
 # LIVE sync handler: write evaluated event values into scene ID props each frame
 _ALPHA_LIVE_HANDLER = None
+# Throttling mechanism to avoid excessive updates during manual scrubbing
+_alpha_last_frame = None
+_alpha_update_count = 0
+_alpha_last_update_time = 0.0
 
 def _alpha_live_frame_change_post(scene: bpy.types.Scene):
+    global _alpha_update_count, _alpha_last_update_time
     try:
         mode = getattr(scene, 'lime_tb_alpha_mode', 'LIVE')
     except Exception:
@@ -472,18 +450,43 @@ def _alpha_live_frame_change_post(scene: bpy.types.Scene):
             scene.update_tag()
         except Exception:
             pass
-        # During playback, avoid forcing a full view layer update
+        # Enhanced playback detection with throttling
         try:
             scr = getattr(bpy.context, "screen", None)
-            if scr and getattr(scr, "is_animation_playing", False):
+            is_playing = False
+            if scr:
+                # Check multiple indicators for more accurate detection
+                is_playing = (
+                    getattr(scr, "is_animation_playing", False) or
+                    getattr(scr, "is_playing", False) or
+                    # Check if we're in a modal operator that might indicate scrubbing
+                    any(op.bl_idname in {'SCREEN_OT_animation_play', 'SCREEN_OT_frame_offset'}
+                        for area in getattr(bpy.context, 'window', None) and [bpy.context.window] or []
+                        for op in getattr(area, 'modal_operators', []))
+                )
+
+            if is_playing:
+                _alpha_log("Skipping view layer update during playback")
                 return
         except Exception:
             pass
-        try:
-            if hasattr(bpy.context, 'view_layer'):
-                bpy.context.view_layer.update()
-        except Exception:
-            pass
+
+        # Throttling: limit updates during rapid scrubbing
+        import time
+        current_time = time.time()
+        _alpha_update_count += 1
+
+        # Update view layer only if enough time has passed or we're not in rapid succession
+        if current_time - _alpha_last_update_time > 0.1:  # Max 10 updates per second
+            try:
+                if hasattr(bpy.context, 'view_layer'):
+                    bpy.context.view_layer.update()
+                _alpha_last_update_time = current_time
+                _alpha_update_count = 0
+            except Exception:
+                pass
+        else:
+            _alpha_log(f"Throttled view layer update (count: {_alpha_update_count})")
 
 def enable_alpha_live_handler():
     global _ALPHA_LIVE_HANDLER
@@ -598,9 +601,9 @@ def _color_fcurve(obj: bpy.types.Object) -> bpy.types.FCurve | None:
 
 
 def bake_alpha(scene: bpy.types.Scene, objects: Iterable[bpy.types.Object], frame_step: int = 1) -> tuple[int, list[str]]:
+    """Bake alpha drivers to keyframes. Creates only 2 keyframes (start/end) with linear interpolation."""
     baked = 0
     skipped: list[str] = []
-    step = max(1, frame_step)
     for obj in objects:
         slugs = _get_object_event_slugs(obj)
         events = [find_event_by_slug(scene, slug) for slug in slugs]
@@ -615,7 +618,8 @@ def bake_alpha(scene: bpy.types.Scene, objects: Iterable[bpy.types.Object], fram
         end = max(evt.frame_end for evt in events)
         if start > end:
             start, end = end, start
-        frames = list(range(start - 1, end + 2, step))
+        # Only create 2 keyframes: start and end (linear interpolation handles the rest)
+        frames = [start, end]
         values = [combined_alpha(scene, events, frame) for frame in frames]
         try:
             obj.driver_remove('color', 3)
@@ -625,6 +629,13 @@ def bake_alpha(scene: bpy.types.Scene, objects: Iterable[bpy.types.Object], fram
         for frame, value in zip(frames, values):
             obj.color[3] = value
             obj.keyframe_insert(data_path='color', index=3, frame=float(frame))
+
+        # Ensure keyframes use linear interpolation
+        fc = _color_fcurve(obj)
+        if fc:
+            for kp in fc.keyframe_points:
+                kp.interpolation = 'LINEAR'
+
         obj[OBJECT_BAKE_FRAMES_PROP] = frames
         obj[OBJECT_BAKED_FLAG_PROP] = True
         baked += 1
@@ -667,15 +678,11 @@ def _on_event_frames_update(self: 'LimeTBAlphaEvent', context) -> None:
         setattr(self, "_lp_lock_frames", False)
 
 
-def _on_event_curve_update(self: 'LimeTBAlphaEvent', context) -> None:
-    scene = _scene_from_context(context)
-    if scene is None or not self.slug:
-        return
-    fc = _ensure_event_fcurve(scene, _prop_name(self.slug))
-    _apply_curve_settings(fc, self.curve)
+# Curve update handler removed - only LINEAR interpolation is supported
 
 
 def _on_event_invert_update(self: 'LimeTBAlphaEvent', context) -> None:
+    # Handler for Alpha Out toggle (formerly Invert)
     scene = _scene_from_context(context)
     if scene is None or not self.slug:
         return
@@ -697,16 +704,9 @@ class LimeTBAlphaEvent(PropertyGroup):
         default=24,
         update=_on_event_frames_update,
     )
-    curve: EnumProperty(
-        name="Curve",
-        description="Interpolation curve used between start and end.",
-        items=CURVE_ITEMS,
-        default='LINEAR',
-        update=_on_event_curve_update,
-    )
     invert: BoolProperty(
-        name="Invert",
-        description="Invert the fade so 1 keeps the object visible and 0 hides it.",
+        name="Alpha Out",
+        description="When enabled, the fade goes from visible (1) to hidden (0). When disabled, it goes from hidden (0) to visible (1).",
         default=False,
         update=_on_event_invert_update,
     )
@@ -721,7 +721,18 @@ class LIME_TB_OT_alpha_event_add(Operator):
         scene = context.scene
         event = create_event(scene)
         scene.lime_tb_alpha_events_index = len(scene.lime_tb_alpha_events) - 1
-        self.report({'INFO'}, f"Added event '{event.name}'")
+
+        # Auto-assign selected objects to the new event
+        selected_objects = context.selected_objects
+        if selected_objects:
+            assigned = assign_event_to_objects(scene, event, selected_objects)
+            if assigned > 0:
+                self.report({'INFO'}, f"Added event '{event.name}' and assigned {assigned} objects")
+            else:
+                self.report({'INFO'}, f"Added event '{event.name}'")
+        else:
+            self.report({'INFO'}, f"Added event '{event.name}'")
+
         return {'FINISHED'}
 
 

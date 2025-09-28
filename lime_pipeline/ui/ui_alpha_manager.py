@@ -11,17 +11,9 @@ class LIME_TB_UL_alpha_events(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):
         event = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            icon_map = {
-                'LINEAR': 'IPO_LINEAR',
-                'BEZIER': 'IPO_BEZIER',
-                'EASE_IN': 'IPO_EASE_IN',
-                'EASE_OUT': 'IPO_EASE_OUT',
-                'EASE_IN_OUT': 'IPO_EASE_IN_OUT',
-            }
             row = layout.row(align=True)
-            curve_icon = icon_map.get(getattr(event, 'curve', 'LINEAR'), 'IPO_BEZIER')
             # Name (read-only here to avoid bypassing rename operator logic)
-            row.label(text=getattr(event, 'name', 'Event'), icon=curve_icon)
+            row.label(text=getattr(event, 'name', 'Event'), icon='IPO_LINEAR')
             # Brief range info
             try:
                 start = int(getattr(event, 'frame_start', 0))
@@ -29,16 +21,18 @@ class LIME_TB_UL_alpha_events(UIList):
                 row.label(text=f"{start} → {end}")
             except Exception:
                 row.label(text="")
-            # Invert badge
+            # Alpha direction badge (IN/OUT)
             try:
                 inv = bool(getattr(event, 'invert', False))
             except Exception:
                 inv = False
             if inv:
-                row.label(text="Invert", icon='ARROW_LEFTRIGHT')
+                row.label(text="OUT", icon='HIDE_ON')
+            else:
+                row.label(text="IN", icon='HIDE_OFF')
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
-            layout.label(text="", icon='IPO_BEZIER')
+            layout.label(text="", icon='IPO_LINEAR')
 
 
 class LIME_TB_PT_alpha_manager(Panel):
@@ -68,9 +62,12 @@ class LIME_TB_PT_alpha_manager(Panel):
         mode_row = layout.row(align=True)
         current_mode = getattr(scene, 'lime_tb_alpha_mode', 'LIVE')
         mode_row.label(text=f"Mode: {current_mode}")
-        op_live = mode_row.operator('lime.tb_alpha_set_mode', text='Live (Drivers)', icon='DRIVER')
+
+        # Driver and Keyframe mode buttons
+        mode_btns_row = layout.row(align=True)
+        op_live = mode_btns_row.operator('lime.tb_alpha_set_mode', text='Driver', icon='DRIVER')
         op_live.mode = 'LIVE'
-        op_bake = mode_row.operator('lime.tb_alpha_set_mode', text='Bake (Keyframes)', icon='KEY_HLT')
+        op_bake = mode_btns_row.operator('lime.tb_alpha_set_mode', text='Keyframe', icon='KEY_HLT')
         op_bake.mode = 'BAKE'
 
         layout.separator()
@@ -101,14 +98,13 @@ class LIME_TB_PT_alpha_manager(Panel):
         box = layout.box()
         hdr = box.row(align=True)
         hdr.label(text=f"Event: {getattr(event, 'name', '')}")
-        hdr.prop(event, 'invert', text='Invert')
+        hdr.prop(event, 'invert', text='Alpha Out')
 
         row = box.row(align=True)
         row.prop(event, 'frame_start')
         row.prop(event, 'frame_end')
 
-        row = box.row(align=True)
-        row.prop(event, 'curve', text='Curve')
+        # Curve selection removed - only LINEAR interpolation is supported
 
         # Manual refresh helpers
         ref = layout.row(align=True)
@@ -126,7 +122,10 @@ class LIME_TB_PT_alpha_manager(Panel):
         assign_row = layout.row(align=True)
         assign_row.operator('lime.tb_alpha_event_assign', text='Assign Selection', icon='ADD')
         assign_row.operator('lime.tb_alpha_event_unassign', text='Remove Selection', icon='REMOVE')
-        assign_row.operator('lime.tb_alpha_event_select_members', text='Select Members', icon='RESTRICT_SELECT_OFF')
+
+        # Select Members button (no separator)
+        select_row = layout.row(align=True)
+        select_row.operator('lime.tb_alpha_event_select_members', text='Select Members', icon='RESTRICT_SELECT_OFF')
 
 
 
