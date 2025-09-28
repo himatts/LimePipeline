@@ -276,7 +276,7 @@ def _noise_refresh_affected(scene: bpy.types.Scene, noise_name: str):
     aff.clear()
     if _objects_with_noise is None:
         return
-    for obj in _objects_with_noise(noise_name) or []:
+    for obj in _objects_with_noise(noise_name, scene) or []:
         it = aff.add()
         it.name = obj.name
 
@@ -317,7 +317,7 @@ def _on_noise_profile_param_update(self, context):
     scene = context.scene
     try:
         name = self.name
-        for obj in _objects_with_noise(name):
+        for obj in _objects_with_noise(name, scene):
             _apply_profile_to_object(obj, self)
     except Exception:
         pass

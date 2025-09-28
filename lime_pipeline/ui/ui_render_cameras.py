@@ -157,11 +157,27 @@ def register_camera_list_props():
 
     bpy.types.Scene.lime_render_cameras_token = StringProperty(options={'HIDDEN', 'SKIP_SAVE'})
 
-    def _compute_cam_token() -> str:
+    from ..data.templates import C_UTILS_CAM
+    def _cams_in_scene(scene, prefer_active_shot: bool = True):
         try:
-            names = [o.name for o in bpy.data.objects if getattr(o, 'type', None) == 'CAMERA']
-            names.sort()
-            return f"{len(names)}|" + "|".join(names)
+            if prefer_active_shot:
+                shot = validate_scene.active_shot_context(bpy.context)
+                if shot:
+                    cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+                    if cam_coll:
+                        return [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
+        except Exception:
+            pass
+        try:
+            return [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
+        except Exception:
+            return []
+
+    def _compute_cam_token(scene=None) -> str:
+        try:
+            sc = scene or bpy.context.scene
+            names = sorted([o.name for o in _cams_in_scene(sc)])
+            return f"{getattr(sc, 'name', '')}:{len(names)}|" + "|".join(names)
         except Exception:
             return ""
 
@@ -171,7 +187,7 @@ def register_camera_list_props():
             if items is None:
                 return
             items.clear()
-            cams = [o for o in bpy.data.objects if getattr(o, 'type', None) == 'CAMERA']
+            cams = _cams_in_scene(scene, prefer_active_shot=True)
             cams.sort(key=lambda o: o.name)
             for cam in cams:
                 it = items.add()
@@ -193,7 +209,7 @@ def register_camera_list_props():
         if scene is None:
             return
         try:
-            cur = _compute_cam_token()
+            cur = _compute_cam_token(scene)
             prev = getattr(scene, 'lime_render_cameras_token', '') or ''
             if cur != prev:
                 _fill_cam_items(scene)
@@ -204,7 +220,7 @@ def register_camera_list_props():
                             sc = bpy.context.scene
                             if sc is None:
                                 return None
-                            now = _compute_cam_token()
+                            now = _compute_cam_token(sc)
                             prev2 = getattr(sc, 'lime_render_cameras_token', '') or ''
                             if now != prev2:
                                 _fill_cam_items(sc)
@@ -227,7 +243,7 @@ def register_camera_list_props():
     try:
         scene = bpy.context.scene
         if scene is not None:
-            cur = _compute_cam_token()
+            cur = _compute_cam_token(scene)
             if cur != (getattr(scene, 'lime_render_cameras_token', '') or ''):
                 _fill_cam_items(scene)
                 scene.lime_render_cameras_token = cur

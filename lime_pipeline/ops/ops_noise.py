@@ -122,17 +122,20 @@ def _apply_profile_to_object(obj: bpy.types.Object, profile) -> int:
     return total
 
 
-def _objects_with_noise(noise_name: str) -> list[bpy.types.Object]:
+def _objects_with_noise(noise_name: str, scene: bpy.types.Scene | None = None) -> list[bpy.types.Object]:
     objs = []
-    for obj in bpy.data.objects:
-        ad = getattr(obj, "animation_data", None)
-        if ad is None or getattr(ad, "action", None) is None:
+    if not noise_name:
+        return objs
+    source = getattr(scene, 'objects', None) if scene is not None else bpy.data.objects
+    for obj in source:
+        ad = getattr(obj, 'animation_data', None)
+        if ad is None or getattr(ad, 'action', None) is None:
             continue
         act = ad.action
         found = False
-        for fc in getattr(act, "fcurves", []) or []:
-            for m in getattr(fc, "modifiers", []) or []:
-                if getattr(m, "type", None) == 'NOISE' and getattr(m, "name", "") == noise_name:
+        for fc in getattr(act, 'fcurves', []) or []:
+            for m in getattr(fc, 'modifiers', []) or []:
+                if getattr(m, 'type', None) == 'NOISE' and getattr(m, 'name', '') == noise_name:
                     found = True
                     break
             if found:
@@ -188,7 +191,7 @@ class LIME_TB_OT_noise_sync(Operator):
             return {'CANCELLED'}
         # Build set of names from profiles and scene modifiers
         names = {p.name for p in col}
-        for obj in bpy.data.objects:
+        for obj in scene.objects:
             ad = getattr(obj, "animation_data", None)
             if ad is None or getattr(ad, "action", None) is None:
                 continue
@@ -218,7 +221,7 @@ class LIME_TB_OT_noise_sync(Operator):
         aff.clear()
         if 0 <= idx < len(col):
             noise_name = col[idx].name
-            for obj in _objects_with_noise(noise_name):
+            for obj in _objects_with_noise(noise_name, scene):
                 it = aff.add()
                 it.name = obj.name
         return {'FINISHED'}
@@ -253,7 +256,7 @@ class LIME_TB_OT_noise_apply_to_selected(Operator):
         try:
             aff = scene.lime_tb_noise_affected
             aff.clear()
-            for obj in _objects_with_noise(profile.name):
+            for obj in _objects_with_noise(profile.name, scene):
                 it = aff.add()
                 it.name = obj.name
         except Exception:
@@ -276,7 +279,7 @@ class LIME_TB_OT_noise_remove_from_object(Operator):
         if not (0 <= idx < len(col)):
             return {'CANCELLED'}
         noise_name = col[idx].name
-        obj = bpy.data.objects.get(self.object_name)
+        obj = scene.objects.get(self.object_name)
         if obj is None:
             return {'CANCELLED'}
         ad = getattr(obj, "animation_data", None)
@@ -296,7 +299,7 @@ class LIME_TB_OT_noise_remove_from_object(Operator):
         try:
             aff = scene.lime_tb_noise_affected
             aff.clear()
-            for o in _objects_with_noise(noise_name):
+            for o in _objects_with_noise(noise_name, scene):
                 it = aff.add()
                 it.name = o.name
         except Exception:
@@ -340,7 +343,7 @@ class LIME_TB_OT_noise_remove_selected(Operator):
         try:
             aff = scene.lime_tb_noise_affected
             aff.clear()
-            for o in _objects_with_noise(noise_name):
+            for o in _objects_with_noise(noise_name, scene):
                 it = aff.add()
                 it.name = o.name
         except Exception:
@@ -372,7 +375,7 @@ class LIME_TB_OT_noise_rename_profile(Operator):
             self.report({'WARNING'}, "A profile with that name already exists")
             return {'CANCELLED'}
         # Update modifiers
-        for obj in bpy.data.objects:
+        for obj in scene.objects:
             ad = getattr(obj, "animation_data", None)
             act = getattr(ad, "action", None) if ad else None
             if act is None:
@@ -389,7 +392,7 @@ class LIME_TB_OT_noise_rename_profile(Operator):
         try:
             aff = scene.lime_tb_noise_affected
             aff.clear()
-            for o in _objects_with_noise(new):
+            for o in _objects_with_noise(new, scene):
                 it = aff.add()
                 it.name = o.name
         except Exception:
@@ -521,7 +524,7 @@ class LIME_TB_OT_noise_delete_profile(Operator):
         name = col[idx].name
         # Remove matching modifiers from all objects
         removed = 0
-        for obj in bpy.data.objects:
+        for obj in scene.objects:
             ad = getattr(obj, "animation_data", None)
             act = getattr(ad, "action", None) if ad else None
             if act is None:

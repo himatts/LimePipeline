@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 2, 0),  # Render presets management (global + defaults)
+    "version": (0, 2, 1),  # Duplicate scene isolation, camera list filter, modularization
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -99,8 +99,10 @@ from .ops.ops_proposal_view import (
 from .ops.ops_import_layout import (
     LIME_OT_import_layout,
 )
-from .ops.ops_stage import (
+from .ops.ops_stage_duplicate_scene import (
     LIME_OT_duplicate_scene_sequential,
+)
+from .ops.ops_stage import (
     LIME_OT_stage_main_light,
     LIME_OT_stage_aux_light,
 )

@@ -569,7 +569,24 @@ class LIME_OT_sync_camera_list(Operator):
             return {'CANCELLED'}
         try:
             items.clear()
-            cams = [o for o in bpy.data.objects if getattr(o, 'type', None) == 'CAMERA']
+            # Only cameras in active scene; prefer active SHOT camera collection when present
+            from ..core import validate_scene
+            from ..data.templates import C_UTILS_CAM
+            try:
+                shot = validate_scene.active_shot_context(context)
+            except Exception:
+                shot = None
+            if shot:
+                try:
+                    cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+                except Exception:
+                    cam_coll = None
+                if cam_coll:
+                    cams = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
+                else:
+                    cams = [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
+            else:
+                cams = [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
             cams.sort(key=lambda o: o.name)
             for cam in cams:
                 it = items.add()

@@ -8,37 +8,12 @@ import bpy
 from bpy.types import Collection, Object, Operator, Scene
 
 from ..core import validate_scene
-from ..core.validate_scene import get_shot_child_by_basename
 
 
 _SH_TOKEN_RE = re.compile(r"\b(SHOT|SH)([_\s]?)(\d{2,3})\b", re.IGNORECASE)
 
 
-def _ensure_child(parent: bpy.types.Collection, name: str) -> bpy.types.Collection:
-    for c in parent.children:
-        if c.name == name:
-            return c
-    new = bpy.data.collections.new(name)
-    parent.children.link(new)
-    return new
-
-
-def _ensure_lights_target(shot: bpy.types.Collection, shot_idx: int, target_base: str) -> bpy.types.Collection:
-    # Deprecated: lights utilities removed
-    return get_shot_child_by_basename(shot, target_base)
-
-
-def _is_in_shot(coll: bpy.types.Collection, shot: bpy.types.Collection) -> bool:
-    # Reuse public helper to check ancestry by comparing resolved root
-    try:
-        return validate_scene.find_shot_root_for_collection(coll) == shot
-    except Exception:
-        return False
-
-
-def _assign_selected_lights(context, target_base: str) -> tuple[set, set]:
-    # Deprecated feature
-    return set(), set()
+ 
 
 
 def _strip_numeric_suffix(name: str) -> str:
@@ -428,40 +403,7 @@ class _ShotSceneRenamer:
                     return
                 self._log("DATA", old_data, unique_data)
 
-class LIME_OT_duplicate_scene_sequential(Operator):
-    bl_idname = "lime.duplicate_scene_sequential"
-    bl_label = "Duplicate Scene Sequential"
-    bl_description = "Duplicate the active scene and renames shot collections and key objects sequentially"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        source_scene = context.scene
-        if source_scene is None:
-            self.report({'ERROR'}, "No active scene to duplicate")
-            return {'CANCELLED'}
-        next_idx = max(1, _find_max_shot_index() + 1)
-        try:
-            result = bpy.ops.scene.new(type='FULL_COPY')
-        except Exception as exc:
-            self.report({'ERROR'}, f"Failed to duplicate scene: {exc}")
-            return {'CANCELLED'}
-        if 'FINISHED' not in result:
-            self.report({'ERROR'}, "Scene duplication cancelled")
-            return {'CANCELLED'}
-        new_scene = context.scene
-        if new_scene == source_scene:
-            self.report({'ERROR'}, "Scene duplication did not create a new scene")
-            return {'CANCELLED'}
-        renamer = _ShotSceneRenamer(source_scene, new_scene, next_idx)
-        try:
-            changes = renamer.run()
-        except Exception as exc:
-            self.report({'ERROR'}, f"Failed to normalize duplicated scene: {exc}")
-            return {'CANCELLED'}
-        shot_label = _format_sh_root("Shot", _shot_index_width(next_idx), next_idx)
-        self.report({'INFO'}, f"Scene duplicated as {new_scene.name}; assigned {shot_label} ({len(changes)} rename(s))")
-        renamer.flush_log()
-        return {'FINISHED'}
+# Backward compatibility shim (do not register): keep name to avoid script breakage
 
 
 class LIME_OT_stage_main_light(Operator):
@@ -485,7 +427,6 @@ class LIME_OT_stage_aux_light(Operator):
 
 
 __all__ = [
-    "LIME_OT_duplicate_scene_sequential",
     "LIME_OT_stage_main_light",
     "LIME_OT_stage_aux_light",
 ]
