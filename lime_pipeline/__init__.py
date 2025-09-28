@@ -90,12 +90,7 @@ from .ops.ops_shots import (
 from .ops.ops_add_missing import (
     LIME_OT_add_missing_collections,
 )
-from .ops.ops_proposal_view import (
-    LIME_OT_proposal_view_config,
-    LIME_OT_take_pv_shot,
-    LIME_OT_take_all_pv_shots,
-    LIME_OT_add_camera_rig,
-)
+## Removed deprecated proposal view operators; camera rig operator now lives in ops_cameras
 from .ops.ops_import_layout import (
     LIME_OT_import_layout,
 )
@@ -119,7 +114,7 @@ from .ops.ops_cameras import (
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
     LIME_OT_sync_camera_list,
-    LIME_OT_add_camera_rig_and_sync,
+    LIME_OT_add_camera_rig,
     LIME_OT_delete_camera_rig,
     LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
@@ -148,9 +143,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_render_preset_update_defaults,
     LIME_OT_clean_step,
     LIME_OT_dimension_envelope,
-    LIME_OT_proposal_view_config,
-    LIME_OT_take_pv_shot,
-    LIME_OT_take_all_pv_shots,
     LIME_OT_add_camera_rig,
     LIME_OT_import_layout,
     LIME_OT_duplicate_scene_sequential,
@@ -185,7 +177,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_duplicate_active_camera,
     LIME_OT_rename_shot_cameras,
     LIME_OT_sync_camera_list,
-    LIME_OT_add_camera_rig_and_sync,
     LIME_OT_delete_camera_rig,
     LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,

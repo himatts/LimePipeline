@@ -1,12 +1,7 @@
-import os
-from pathlib import Path
-
 import bpy
 from bpy.types import Operator
-from bpy.props import StringProperty, IntProperty
+from bpy.props import StringProperty, IntProperty, EnumProperty
 
-from ..core.paths import paths_for_type
-from ..core.naming import resolve_project_name, hydrate_state_from_filepath, parse_blend_details
 from ..core import validate_scene
 from ..data.templates import C_UTILS_CAM
 
@@ -552,9 +547,6 @@ class LIME_OT_pose_camera_rig(Operator):
         return {'FINISHED'}
 
 
-
-
-
 class LIME_OT_sync_camera_list(Operator):
     bl_idname = 'lime.sync_camera_list'
     bl_label = 'Refresh Cameras'
@@ -610,40 +602,7 @@ class LIME_OT_sync_camera_list(Operator):
 __all__.append('LIME_OT_sync_camera_list')
 
 
-class LIME_OT_add_camera_rig_and_sync(Operator):
-    bl_idname = 'lime.add_camera_rig_and_sync'
-    bl_label = 'Add Camera (Rig) and Refresh'
-    bl_description = 'Create a camera rig using Lime operator and refresh the list'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        try:
-            bpy.ops.lime.add_camera_rig('INVOKE_DEFAULT')
-        except Exception:
-            try:
-                bpy.ops.lime.add_camera_rig()
-            except Exception:
-                self.report({'ERROR'}, 'Failed to add camera rig')
-                return {'CANCELLED'}
-        try:
-            bpy.ops.lime.sync_camera_list()
-        except Exception:
-            pass
-        try:
-            import bpy as _bpy3
-            def _delayed_sync():
-                try:
-                    _bpy3.ops.lime.sync_camera_list()
-                except Exception:
-                    pass
-                return None
-            _bpy3.app.timers.register(_delayed_sync, first_interval=0.1)
-        except Exception:
-            pass
-        return {'FINISHED'}
-
-
-__all__.append('LIME_OT_add_camera_rig_and_sync')
+## Removed: LIME_OT_add_camera_rig_and_sync (merged into LIME_OT_add_camera_rig)
 
 
 class LIME_OT_delete_camera_rig_and_sync(Operator):
@@ -672,8 +631,184 @@ class LIME_OT_delete_camera_rig_and_sync(Operator):
 
 
 __all__.append('LIME_OT_delete_camera_rig_and_sync')
-
 __all__.append("LIME_OT_delete_camera_rig")
 __all__.append("LIME_OT_pose_camera_rig")
+
+
+class LIME_OT_add_camera_rig(Operator):
+    bl_idname = "lime.add_camera_rig"
+    bl_label = "Create Camera (Rig)"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Add a camera rig to the SHOT's 00_UTILS_CAM collection"
+
+    rig_type: EnumProperty(
+        name="Rig Type",
+        items=(
+            ('DOLLY', "Dolly", "Dolly rig"),
+            ('CRANE', "Crane", "Crane rig"),
+            ('2D', "2D", "2D rig"),
+        ),
+        default='DOLLY',
+    )
+
+    @classmethod
+    def poll(cls, ctx):
+        shot = validate_scene.active_shot_context(ctx)
+        return shot is not None
+
+    def execute(self, context):
+        shot = validate_scene.active_shot_context(context)
+        if shot is None:
+            self.report({'ERROR'}, "No active SHOT")
+            return {'CANCELLED'}
+
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        if cam_coll is None:
+            self.report({'ERROR'}, "Active SHOT has no camera collection")
+            return {'CANCELLED'}
+
+        # Pre-info: number of existing cameras and SHOT number
+        try:
+            cams_before = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
+            existing_cam_count = len(cams_before)
+            before_cam_names = set(o.name for o in cams_before)
+        except Exception:
+            existing_cam_count = 0
+            before_cam_names = set()
+        print(f"[LimePV] AddCameraRig: shot={shot.name}, existing_cam_count={existing_cam_count}, before_cam_names={sorted(list(before_cam_names))}")
+        try:
+            shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+        except Exception:
+            shot_idx = 0
+
+        # Activate the camera collection as target
+        target_layer = None
+        try:
+            def _find_layer(layer, wanted):
+                if layer.collection == wanted:
+                    return layer
+                for ch in layer.children:
+                    found = _find_layer(ch, wanted)
+                    if found:
+                        return found
+                return None
+
+            root_layer = context.view_layer.layer_collection
+            target_layer = _find_layer(root_layer, cam_coll)
+            if target_layer is not None:
+                context.view_layer.active_layer_collection = target_layer
+        except Exception:
+            pass
+
+        # Confirmed operator: object.build_camera_rig(mode=...)
+        created = False
+        last_error = None
+        mode = self.rig_type
+        if mode == '2D':
+            mode_candidates = ['TWO_D', '2D']
+        else:
+            mode_candidates = [mode]
+
+        # Locate a VIEW_3D to run the operator
+        win = None
+        area = None
+        region = None
+        for w in context.window_manager.windows:
+            for a in w.screen.areas:
+                if a.type == 'VIEW_3D':
+                    r = next((rg for rg in a.regions if rg.type == 'WINDOW'), None)
+                    if r is not None:
+                        win = w
+                        area = a
+                        region = r
+                        break
+            if win:
+                break
+        print(f"[LimePV] View3D located: win={bool(win)}, area={bool(area)}, region={bool(region)}")
+
+        # Save objects before for detection of new ones (by name)
+        before_objs = {obj.name for obj in bpy.data.objects}
+        print(f"[LimePV] Objects before: {len(before_objs)}")
+
+        # Ensure OBJECT mode in 3D context
+        try:
+            if win and area and region:
+                with bpy.context.temp_override(window=win, area=area, region=region, scene=context.scene, view_layer=context.view_layer):
+                    bpy.ops.object.mode_set(mode='OBJECT')
+            else:
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except Exception:
+            pass
+
+        # Verify operator availability
+        build_op = getattr(bpy.ops.object, 'build_camera_rig', None)
+        if build_op is None:
+            last_error = "Operator object.build_camera_rig not found"
+            print("[LimePV] build_camera_rig operator NOT found")
+        else:
+            print(f"[LimePV] build_camera_rig operator available, mode candidates={mode_candidates}")
+            for m in mode_candidates:
+                try:
+                    if win and area and region:
+                        with bpy.context.temp_override(window=win, area=area, region=region, scene=context.scene, view_layer=context.view_layer):
+                            res = bpy.ops.object.build_camera_rig('EXEC_DEFAULT', mode=m)
+                    else:
+                        res = bpy.ops.object.build_camera_rig('EXEC_DEFAULT', mode=m)
+                    print(f"[LimePV] build_camera_rig result for mode={m}: {res}")
+                    if res == {'FINISHED'}:
+                        created = True
+                        break
+                except Exception as ex:
+                    last_error = str(ex)
+                    print(f"[LimePV] build_camera_rig error for mode={m}: {last_error}")
+                    continue
+
+        if not created:
+            msg = "Could not create camera. Is 'Add Camera Rigs' enabled?"
+            if last_error:
+                msg += f" ({last_error})"
+            self.report({'ERROR'}, msg)
+            print(f"[LimePV] Creation failed: {msg}")
+            return {'CANCELLED'}
+
+        # Rename only the new camera(s) directly (no relink or rig changes)
+        try:
+            after_names = {obj.name for obj in bpy.data.objects}
+            new_obj_names = [name for name in after_names if name not in before_objs]
+            new_objs = [bpy.data.objects[name] for name in new_obj_names]
+            print(f"[LimePV] New objects: {[ (o.name, getattr(o,'type',None)) for o in new_objs ]}")
+            new_cams = [o for o in new_objs if getattr(o, "type", None) == 'CAMERA']
+            if not new_cams:
+                print("[LimePV] No new camera objects detected; aborting rename")
+            else:
+                new_cams.sort(key=lambda o: o.name)
+                next_idx = existing_cam_count + 1
+                for cam in new_cams:
+                    try:
+                        target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
+                        while target_name in bpy.data.objects.keys():
+                            next_idx += 1
+                            target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
+                        print(f"[LimePV] Simple rename camera {cam.name} -> {target_name}")
+                        cam.name = target_name
+                        if getattr(cam, "data", None) is not None:
+                            cam.data.name = target_name + ".Data"
+                        # After camera rename, rename its parent Armature (rig)
+                        try:
+                            _rename_parent_armature_for_camera(cam, shot_idx_hint=shot_idx, cam_idx_hint=next_idx)
+                        except Exception:
+                            pass
+                        next_idx += 1
+                    except Exception as ex:
+                        print(f"[LimePV] Simple rename error: {ex}")
+        except Exception:
+            pass
+
+        self.report({'INFO'}, f"Camera created in {shot.name}/{C_UTILS_CAM}")
+        return {'FINISHED'}
+
+
+__all__.append('LIME_OT_add_camera_rig')
+
 
 

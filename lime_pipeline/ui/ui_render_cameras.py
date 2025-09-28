@@ -63,7 +63,7 @@ class LIME_PT_render_camera_list(Panel):
         row = layout.row(align=True)
         row.template_list("LIME_UL_render_cameras", "", scene, "lime_render_cameras", scene, "lime_render_cameras_index", rows=6)
         col_btns = row.column(align=True)
-        col_btns.operator("lime.add_camera_rig_and_sync", text='', icon='ADD')
+        col_btns.operator("lime.add_camera_rig", text='', icon='ADD')
         del_op = col_btns.operator("lime.delete_camera_rig_and_sync", text='', icon='REMOVE')
         try:
             idx = getattr(scene, 'lime_render_cameras_index', -1)
