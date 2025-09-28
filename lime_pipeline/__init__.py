@@ -30,6 +30,9 @@ from .ops.ops_model_organizer import (
     LIME_OT_apply_scene_deltas,
     LIME_OT_colorize_parent_groups,
 )
+from .ops.ops_material_alpha_mix import (
+    LIME_OT_apply_object_alpha_mix,
+)
 from .ui import (
     LIME_TB_PT_root,
     LIME_TB_OT_placeholder,
@@ -152,6 +155,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
     LIME_OT_colorize_parent_groups,
+    LIME_OT_apply_object_alpha_mix,
     LIME_OT_set_unit_preset,
     LIME_TB_OT_apply_keyframe_style,
     LIME_TB_OT_noise_add_profile,
