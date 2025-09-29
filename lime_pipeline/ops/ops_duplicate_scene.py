@@ -9,7 +9,7 @@ import string
 from bpy.types import Collection, Object, Operator, Scene
 
 from ..core import validate_scene
-from ..data.templates import C_UTILS_CAM
+from ..data.templates import C_CAM
 from .ops_alpha_manager import ensure_event_tracks, rebuild_all_drivers
 from .ops_cameras import _rename_parent_armature_for_camera  # reuse rig rename helper
 _SH_TOKEN_RE = re.compile(r"\b(SHOT|SH)([_\s]?)(\d{2,3})\b", re.IGNORECASE)

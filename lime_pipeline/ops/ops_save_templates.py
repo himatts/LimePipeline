@@ -14,7 +14,7 @@ from ..core.naming import (
     hydrate_state_from_filepath,
 )
 from ..core import validate_scene
-from ..data.templates import C_UTILS_CAM
+from ..data.templates import C_CAM
 
 
 def _ensure_editables_dir(state, ptype: str) -> Path:
@@ -63,7 +63,7 @@ def _resolve_prj_rev_sc(state):
 
 def _camera_index_for_shot(shot, camera_obj) -> int:
     try:
-        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
         if not cam_coll:
             return 1
         cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']

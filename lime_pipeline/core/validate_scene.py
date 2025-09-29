@@ -111,7 +111,7 @@ def can_duplicate_shot(ctx) -> Tuple[bool, str]:
 def get_shot_child_by_basename(shot: bpy.types.Collection, base_name: str) -> Optional[bpy.types.Collection]:
     """Return direct child collection of shot whose name matches base_name ignoring numeric suffixes.
 
-    Example: base_name='00_UTILS_CAM' will match children named '00_UTILS_CAM', '00_UTILS_CAM.001', etc.
+    Example: base_name='00_CAM' will match children named '00_CAM', '00_CAM.001', etc.
     """
     if shot is None or not base_name:
         return None

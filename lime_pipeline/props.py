@@ -102,7 +102,7 @@ class LimePipelineState(PropertyGroup):
         try:
             shot = validate_scene.active_shot_context(context)
             if shot is not None:
-                base = getattr(templates, "C_UTILS_CAM", "00_UTILS_CAM")
+                base = getattr(templates, "C_CAM", "00_CAM")
                 cam_coll = validate_scene.get_shot_child_by_basename(shot, base)
                 if cam_coll is not None:
                     cams = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']

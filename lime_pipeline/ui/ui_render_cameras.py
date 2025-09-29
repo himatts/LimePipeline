@@ -157,13 +157,13 @@ def register_camera_list_props():
 
     bpy.types.Scene.lime_render_cameras_token = StringProperty(options={'HIDDEN', 'SKIP_SAVE'})
 
-    from ..data.templates import C_UTILS_CAM
+    from ..data.templates import C_CAM
     def _cams_in_scene(scene, prefer_active_shot: bool = True):
         try:
             if prefer_active_shot:
                 shot = validate_scene.active_shot_context(bpy.context)
                 if shot:
-                    cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+                    cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
                     if cam_coll:
                         return [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
         except Exception:

@@ -3,7 +3,7 @@ from bpy.types import Operator
 from bpy.props import StringProperty, IntProperty, EnumProperty
 
 from ..core import validate_scene
-from ..data.templates import C_UTILS_CAM
+from ..data.templates import C_CAM
 
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff'}
@@ -253,7 +253,7 @@ class LIME_OT_rename_shot_cameras(Operator):
         shot = validate_scene.active_shot_context(ctx)
         if shot is None:
             return False
-        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
         if cam_coll is None:
             return False
         cams = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
@@ -265,7 +265,7 @@ class LIME_OT_rename_shot_cameras(Operator):
             self.report({'ERROR'}, "No active SHOT")
             return {'CANCELLED'}
 
-        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
         if cam_coll is None:
             self.report({'ERROR'}, "Active SHOT has no camera collection")
             return {'CANCELLED'}
@@ -416,7 +416,7 @@ class LIME_OT_delete_camera_rig(Operator):
         # Rename remaining cameras in the shot
         if shot is not None:
             try:
-                cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+                cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
                 if cam_coll is not None:
                     cameras = [obj for obj in cam_coll.objects if getattr(obj, 'type', None) == 'CAMERA']
                     cameras.sort(key=lambda o: o.name)
@@ -563,14 +563,14 @@ class LIME_OT_sync_camera_list(Operator):
             items.clear()
             # Only cameras in active scene; prefer active SHOT camera collection when present
             from ..core import validate_scene
-            from ..data.templates import C_UTILS_CAM
+            from ..data.templates import C_CAM
             try:
                 shot = validate_scene.active_shot_context(context)
             except Exception:
                 shot = None
             if shot:
                 try:
-                    cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+                    cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
                 except Exception:
                     cam_coll = None
                 if cam_coll:
@@ -639,7 +639,7 @@ class LIME_OT_add_camera_rig(Operator):
     bl_idname = "lime.add_camera_rig"
     bl_label = "Create Camera (Rig)"
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Add a camera rig to the SHOT's 00_UTILS_CAM collection"
+    bl_description = "Add a camera rig to the SHOT's 00_CAM collection"
 
     rig_type: EnumProperty(
         name="Rig Type",
@@ -662,7 +662,7 @@ class LIME_OT_add_camera_rig(Operator):
             self.report({'ERROR'}, "No active SHOT")
             return {'CANCELLED'}
 
-        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_UTILS_CAM)
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
         if cam_coll is None:
             self.report({'ERROR'}, "Active SHOT has no camera collection")
             return {'CANCELLED'}
@@ -804,7 +804,7 @@ class LIME_OT_add_camera_rig(Operator):
         except Exception:
             pass
 
-        self.report({'INFO'}, f"Camera created in {shot.name}/{C_UTILS_CAM}")
+        self.report({'INFO'}, f"Camera created in {shot.name}/{C_CAM}")
         return {'FINISHED'}
 
 

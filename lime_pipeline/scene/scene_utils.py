@@ -6,7 +6,7 @@ import re
 import bpy
 
 from ..core.validate_scene import parse_shot_index, get_shot_child_by_basename
-from ..data import SHOT_TREE, C_UTILS_CAM
+from ..data import SHOT_TREE, C_CAM
 
 
 def _ensure_child(parent: bpy.types.Collection, name: str) -> bpy.types.Collection:
@@ -116,9 +116,8 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
         """Return name with leading SH##_ prefix replaced by new index; preserve numeric suffix like .001.
 
         Examples:
-        - 'SH01_00_UTILS_CAM' -> 'SH02_00_UTILS_CAM'
+        - 'SH01_00_CAM' -> 'SH02_00_CAM'
         - 'SH12_01_Project_MAIN.001' -> 'SH02_01_Project_MAIN.001'
-        - '00_UTILS_LIGHTS' -> 'SH02_00_UTILS_LIGHTS'
         """
         core, dot, rest = name.partition('.')
         m = _SH_PREFIX_RE.match(core or "")
@@ -351,7 +350,7 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
 
     # Phase 4: ensure camera names in destination shot follow SHOT_##_CAMERA_N convention
     try:
-        cam_coll = get_shot_child_by_basename(dst_shot, C_UTILS_CAM)
+        cam_coll = get_shot_child_by_basename(dst_shot, C_CAM)
         if cam_coll is not None:
             cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
             if cameras:
