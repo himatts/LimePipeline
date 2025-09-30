@@ -229,6 +229,10 @@ class LIME_OT_duplicate_active_camera(Operator):
                 self.report({'INFO'}, f"Duplicated camera: {original_to_copy[cam].name}")
             else:
                 self.report({'INFO'}, f"Duplicated camera rig with {len(original_to_copy)} objects")
+            try:
+                bpy.ops.lime.sync_camera_list()
+            except Exception:
+                pass
             return {'FINISHED'}
         except Exception as ex:
             self.report({'ERROR'}, str(ex))
@@ -561,24 +565,49 @@ class LIME_OT_sync_camera_list(Operator):
             return {'CANCELLED'}
         try:
             items.clear()
-            # Only cameras in active scene; prefer active SHOT camera collection when present
-            from ..core import validate_scene
-            from ..data.templates import C_CAM
+            rename_message = 'refresh only'
+            shot = None
+            cam_coll = None
             try:
                 shot = validate_scene.active_shot_context(context)
             except Exception:
                 shot = None
-            if shot:
+            if shot is not None:
                 try:
                     cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
                 except Exception:
                     cam_coll = None
-                if cam_coll:
-                    cams = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
+
+            cams_in_shot = []
+            if cam_coll is not None:
+                try:
+                    cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
+                except Exception:
+                    cams_in_shot = []
+
+            if cams_in_shot:
+                try:
+                    result = bpy.ops.lime.rename_shot_cameras('EXEC_DEFAULT')
+                except Exception:
+                    rename_message = 'refresh (rename failed)'
                 else:
-                    cams = [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
+                    if result == {'FINISHED'}:
+                        rename_message = 'combined rename+refresh'
+                        try:
+                            cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
+                        except Exception:
+                            cams_in_shot = []
+                    else:
+                        rename_message = 'refresh (rename cancelled)'
+
+            if cam_coll is not None:
+                cams = cams_in_shot
             else:
-                cams = [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
+                try:
+                    cams = [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
+                except Exception:
+                    cams = []
+
             cams.sort(key=lambda o: o.name)
             for cam in cams:
                 it = items.add()
@@ -595,7 +624,7 @@ class LIME_OT_sync_camera_list(Operator):
         except Exception:
             self.report({'WARNING'}, 'Could not refresh camera list')
             return {'CANCELLED'}
-        self.report({'INFO'}, f'Cameras: {len(items)}')
+        self.report({'INFO'}, f"Camera list {rename_message}: {len(items)} items")
         return {'FINISHED'}
 
 

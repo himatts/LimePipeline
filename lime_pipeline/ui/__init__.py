@@ -7,9 +7,8 @@ from .ui_render_configs import (
     LIME_PT_render_settings,
     LIME_PT_render_outputs,
 )
-from .ui_render_cameras import (
+from .ui_cameras_manager import (
     LIME_PT_render_cameras,
-    LIME_PT_render_camera_list,
     register_camera_list_props,
     unregister_camera_list_props,
 )
@@ -45,7 +44,6 @@ __all__ = [
     "LIME_PT_render_preset_actions",
     "LIME_PT_render_settings",
     "LIME_PT_render_cameras",
-    "LIME_PT_render_camera_list",
     "LIME_PT_render_outputs",
     "register_camera_list_props",
     "unregister_camera_list_props",

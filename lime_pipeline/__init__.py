@@ -16,7 +16,13 @@ from .prefs import LimePipelinePrefs
 from .props import register as register_props, unregister as unregister_props
 from .ui import LIME_PT_project_org
 from .ui import LIME_PT_shots
-from .ui import LIME_PT_render_configs, LIME_PT_render_preset_actions, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
+from .ui import (
+    LIME_PT_render_configs,
+    LIME_PT_render_preset_actions,
+    LIME_PT_render_settings,
+    LIME_PT_render_outputs,
+    LIME_PT_render_cameras,
+)
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
 from .ui import (
@@ -188,7 +194,6 @@ PIPELINE_PANEL_CLASSES = (
     LIME_PT_shots,
     LIME_PT_stage_setup,
     LIME_PT_render_cameras,
-    LIME_PT_render_camera_list,
 )
 
 OTHER_PANEL_CLASSES = (

@@ -28,43 +28,12 @@ class LIME_PT_render_cameras(Panel):
         layout = self.layout
         scene = ctx.scene
 
-        # Controls: single row so buttons are tightly grouped
-        row = layout.row(align=True)
-        row.enabled = validate_scene.active_shot_context(ctx) is not None
-        row.operator("lime.add_camera_rig", text="Create Camera (Rig)", icon='OUTLINER_DATA_CAMERA')
-        row.operator("lime.duplicate_active_camera", text="", icon='DUPLICATE')
-
-        # Rename cameras in active SHOT's camera collection
-        row = layout.row(align=True)
-        row.enabled = validate_scene.active_shot_context(ctx) is not None
-        row.operator("lime.rename_shot_cameras", text="Rename Cameras", icon='FILE_REFRESH')
-
-        row = layout.row(align=True)
-        row.enabled = False
-        row.operator("wm.call_menu", text="Camera Background", icon='IMAGE_DATA')
-
-        layout.separator()
-        layout.operator("lime.render_invoke", text="Render (F12)", icon='RENDER_STILL')
-
-
-class LIME_PT_render_camera_list(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = CAT
-    bl_label = "Camera List"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LIME_PT_render_cameras"
-    bl_order = 0
-
-    def draw(self, ctx):
-        layout = self.layout
-        scene = ctx.scene
-
         row = layout.row(align=True)
         row.template_list("LIME_UL_render_cameras", "", scene, "lime_render_cameras", scene, "lime_render_cameras_index", rows=6)
-        col_btns = row.column(align=True)
-        col_btns.operator("lime.add_camera_rig", text='', icon='ADD')
-        del_op = col_btns.operator("lime.delete_camera_rig_and_sync", text='', icon='REMOVE')
+
+        col = row.column(align=True)
+        col.operator("lime.add_camera_rig", text='', icon='ADD')
+        del_op = col.operator("lime.delete_camera_rig_and_sync", text='', icon='REMOVE')
         try:
             idx = getattr(scene, 'lime_render_cameras_index', -1)
             items = getattr(scene, 'lime_render_cameras', None)
@@ -72,8 +41,9 @@ class LIME_PT_render_camera_list(Panel):
                 del_op.camera_name = items[idx].name
         except Exception:
             pass
-        col_btns.separator()
-        col_btns.operator("lime.sync_camera_list", text='', icon='FILE_REFRESH')
+        col.separator()
+        col.operator("lime.duplicate_active_camera", text='', icon='DUPLICATE')
+        col.operator("lime.sync_camera_list", text='', icon='FILE_REFRESH')
 
 
 class LimeRenderCamItem(PropertyGroup):
@@ -280,7 +250,6 @@ def unregister_camera_list_props():
 
 __all__ = [
     "LIME_PT_render_cameras",
-    "LIME_PT_render_camera_list",
     "LIME_UL_render_cameras",
     "LimeRenderCamItem",
     "register_camera_list_props",
