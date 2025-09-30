@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased] - 2025-09-30
+### Changed (LP-00003)
+- Simplified Shots UI panel by removing subpanels and leveraging native Blender list controls
+- Removed deprecated "Shot Instance" functionality completely
+- Relocated "Duplicate Shot" and "Add Missing Collections" as supplementary buttons alongside the main shot list
+- Maintained all core shot management functionality while improving UI consistency
+
 ## [0.2.1] - 2025-09-28
 ### Changed
 - Modularized `lime.duplicate_scene_sequential` into `ops/ops_stage_duplicate_scene.py` and centralized registration.

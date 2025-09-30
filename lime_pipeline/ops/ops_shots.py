@@ -4,8 +4,7 @@ from bpy.props import StringProperty
 
 from ..core import validate_scene
 from ..core.naming import resolve_project_name
-from ..scene.scene_utils import create_shot, instance_shot, duplicate_shot, ensure_shot_tree
-import bpy
+from ..scene.scene_utils import create_shot, duplicate_shot, ensure_shot_tree
 
 
 class LIME_OT_new_shot(Operator):
@@ -29,32 +28,6 @@ class LIME_OT_new_shot(Operator):
             self.report({'ERROR'}, str(ex))
             return {'CANCELLED'}
         self.report({'INFO'}, f"Created SHOT {idx:02d}")
-        return {'FINISHED'}
-
-
-class LIME_OT_shot_instance(Operator):
-    bl_idname = "lime.shot_instance"
-    bl_label = "Shot Instance"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, ctx):
-        ok, _ = validate_scene.can_instance_shot(ctx)
-        return ok
-
-    def execute(self, context):
-        scene = context.scene
-        src = validate_scene.active_shot_context(context)
-        if src is None:
-            self.report({'ERROR'}, "No SHOT context")
-            return {'CANCELLED'}
-        dst_idx = validate_scene.next_shot_index(scene)
-        try:
-            instance_shot(scene, src, dst_idx)
-        except Exception as ex:
-            self.report({'ERROR'}, str(ex))
-            return {'CANCELLED'}
-        self.report({'INFO'}, f"Instanced SHOT {dst_idx:02d} from {src.name}")
         return {'FINISHED'}
 
 

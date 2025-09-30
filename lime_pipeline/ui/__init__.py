@@ -1,5 +1,5 @@
 from .ui_project_org import LIME_PT_project_org
-from .ui_shots import LIME_PT_shots, LIME_PT_shots_list, LIME_PT_shots_tools
+from .ui_shots import LIME_PT_shots
 from .ui_shots import register_shot_list_props, unregister_shot_list_props
 from .ui_render_configs import (
     LIME_PT_render_configs,
@@ -39,8 +39,6 @@ from .ui_alpha_manager import (
 __all__ = [
     "LIME_PT_project_org",
     "LIME_PT_shots",
-    "LIME_PT_shots_list",
-    "LIME_PT_shots_tools",
     "register_shot_list_props",
     "unregister_shot_list_props",
     "LIME_PT_render_configs",

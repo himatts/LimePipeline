@@ -2,7 +2,6 @@
 
 from .ops_shots import (
     LIME_OT_new_shot,
-    LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
 )
 from .ops_duplicate_scene import (
@@ -11,7 +10,6 @@ from .ops_duplicate_scene import (
 
 __all__ = [
     "LIME_OT_new_shot",
-    "LIME_OT_shot_instance",
     "LIME_OT_duplicate_shot",
     "LIME_OT_duplicate_scene_sequential",
 ]

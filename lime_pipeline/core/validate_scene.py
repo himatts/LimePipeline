@@ -96,10 +96,6 @@ def can_create_new_shot(scene: bpy.types.Scene) -> Tuple[bool, str]:
     return True, ""
 
 
-def can_instance_shot(ctx) -> Tuple[bool, str]:
-    if active_shot_context(ctx) is not None:
-        return True, ""
-    return False, "Activate a collection inside a 'SHOT ##' to instance."
 
 
 def can_duplicate_shot(ctx) -> Tuple[bool, str]:

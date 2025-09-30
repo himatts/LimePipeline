@@ -25,28 +25,17 @@ class LIME_PT_shots(Panel):
     bl_order = 4
 
     def draw(self, ctx):
-        # Container panel: subpanels handle content
-        pass
-
-
-class LIME_PT_shots_list(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = CAT
-    bl_label = "Shot List"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_idname = "LIME_PT_shots_list"
-    bl_parent_id = "LIME_PT_shots"
-    bl_order = 0
-
-    def draw(self, ctx):
         layout = self.layout
         scene = ctx.scene
+
+        # Main shot list with controls
         row = layout.row(align=True)
         row.template_list("LIME_UL_shots", "", scene, "lime_shots", scene, "lime_shots_index", rows=6)
-        col_btns = row.column(align=True)
-        col_btns.operator("lime.new_shot_and_sync", text='', icon='ADD')
-        del_op = col_btns.operator("lime.delete_shot_and_sync", text='', icon='REMOVE')
+
+        # All controls in single column
+        col = row.column(align=True)
+        col.operator("lime.new_shot_and_sync", text='', icon='ADD')
+        del_op = col.operator("lime.delete_shot_and_sync", text='', icon='REMOVE')
         try:
             idx = getattr(scene, 'lime_shots_index', -1)
             items = getattr(scene, 'lime_shots', None)
@@ -54,44 +43,12 @@ class LIME_PT_shots_list(Panel):
                 del_op.shot_name = items[idx].name
         except Exception:
             pass
-        col_btns.separator()
-        col_btns.operator("lime.sync_shot_list", text='', icon='FILE_REFRESH')
+        col.separator()
+        col.operator("lime.sync_shot_list", text='', icon='FILE_REFRESH')
+        col.operator("lime.duplicate_shot_and_sync", text='', icon='DUPLICATE')
+        col.operator("lime.add_missing_collections", text='', icon='WARNING_LARGE')
 
 
-class LIME_PT_shots_tools(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = CAT
-    bl_label = "Shot Tools"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_idname = "LIME_PT_shots_tools"
-    bl_parent_id = "LIME_PT_shots"
-    bl_order = 1
-
-    def draw(self, ctx):
-        layout = self.layout
-        col = layout.column(align=True)
-        col.operator("lime.new_shot_and_sync", text="New Shot", icon='ADD')
-
-        row = layout.row(align=True)
-        can_instance, msg_i = validate_scene.can_instance_shot(ctx)
-        row.enabled = can_instance
-        row.operator("lime.shot_instance_and_sync", text="Shot Instance", icon='OUTLINER_COLLECTION')
-        if not can_instance and msg_i:
-            hint = layout.row(align=True)
-            hint.label(text=msg_i, icon='INFO')
-
-        row = layout.row(align=True)
-        can_dup, msg_d = validate_scene.can_duplicate_shot(ctx)
-        row.enabled = can_dup
-        row.operator("lime.duplicate_shot_and_sync", text="Duplicate Shot", icon='DUPLICATE')
-        if not can_dup and msg_d:
-            hint = layout.row(align=True)
-            hint.label(text=msg_d, icon='INFO')
-
-        row = layout.row(align=True)
-        row.enabled = validate_scene.active_shot_context(ctx) is not None
-        row.operator("lime.add_missing_collections", text="Add Missing Collections", icon='FILE_REFRESH')
 
 
 class LimeShotItem(PropertyGroup):
@@ -251,23 +208,6 @@ class LIME_OT_duplicate_shot_and_sync(Operator):
         return {'FINISHED'}
 
 
-class LIME_OT_shot_instance_and_sync(Operator):
-    bl_idname = "lime.shot_instance_and_sync"
-    bl_label = "Shot Instance and Refresh"
-    bl_description = "Create an instance of the active SHOT and refresh the list"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        try:
-            bpy.ops.lime.shot_instance()
-        except Exception:
-            self.report({'ERROR'}, 'Failed to instance SHOT')
-            return {'CANCELLED'}
-        try:
-            bpy.ops.lime.sync_shot_list()
-        except Exception:
-            pass
-        return {'FINISHED'}
 
 
 def register_shot_list_props():
@@ -277,7 +217,6 @@ def register_shot_list_props():
     bpy.utils.register_class(LIME_OT_new_shot_and_sync)
     bpy.utils.register_class(LIME_OT_delete_shot_and_sync)
     bpy.utils.register_class(LIME_OT_duplicate_shot_and_sync)
-    bpy.utils.register_class(LIME_OT_shot_instance_and_sync)
 
     bpy.types.Scene.lime_shots = CollectionProperty(type=LimeShotItem)
 
@@ -422,7 +361,6 @@ def unregister_shot_list_props():
             pass
         _SHOTS_HANDLER = None
     for cls in (
-        LIME_OT_shot_instance_and_sync,
         LIME_OT_duplicate_shot_and_sync,
         LIME_OT_delete_shot_and_sync,
         LIME_OT_new_shot_and_sync,

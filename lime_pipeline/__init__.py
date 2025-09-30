@@ -15,7 +15,7 @@ from bpy.app.handlers import persistent
 from .prefs import LimePipelinePrefs
 from .props import register as register_props, unregister as unregister_props
 from .ui import LIME_PT_project_org
-from .ui import LIME_PT_shots, LIME_PT_shots_list, LIME_PT_shots_tools
+from .ui import LIME_PT_shots
 from .ui import LIME_PT_render_configs, LIME_PT_render_preset_actions, LIME_PT_render_settings, LIME_PT_render_cameras, LIME_PT_render_camera_list, LIME_PT_render_outputs
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
@@ -82,7 +82,6 @@ from .ops.ops_alpha_manager import (
 
 from .ops.ops_shots import (
     LIME_OT_new_shot,
-    LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
     LIME_OT_activate_shot,
     LIME_OT_delete_shot,
@@ -160,7 +159,6 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_noise_group_copy,
     LIME_TB_OT_noise_group_paste,
     LIME_OT_new_shot,
-    LIME_OT_shot_instance,
     LIME_OT_duplicate_shot,
     LIME_OT_activate_shot,
     LIME_OT_delete_shot,
@@ -188,8 +186,6 @@ PIPELINE_PANEL_CLASSES = (
     LIME_PT_render_settings,
     LIME_PT_render_outputs,
     LIME_PT_shots,
-    LIME_PT_shots_list,
-    LIME_PT_shots_tools,
     LIME_PT_stage_setup,
     LIME_PT_render_cameras,
     LIME_PT_render_camera_list,
