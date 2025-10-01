@@ -159,9 +159,14 @@ def register_camera_list_props():
             items.clear()
             cams = _cams_in_scene(scene, prefer_active_shot=True)
             cams.sort(key=lambda o: o.name)
+            seen_names = set()
             for cam in cams:
+                name = getattr(cam, 'name', '') or ''
+                if not name or name in seen_names:
+                    continue
+                seen_names.add(name)
                 it = items.add()
-                it.name = cam.name
+                it.name = name
             try:
                 active_name = getattr(scene.camera, 'name', '') if getattr(scene, 'camera', None) else ''
                 if active_name:

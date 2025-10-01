@@ -43,8 +43,26 @@ def list_shot_roots(scene: bpy.types.Scene) -> List[tuple[bpy.types.Collection, 
 
 
 def next_shot_index(scene: bpy.types.Scene) -> int:
-    roots = list_shot_roots(scene)
-    return (roots[-1][1] + 1) if roots else 1
+    max_idx = 0
+    try:
+        all_scenes = list(bpy.data.scenes)
+    except Exception:
+        all_scenes = [scene]
+    for sc in all_scenes:
+        try:
+            for _shot, idx in list_shot_roots(sc):
+                if idx is not None:
+                    max_idx = max(max_idx, idx)
+        except Exception:
+            pass
+    try:
+        for coll in bpy.data.collections:
+            idx = parse_shot_index(getattr(coll, 'name', '') or '')
+            if idx is not None:
+                max_idx = max(max_idx, idx)
+    except Exception:
+        pass
+    return (max_idx + 1) if max_idx else 1
 
 
 def find_shot_root_for_collection(coll: bpy.types.Collection, scene: Optional[bpy.types.Scene] = None) -> Optional[bpy.types.Collection]:
