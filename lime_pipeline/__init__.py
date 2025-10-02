@@ -50,6 +50,7 @@ from .ui import (
     LIME_TB_UL_alpha_events,
 )
 from .ui import register_camera_list_props, unregister_camera_list_props
+from .ui import register_render_shortcut_props, unregister_render_shortcut_props
 from .ui import register_shot_list_props, unregister_shot_list_props
 from .ops.ops_select_root import LIME_OT_pick_root
 from .ops.ops_folders import LIME_OT_ensure_folders, LIME_OT_open_folder
@@ -64,6 +65,7 @@ from .ops.ops_render_presets import (
     LIME_OT_render_preset_reset_all,
     LIME_OT_render_preset_restore_defaults,
     LIME_OT_render_preset_update_defaults,
+    LIME_OT_render_apply_resolution_shortcut,
     ensure_preset_slots,
 )
 from .ops.animation_params import LIME_TB_OT_apply_keyframe_style
@@ -142,6 +144,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_render_preset_reset_all,
     LIME_OT_render_preset_restore_defaults,
     LIME_OT_render_preset_update_defaults,
+    LIME_OT_render_apply_resolution_shortcut,
     LIME_OT_clean_step,
     LIME_OT_dimension_envelope,
     LIME_OT_add_camera_rig,
@@ -250,6 +253,7 @@ def register():
     register_alpha_props()
     register_camera_list_props()
     register_shot_list_props()
+    register_render_shortcut_props()
 
     try:
         st = getattr(bpy.context.window_manager, "lime_pipeline", None)
@@ -314,6 +318,14 @@ def register():
 
     try:
         ensure_preset_slots(bpy.context, ensure_scene=True)
+        # Initialize UHD shortcut base resolution values
+        try:
+            wm_state = getattr(bpy.context.window_manager, 'lime_pipeline', None)
+            if wm_state and not hasattr(wm_state, 'lime_shortcut_base_x'):
+                wm_state.lime_shortcut_base_x = 1920
+                wm_state.lime_shortcut_base_y = 1080
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -332,6 +344,7 @@ def unregister():
     unregister_alpha_props()
     unregister_camera_list_props()
     unregister_shot_list_props()
+    unregister_render_shortcut_props()
     try:
         from .ops.ops_model_organizer import disable_auto_select_hierarchy
         disable_auto_select_hierarchy()
@@ -360,8 +373,22 @@ def _on_load_post(dummy):
         pass
     try:
         ensure_preset_slots(bpy.context, ensure_scene=True)
+        # Initialize UHD shortcut base resolution values on file load
+        try:
+            wm_state = getattr(bpy.context.window_manager, 'lime_pipeline', None)
+            if wm_state and not hasattr(wm_state, 'lime_shortcut_base_x'):
+                wm_state.lime_shortcut_base_x = 1920
+                wm_state.lime_shortcut_base_y = 1080
+        except Exception:
+            pass
     except Exception:
         pass
+
+
+
+
+
+
 
 
 

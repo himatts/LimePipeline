@@ -169,6 +169,22 @@ class LimePipelineState(PropertyGroup):
         options={'HIDDEN'},
     )
 
+    # Resolution shortcut properties for UHD toggle auto-update
+    lime_shortcut_base_x: IntProperty(
+        name="Base Resolution X",
+        description="Base X resolution value for UHD toggle calculations",
+        default=1920,
+        min=1,
+        options={'HIDDEN'},
+    )
+    lime_shortcut_base_y: IntProperty(
+        name="Base Resolution Y",
+        description="Base Y resolution value for UHD toggle calculations",
+        default=1080,
+        min=1,
+        options={'HIDDEN'},
+    )
+
 def register():
     bpy.utils.register_class(LimeRenderPresetSlot)
     bpy.utils.register_class(LimePipelineState)

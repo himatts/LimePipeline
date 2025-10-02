@@ -6,6 +6,8 @@ from .ui_render_configs import (
     LIME_PT_render_preset_actions,
     LIME_PT_render_settings,
     LIME_PT_render_outputs,
+    register_render_shortcut_props,
+    unregister_render_shortcut_props,
 )
 from .ui_cameras_manager import (
     LIME_PT_render_cameras,
@@ -45,6 +47,8 @@ __all__ = [
     "LIME_PT_render_settings",
     "LIME_PT_render_cameras",
     "LIME_PT_render_outputs",
+    "register_render_shortcut_props",
+    "unregister_render_shortcut_props",
     "register_camera_list_props",
     "unregister_camera_list_props",
     "LIME_PT_stage_setup",
@@ -59,6 +63,8 @@ __all__ = [
     "LIME_TB_PT_alpha_manager",
     "LIME_TB_UL_alpha_events",
 ]
+
+
 
 
 

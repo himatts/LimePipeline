@@ -1,5 +1,6 @@
 import bpy
 from bpy.types import Panel
+from bpy.props import BoolProperty
 from pathlib import Path
 
 from ..core.paths import paths_for_type
@@ -9,6 +10,14 @@ from ..core.naming import hydrate_state_from_filepath
 CAT = "Lime Pipeline"
 ADDON_ID = __package__.split('.')[0]
 from ..ops.ops_render_presets import PRESET_SLOT_COUNT
+
+RESOLUTION_SHORTCUTS = (
+    ("16:9", 1920, 1080),
+    ("9:16", 1080, 1920),
+    ("3:4", 1080, 1440),
+    ("4:3", 1440, 1080),
+    ("1:1", 1920, 1920),
+)
 
 
 class LIME_PT_render_configs(Panel):
@@ -27,6 +36,9 @@ class LIME_PT_render_configs(Panel):
             prefs = ctx.preferences.addons[ADDON_ID].preferences
         except Exception:
             prefs = None
+
+        scene = ctx.scene
+        render = scene.render
 
         global_col = layout.column(align=True)
         global_col.label(text="Global Presets")
@@ -55,6 +67,22 @@ class LIME_PT_render_configs(Panel):
             delete_col.enabled = has_data
             delete_btn = delete_col.operator("lime.render_preset_clear", text="", icon='TRASH')
             delete_btn.slot_index = idx
+
+        global_col.separator()
+
+        shortcuts_row = global_col.row(align=True)
+        shortcuts_row.use_property_decorate = False
+        for label, base_x, base_y in RESOLUTION_SHORTCUTS:
+            op = shortcuts_row.operator("lime.render_apply_resolution_shortcut", text=label)
+            op.base_x = base_x
+            op.base_y = base_y
+            op.label = label
+
+        uhd_toggle = shortcuts_row.row(align=True)
+        uhd_toggle.prop(scene, "lime_render_shortcut_use_uhd", text="UHD", toggle=True)
+
+        filepath_row = global_col.row(align=True)
+        filepath_row.prop(render, "filepath", text="")
 
         global_col.separator()
 
@@ -251,9 +279,82 @@ class LIME_PT_render_outputs(Panel):
         row.operator("lime.open_output_folder", text="Animation", icon='FILE_FOLDER')
 
 
+def _update_uhd_resolution(self, context):
+    """Update resolution when UHD toggle changes"""
+    try:
+        if context is None:
+            return
+
+        scene = context.scene
+        render = scene.render
+
+        # Get stored base resolution values
+        wm_state = getattr(context.window_manager, 'lime_pipeline', None)
+        if wm_state is None:
+            return
+
+        # Get base resolution values, defaulting to 1920x1080 if not set
+        base_x = getattr(wm_state, 'lime_shortcut_base_x', 1920)
+        base_y = getattr(wm_state, 'lime_shortcut_base_y', 1080)
+
+        # Ensure base values are reasonable (at least 1px)
+        if base_x < 1:
+            base_x = 1920
+            wm_state.lime_shortcut_base_x = base_x
+        if base_y < 1:
+            base_y = 1080
+            wm_state.lime_shortcut_base_y = base_y
+
+        # Apply UHD scaling - only update if values are different to avoid loops
+        current_uhd = getattr(scene, 'lime_render_shortcut_use_uhd', False)
+
+        if current_uhd:
+            target_x = base_x * 2
+            target_y = base_y * 2
+        else:
+            target_x = base_x
+            target_y = base_y
+
+        # Only update if values are actually different
+        if render.resolution_x != target_x or render.resolution_y != target_y:
+            render.resolution_x = target_x
+            render.resolution_y = target_y
+
+    except Exception:
+        # Silently handle any errors during update
+        pass
+
+
+def register_render_shortcut_props():
+    bpy.types.Scene.lime_render_shortcut_use_uhd = BoolProperty(
+        name="UHD",
+        description="Apply 2x resolution scaling when using shortcut buttons.",
+        default=False,
+        options={"HIDDEN"},
+        update=_update_uhd_resolution,
+    )
+
+
+def unregister_render_shortcut_props():
+    if hasattr(bpy.types.Scene, "lime_render_shortcut_use_uhd"):
+        del bpy.types.Scene.lime_render_shortcut_use_uhd
+
+
 __all__ = [
     "LIME_PT_render_configs",
     "LIME_PT_render_settings",
     "LIME_PT_render_outputs",
     "LIME_PT_render_preset_actions",
+    "register_render_shortcut_props",
+    "unregister_render_shortcut_props",
 ]
+
+
+
+
+
+
+
+
+
+

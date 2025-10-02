@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 import bpy
 from bpy.types import Operator
-from bpy.props import IntProperty
+from bpy.props import IntProperty, StringProperty
 
 from ..props import LimeRenderPresetSlot
 
@@ -11,10 +11,44 @@ ADDON_ID = __package__.split('.')[0]
 DATA_VERSION = 1
 PRESET_SLOT_COUNT = 4
 
+
+def _default_slot_name(index: int) -> str:
+    index = max(0, int(index))
+    return f"Preset {index + 1}"
+
+
+def _normalize_slot_name(name: str, index: int) -> str:
+    return (name or '').strip() or _default_slot_name(index)
+
+
+def _slot_has_payload(slot: Optional['LimeRenderPresetSlot']) -> bool:
+    if slot is None or getattr(slot, 'is_empty', True):
+        return False
+    raw = getattr(slot, 'data_json', '')
+    return bool(raw and raw.strip())
+
+
+def _slot_display_name(slot: Optional['LimeRenderPresetSlot'], index: int) -> str:
+    if slot is not None:
+        raw = getattr(slot, 'name', '')
+        if raw:
+            cleaned = raw.strip()
+            if cleaned:
+                return cleaned
+    return _default_slot_name(index)
+
+
+def _reset_slot(slot: Optional['LimeRenderPresetSlot'], index: int):
+    if slot is None:
+        return
+    slot.data_json = ''
+    slot.is_empty = True
+    slot.data_version = DATA_VERSION
+    slot.name = _default_slot_name(index)
+
+
 RENDER_PROPS = (
     'engine',
-    'resolution_x',
-    'resolution_y',
     'resolution_percentage',
     'film_transparent',
     'threads_mode',
@@ -97,20 +131,18 @@ def _ensure_collection_size(collection, count: int):
     count = max(0, int(count))
     while len(collection) < count:
         slot = collection.add()
-        slot_index = len(collection)
-        if not slot.name:
-            slot.name = f"Preset {slot_index}"
+        slot_index = len(collection) - 1
+        slot.name = _default_slot_name(slot_index)
         slot.is_empty = True
         slot.data_version = DATA_VERSION
-        slot.data_json = ""
+        slot.data_json = ''
     while len(collection) > count:
         try:
             collection.remove(len(collection) - 1)
         except Exception:
             break
-    for idx, slot in enumerate(collection[:count], 1):
-        if not slot.name:
-            slot.name = f"Preset {idx}"
+    for idx, slot in enumerate(collection[:count]):
+        slot.name = _normalize_slot_name(getattr(slot, 'name', ''), idx)
 
 
 def ensure_preset_slots(context=None, ensure_scene=False) -> int:
@@ -285,18 +317,33 @@ class LIME_OT_render_preset_save(Operator):
     bl_description = 'Save the current render configuration into the selected preset slot'
 
     slot_index: IntProperty(name='Slot', default=0, min=0, max=PRESET_SLOT_COUNT - 1)
+    preset_name: StringProperty(name='Preset Name', default='')
 
     @classmethod
-    def description(cls, _context, props):
+    def description(cls, context, props):
         try:
             idx = max(0, int(getattr(props, 'slot_index', 0)))
         except Exception:
             idx = 0
-        return f'LMB: Save current render settings into Global preset {idx + 1}.'
+        slot = _get_global_slot(context, idx)
+        name = _slot_display_name(slot, idx)
+        return f'LMB: Save current render settings into "{name}".'
+
+    def invoke(self, context, event):
+        if _get_addon_prefs(context) is None:
+            self.report({'ERROR'}, 'Addon preferences not available.')
+            return {'CANCELLED'}
+        ensure_preset_slots(context)
+        slot = _get_global_slot(context, self.slot_index)
+        self.preset_name = _slot_display_name(slot, self.slot_index)
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, _context):
+        layout = self.layout
+        layout.prop(self, 'preset_name', text='Preset Name')
 
     def execute(self, context):
-        prefs = _get_addon_prefs(context)
-        if prefs is None:
+        if _get_addon_prefs(context) is None:
             self.report({'ERROR'}, 'Addon preferences not available.')
             return {'CANCELLED'}
         ensure_preset_slots(context)
@@ -305,9 +352,10 @@ class LIME_OT_render_preset_save(Operator):
         if slot is None:
             self.report({'ERROR'}, 'Unable to resolve preset slot.')
             return {'CANCELLED'}
+        slot.name = _normalize_slot_name(self.preset_name, self.slot_index)
         _store_slot_payload(slot, payload)
-        display_idx = self.slot_index + 1
-        self.report({'INFO'}, f"Saved preset {display_idx}.")
+        name = _slot_display_name(slot, self.slot_index)
+        self.report({'INFO'}, f'Saved preset "{name}".')
         return {'FINISHED'}
 
 
@@ -319,22 +367,24 @@ class LIME_OT_render_preset_apply(Operator):
     slot_index: IntProperty(name='Slot', default=0, min=0, max=PRESET_SLOT_COUNT - 1)
 
     @classmethod
-    def description(cls, _context, props):
+    def description(cls, context, props):
         try:
             idx = max(0, int(getattr(props, 'slot_index', 0)))
         except Exception:
             idx = 0
-        return f'LMB: Apply Global preset {idx + 1} to the current scene.'
+        slot = _get_global_slot(context, idx)
+        return _slot_display_name(slot, idx)
 
     def execute(self, context):
         ensure_preset_slots(context)
         slot = _get_global_slot(context, self.slot_index)
         payload = _load_slot_payload(slot) if slot else None
         if payload and apply_render_config(context, payload):
-            display_idx = self.slot_index + 1
-            self.report({'INFO'}, f"Applied preset {display_idx}.")
+            name = _slot_display_name(slot, self.slot_index)
+            self.report({'INFO'}, f'Applied preset "{name}".')
             return {'FINISHED'}
-        self.report({'WARNING'}, 'No preset data to apply.')
+        name = _default_slot_name(self.slot_index)
+        self.report({'WARNING'}, f'No preset data stored for "{name}".')
         return {'CANCELLED'}
 
 
@@ -346,12 +396,14 @@ class LIME_OT_render_preset_clear(Operator):
     slot_index: IntProperty(name='Slot', default=0, min=0, max=PRESET_SLOT_COUNT - 1)
 
     @classmethod
-    def description(cls, _context, props):
+    def description(cls, context, props):
         try:
             idx = max(0, int(getattr(props, 'slot_index', 0)))
         except Exception:
             idx = 0
-        return f'LMB: Clear Global preset {idx + 1}. A confirmation prompt protects against mistakes.'
+        slot = _get_global_slot(context, idx)
+        name = _slot_display_name(slot, idx)
+        return f'LMB: Clear preset "{name}". A confirmation prompt protects against mistakes.'
 
     def invoke(self, context, event):
         return context.window_manager.invoke_confirm(self, event)
@@ -362,11 +414,9 @@ class LIME_OT_render_preset_clear(Operator):
         if slot is None:
             self.report({'ERROR'}, 'Unable to resolve preset slot.')
             return {'CANCELLED'}
-        slot.data_json = ''
-        slot.is_empty = True
-        slot.data_version = DATA_VERSION
-        display_idx = self.slot_index + 1
-        self.report({'INFO'}, f"Cleared preset {display_idx}.")
+        name = _slot_display_name(slot, self.slot_index)
+        _reset_slot(slot, self.slot_index)
+        self.report({'INFO'}, f'Cleared preset "{name}".')
         return {'FINISHED'}
 
 
@@ -384,9 +434,7 @@ class LIME_OT_render_preset_reset_all(Operator):
             slot = _get_global_slot(context, idx)
             if slot is None:
                 continue
-            slot.data_json = ''
-            slot.is_empty = True
-            slot.data_version = DATA_VERSION
+            _reset_slot(slot, idx)
         self.report({'INFO'}, 'Reset presets.')
         return {'FINISHED'}
 
@@ -410,15 +458,13 @@ class LIME_OT_render_preset_restore_defaults(Operator):
             dst = _get_global_slot(context, idx)
             if dst is None:
                 continue
-            if src is None or src.is_empty or not src.data_json:
-                dst.data_json = ''
-                dst.is_empty = True
-                dst.data_version = DATA_VERSION
-            else:
-                dst.name = src.name or dst.name
-                dst.data_version = src.data_version
-                dst.data_json = src.data_json
-                dst.is_empty = src.is_empty
+            if not _slot_has_payload(src):
+                _reset_slot(dst, idx)
+                continue
+            dst.name = _normalize_slot_name(getattr(src, 'name', ''), idx)
+            dst.data_version = src.data_version
+            dst.data_json = src.data_json
+            dst.is_empty = src.is_empty
         self.report({'INFO'}, 'Restored defaults.')
         return {'FINISHED'}
 
@@ -442,20 +488,51 @@ class LIME_OT_render_preset_update_defaults(Operator):
             dst = _get_defaults_slot(context, idx)
             if dst is None:
                 continue
-            if src is None or src.is_empty or not src.data_json:
-                dst.data_json = ''
-                dst.is_empty = True
-                dst.data_version = DATA_VERSION
-                if not dst.name:
-                    dst.name = f'Preset {idx + 1}'
-            else:
-                dst.name = src.name or dst.name or f'Preset {idx + 1}'
-                dst.data_version = src.data_version
-                dst.data_json = src.data_json
-                dst.is_empty = src.is_empty
+            if not _slot_has_payload(src):
+                _reset_slot(dst, idx)
+                continue
+            dst.name = _normalize_slot_name(getattr(src, 'name', ''), idx)
+            dst.data_version = src.data_version
+            dst.data_json = src.data_json
+            dst.is_empty = src.is_empty
         self.report({'INFO'}, 'Updated defaults.')
         return {'FINISHED'}
 
+
+class LIME_OT_render_apply_resolution_shortcut(Operator):
+    bl_idname = 'lime.render_apply_resolution_shortcut'
+    bl_label = 'Apply Resolution Shortcut'
+    bl_description = 'Apply a preset resolution pair to the active scene render settings'
+
+    base_x: IntProperty(name='Width', default=1920, min=1)
+    base_y: IntProperty(name='Height', default=1080, min=1)
+    label: StringProperty(name='Label', default='', options={'HIDDEN'})
+
+    @classmethod
+    def description(cls, context, props):
+        label = getattr(props, 'label', '') or 'Resolution'
+        scene = getattr(context, 'scene', None)
+        use_uhd = bool(getattr(scene, 'lime_render_shortcut_use_uhd', False)) if scene else False
+        suffix = ' (UHD)' if use_uhd else ' (HD)'
+        return f'Apply {label}{suffix} resolution shortcut.'
+
+    def execute(self, context):
+        scene = context.scene
+        render = scene.render
+        use_uhd = bool(getattr(scene, 'lime_render_shortcut_use_uhd', False))
+        scale = 2 if use_uhd else 1
+
+        # Apply resolution immediately
+        render.resolution_x = int(self.base_x * scale)
+        render.resolution_y = int(self.base_y * scale)
+
+        # Store base resolution values for UHD toggle auto-update
+        wm_state = getattr(context.window_manager, 'lime_pipeline', None)
+        if wm_state:
+            wm_state.lime_shortcut_base_x = self.base_x
+            wm_state.lime_shortcut_base_y = self.base_y
+
+        return {'FINISHED'}
 
 __all__ = [
     'PRESET_SLOT_COUNT',
@@ -468,5 +545,8 @@ __all__ = [
     'LIME_OT_render_preset_reset_all',
     'LIME_OT_render_preset_restore_defaults',
     'LIME_OT_render_preset_update_defaults',
+    'LIME_OT_render_apply_resolution_shortcut',
 ]
+
+
 

@@ -21,9 +21,3 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-
-# OpenSpec project files
-openspec/
-
-# Cursor commands
-.cursor/commands/
