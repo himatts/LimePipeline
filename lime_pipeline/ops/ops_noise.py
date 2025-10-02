@@ -169,10 +169,16 @@ class LIME_TB_OT_noise_add_profile(Operator):
             idx += 1
         item = col.add()
         item.name = name
-        # Defaults: enable Location XYZ
+        # Defaults: enable Location XYZ with refined default values
         item.loc_x_enabled = True
         item.loc_y_enabled = True
         item.loc_z_enabled = True
+        # Set refined default values for better noise control
+        for axis in ['x', 'y', 'z']:
+            for group in ['loc', 'rot', 'scl']:
+                setattr(item, f"{group}_{axis}_strength", 0.05)  # Refined default strength
+                setattr(item, f"{group}_{axis}_scale", 50.0)     # Refined default scale
+                setattr(item, f"{group}_{axis}_phase", 0.0)      # Keep phase at 0
         scene.lime_tb_noise_active = len(col) - 1
         self.report({'INFO'}, f"Added noise profile: {name}")
         return {'FINISHED'}
@@ -408,13 +414,13 @@ class LIME_TB_OT_noise_group_randomize(Operator):
 
     group: bpy.props.EnumProperty(items=[('loc', 'Location', ''), ('rot', 'Rotation', ''), ('scl', 'Scale', '')])
 
-    # Simple ranges; adjust in last operator panel if invoked
-    strength_min: bpy.props.FloatProperty(name="Strength Min", default=-1.0)
-    strength_max: bpy.props.FloatProperty(name="Strength Max", default=1.0)
-    scale_min: bpy.props.FloatProperty(name="Scale Min", default=0.25, min=0.0)
-    scale_max: bpy.props.FloatProperty(name="Scale Max", default=2.0, min=0.0)
-    phase_min: bpy.props.FloatProperty(name="Phase Min", default=-3.1416)
-    phase_max: bpy.props.FloatProperty(name="Phase Max", default=3.1416)
+    # Refined ranges for better noise control
+    strength_min: bpy.props.FloatProperty(name="Strength Min", default=0.01)
+    strength_max: bpy.props.FloatProperty(name="Strength Max", default=0.1)
+    scale_min: bpy.props.FloatProperty(name="Scale Min", default=30.0, min=0.0)
+    scale_max: bpy.props.FloatProperty(name="Scale Max", default=60.0, min=0.0)
+    phase_min: bpy.props.FloatProperty(name="Phase Min", default=-100.0)
+    phase_max: bpy.props.FloatProperty(name="Phase Max", default=100.0)
 
     def execute(self, context):
         scene = context.scene

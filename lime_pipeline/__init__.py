@@ -43,8 +43,8 @@ from .ui import (
     LIME_TB_PT_root,
     LIME_TB_OT_placeholder,
     LIME_TB_PT_animation_params,
-    LIME_TB_PT_noisy_movement,
 )
+from .ui import LIME_TB_PT_noisy_movement
 from .ui import (
     LIME_TB_PT_alpha_manager,
     LIME_TB_UL_alpha_events,

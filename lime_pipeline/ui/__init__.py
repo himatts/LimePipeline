@@ -26,9 +26,11 @@ from .ui_dimension_utilities import (
 from .ui_toolbox import LIME_TB_PT_root, LIME_TB_OT_placeholder
 from .ui_toolbox_animation import (
     LIME_TB_PT_animation_params,
-    LIME_TB_PT_noisy_movement,
     register_anim_params_props,
     unregister_anim_params_props,
+)
+from .ui_noise_movement import (
+    LIME_TB_PT_noisy_movement,
     register_noise_props,
     unregister_noise_props,
 )
