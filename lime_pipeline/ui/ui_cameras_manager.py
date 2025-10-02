@@ -189,24 +189,38 @@ def register_camera_list_props():
             if cur != prev:
                 _fill_cam_items(scene)
                 scene.lime_render_cameras_token = cur
-                try:
-                    def _recheck():
-                        try:
-                            sc = bpy.context.scene
-                            if sc is None:
-                                return None
-                            now = _compute_cam_token(sc)
-                            prev2 = getattr(sc, 'lime_render_cameras_token', '') or ''
-                            if now != prev2:
-                                _fill_cam_items(sc)
-                                sc.lime_render_cameras_token = now
-                        except Exception:
-                            pass
-                        return None
-                    import bpy as _bpy2
-                    _bpy2.app.timers.register(_recheck, first_interval=0.1)
-                except Exception:
-                    pass
+                # Always do recheck to ensure consistency, but with improved logic
+                def _recheck():
+                    try:
+                        sc = bpy.context.scene
+                        if sc is None:
+                            return None
+                        now = _compute_cam_token(sc)
+                        prev2 = getattr(sc, 'lime_render_cameras_token', '') or ''
+                        if now != prev2:
+                            _fill_cam_items(sc)
+                            sc.lime_render_cameras_token = now
+                        # Also check again after a short delay to catch any remaining changes
+                        def _delayed_recheck():
+                            try:
+                                s = bpy.context.scene
+                                if s is None:
+                                    return None
+                                current = _compute_cam_token(s)
+                                prev3 = getattr(s, 'lime_render_cameras_token', '') or ''
+                                if current != prev3:
+                                    _fill_cam_items(s)
+                                    s.lime_render_cameras_token = current
+                            except Exception:
+                                pass
+                            return None
+                        import bpy as _bpy3
+                        _bpy3.app.timers.register(_delayed_recheck, first_interval=0.2)
+                    except Exception:
+                        pass
+                    return None
+                import bpy as _bpy2
+                _bpy2.app.timers.register(_recheck, first_interval=0.1)
         except Exception:
             pass
 

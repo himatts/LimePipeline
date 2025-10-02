@@ -14,6 +14,156 @@ import re
 _CAM_NAME_RE = re.compile(r"^SHOT_(\d{2,3})_CAMERA_(\d+)")
 
 
+def _apply_initial_rig_scale(rig_objects):
+    """Apply initial scale of 0.1 to rig objects after creation."""
+    try:
+        # Find the root rig object (typically an Armature)
+        rig_root = None
+        for obj in rig_objects:
+            if getattr(obj, 'type', None) == 'ARMATURE':
+                # Check if this armature is the root (no armature parent)
+                if not any(getattr(parent, 'type', None) == 'ARMATURE' for parent in [getattr(obj, 'parent', None)]):
+                    rig_root = obj
+                    break
+
+        if rig_root is not None:
+            rig_root.scale = (0.1, 0.1, 0.1)
+            print(f"[LimePV] Applied initial scale 0.1 to rig: {rig_root.name}")
+        else:
+            print("[LimePV] No suitable rig root found for scale application")
+    except Exception as e:
+        print(f"[LimePV] Could not apply initial rig scale: {e}")
+
+
+def _make_camera_data_independent(original_to_copy: dict):
+    """
+    Asegura que las cámaras duplicadas usen un Camera Data independiente
+    conservando drivers, y retargetea todas sus variables al rig copiado.
+    `original_to_copy` debe mapear objetos originales -> copias (Armatures y Cameras).
+    """
+    try:
+        # Mapa de armatures originales -> armatures copiados
+        arm_map = {
+            orig: new for orig, new in original_to_copy.items()
+            if getattr(orig, 'type', None) == 'ARMATURE'
+        }
+
+        for orig_obj, new_obj in original_to_copy.items():
+            if getattr(orig_obj, 'type', None) != 'CAMERA':
+                continue
+
+            # 1) Copiar Camera Data para preservar drivers/animation_data
+            old_data = new_obj.data
+            if old_data is None:
+                # No debería ocurrir en un flujo normal; evitamos crash silencioso.
+                print(f"[LimePV] {new_obj.name} no tiene Camera Data; se omite.")
+                continue
+
+            new_data = old_data.copy()              # <-- CLAVE: preservar drivers
+            new_data.name = old_data.name + "_copy" # opcional
+            new_obj.data = new_data
+
+            # 2) Retarget de drivers al rig copiado
+            ad = new_data.animation_data
+            if ad and ad.drivers:
+                for fcu in ad.drivers:
+                    drv = fcu.driver
+                    for var in drv.variables:
+                        for t in var.targets:
+                            # Si la variable apuntaba a un Armature original, cámbiala por su copia
+                            if getattr(t, "id", None) in arm_map:
+                                t.id = arm_map[t.id]
+                            # Fallback: si apunta a *algún* armature, usa el padre del new_obj si es armature
+                            elif getattr(t, "id", None) and getattr(t.id, "type", "") == 'ARMATURE':
+                                if new_obj.parent and new_obj.parent.type == 'ARMATURE':
+                                    t.id = new_obj.parent
+
+            # 3) DOF: que apunte a su propio rig cuando aplique
+            if hasattr(new_data, "dof"):
+                rig = new_obj.parent if (new_obj.parent and new_obj.parent.type == 'ARMATURE') else None
+                if rig:
+                    rig_id = (rig.get("rig_id", "") or "").lower()
+                    # En rigs de este add-on, DOF suele ser el propio rig (2D sí lo usa explícitamente)
+                    if rig_id in {"2d_rig", "dolly_rig", "crane_rig"}:
+                        new_data.dof.focus_object = rig
+                        if rig_id == "2d_rig":
+                            new_data.dof.focus_subtarget = "DOF"
+                        else:
+                            # En los rigs 3D, cuando el DOF se usa, suele ser el MCH del Aim.
+                            new_data.dof.focus_subtarget = "MCH-Aim_shape_rotation"
+
+            # 4) Blindaje extra: asegurar que existe al menos un driver básico
+            if not (new_data.animation_data and new_data.animation_data.drivers):
+                # Crear un driver "lens" neutro, para que ui_panels.py no muera
+                try:
+                    fcu = new_data.driver_add("lens")
+                    fcu.driver.type = 'SCRIPTED'
+                    fcu.driver.expression = "lens"
+                    print(f"[LimePV] Creado driver básico para: {new_obj.name}")
+                except Exception as e:
+                    print(f"[LimePV] No se pudo crear driver básico para {new_obj.name}: {e}")
+
+            print(f"[LimePV] Camera Data independiente y drivers retargeteados para: {new_obj.name}")
+
+    except Exception as e:
+        print(f"[LimePV] Error in camera data independence: {e}")
+
+
+def _ensure_rig_functionality(original_to_copy):
+    """Ensure duplicated rig maintains its control functionality and proper naming."""
+    try:
+        # Find the camera in the duplicated rig
+        camera_obj = None
+        for original_obj, new_obj in original_to_copy.items():
+            if getattr(original_obj, 'type', None) == 'CAMERA':
+                camera_obj = new_obj
+                break
+
+        if camera_obj is None:
+            return
+
+        # Ensure camera data has proper naming
+        if hasattr(camera_obj, 'data') and camera_obj.data:
+            camera_obj.data.name = camera_obj.name + ".Data"
+
+        print(f"[LimePV] Rig functionality preserved for: {camera_obj.name}")
+
+    except Exception as e:
+        print(f"[LimePV] Error ensuring rig functionality: {e}")
+
+
+def _set_root_bone_theme03(rig_objects):
+    """Set Root bone color to Theme 03 for newly created rigs."""
+    try:
+        # Find armature objects
+        armatures = [obj for obj in rig_objects if getattr(obj, 'type', None) == 'ARMATURE']
+
+        for armature in armatures:
+            # Try to set color in Pose mode bones
+            try:
+                if hasattr(armature, 'pose') and armature.pose:
+                    root_bone = armature.pose.bones.get('Root')
+                    if root_bone and hasattr(root_bone, 'color'):
+                        root_bone.color.palette = 'THEME03'
+                        print(f"[LimePV] Applied Theme 03 color to Root bone in Pose mode: {armature.name}")
+            except Exception:
+                pass
+
+            # Also try Edit mode bones if available
+            try:
+                if (hasattr(armature, 'data') and armature.data and
+                    hasattr(armature.data, 'edit_bones') and armature.data.edit_bones):
+                    root_bone = armature.data.edit_bones.get('Root')
+                    if root_bone and hasattr(root_bone, 'color'):
+                        root_bone.color.palette = 'THEME03'
+                        print(f"[LimePV] Applied Theme 03 color to Root bone in Edit mode: {armature.name}")
+            except Exception:
+                pass
+
+    except Exception as e:
+        print(f"[LimePV] Could not apply Root bone color: {e}")
+
+
 def _rename_parent_armature_for_camera(cam_obj, shot_idx_hint: int | None = None, cam_idx_hint: int | None = None) -> None:
     try:
         import bpy as _bpy  # local import for safety
@@ -193,6 +343,46 @@ class LIME_OT_duplicate_active_camera(Operator):
                     except Exception:
                         pass
 
+            # Temporarily disable camera list auto-update during duplication
+            # to prevent visual glitches with intermediate states
+            from ..ui.ui_cameras_manager import _CAM_LIST_HANDLER
+            handler_was_active = False
+            if _CAM_LIST_HANDLER is not None:
+                try:
+                    if _CAM_LIST_HANDLER in bpy.app.handlers.depsgraph_update_post:
+                        bpy.app.handlers.depsgraph_update_post.remove(_CAM_LIST_HANDLER)
+                        handler_was_active = True
+                        print("[LimePV] Temporarily disabled camera list auto-update during duplication")
+                except Exception:
+                    pass
+
+            try:
+                # Make camera data independent from original rig
+                _make_camera_data_independent(original_to_copy)
+
+                # Ensure rig functionality is preserved for duplicated cameras
+                _ensure_rig_functionality(original_to_copy)
+            finally:
+                # Re-enable camera list auto-update after duplication
+                if handler_was_active and _CAM_LIST_HANDLER is not None:
+                    try:
+                        if _CAM_LIST_HANDLER not in bpy.app.handlers.depsgraph_update_post:
+                            bpy.app.handlers.depsgraph_update_post.append(_CAM_LIST_HANDLER)
+                            print("[LimePV] Re-enabled camera list auto-update after duplication")
+                            # Force an update after re-enabling to catch any missed changes
+                            try:
+                                scene = bpy.context.scene
+                                if scene is not None:
+                                    from ..ui.ui_cameras_manager import _fill_cam_items, _compute_cam_token
+                                    current_token = _compute_cam_token(scene)
+                                    _fill_cam_items(scene)
+                                    scene.lime_render_cameras_token = current_token
+                                    print("[LimePV] Forced camera list update after re-enabling handler")
+                            except Exception as e:
+                                print(f"[LimePV] Could not force update after re-enabling handler: {e}")
+                    except Exception:
+                        pass
+
             # Retarget constraints inside the duplicated rig to use duplicates
             for ob, new_ob in list(original_to_copy.items()):
                 try:
@@ -210,29 +400,87 @@ class LIME_OT_duplicate_active_camera(Operator):
                 except Exception:
                     pass
 
-            # Clear animation on duplicates (object and data)
-            for new_ob in list(original_to_copy.values()):
-                try:
-                    if getattr(new_ob, 'animation_data', None):
-                        new_ob.animation_data_clear()
-                except Exception:
-                    pass
-                try:
-                    data = getattr(new_ob, 'data', None)
-                    if data is not None and getattr(data, 'animation_data', None):
-                        data.animation_data_clear()
-                except Exception:
-                    pass
+            # Clear animation only for objects that don't need to preserve rig functionality
+            # (Camera rig objects need their internal drivers preserved)
+            for original_ob, new_ob in list(original_to_copy.items()):
+                # For camera objects, only clear object-level animation, preserve data animation
+                if getattr(original_ob, 'type', None) == 'CAMERA':
+                    try:
+                        if getattr(new_ob, 'animation_data', None):
+                            new_ob.animation_data_clear()
+                    except Exception:
+                        pass
+                    # Don't clear camera data animation - it contains the rig drivers
+                else:
+                    # For non-camera objects in the rig, clear all animation
+                    try:
+                        if getattr(new_ob, 'animation_data', None):
+                            new_ob.animation_data_clear()
+                    except Exception:
+                        pass
+                    try:
+                        data = getattr(new_ob, 'data', None)
+                        if data is not None and getattr(data, 'animation_data', None):
+                            data.animation_data_clear()
+                    except Exception:
+                        pass
 
             # Report
             if root is cam and len(original_to_copy) == 1:
                 self.report({'INFO'}, f"Duplicated camera: {original_to_copy[cam].name}")
             else:
                 self.report({'INFO'}, f"Duplicated camera rig with {len(original_to_copy)} objects")
+
+            # Ensure proper naming after duplication
             try:
-                bpy.ops.lime.sync_camera_list()
-            except Exception:
-                pass
+                # Find the duplicated camera
+                duplicated_cam = None
+                for original_obj, new_obj in original_to_copy.items():
+                    if getattr(original_obj, 'type', None) == 'CAMERA':
+                        duplicated_cam = new_obj
+                        break
+
+                if duplicated_cam is not None:
+                    # Check if renaming is needed - improved logic to detect numeric suffixes
+                    shot = validate_scene.active_shot_context(context)
+                    if shot is not None:
+                        try:
+                            shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+                            current_name = getattr(duplicated_cam, 'name', '')
+
+                            # Check if name follows pattern but has numeric suffix (indicating duplication)
+                            import re
+                            pattern = f"SHOT_{shot_idx:02d}_CAMERA_"
+                            if current_name.startswith(pattern):
+                                # Extract the number part after "CAMERA_"
+                                after_pattern = current_name[len(pattern):]
+                                if after_pattern and (after_pattern != "1" or ".001" in current_name):
+                                    print(f"[LimePV] Camera {current_name} needs renaming (has numeric suffix or wrong number)")
+                                    needs_rename = True
+                                else:
+                                    print(f"[LimePV] Camera {current_name} follows correct pattern without suffix")
+                                    needs_rename = False
+                            else:
+                                print(f"[LimePV] Camera {current_name} needs renaming (doesn't follow pattern)")
+                                needs_rename = True
+
+                            if needs_rename:
+                                # Execute rename operation specifically
+                                try:
+                                    result = bpy.ops.lime.rename_shot_cameras('EXEC_DEFAULT')
+                                    if result == {'FINISHED'}:
+                                        print("[LimePV] Camera renaming completed successfully")
+                                    else:
+                                        print(f"[LimePV] Camera renaming failed or was cancelled: {result}")
+                                except Exception as e:
+                                    print(f"[LimePV] Error during camera renaming: {e}")
+                        except Exception as e:
+                            print(f"[LimePV] Error checking camera naming: {e}")
+            except Exception as e:
+                print(f"[LimePV] Error in post-duplication naming check: {e}")
+
+            # Note: Camera list will be updated automatically by the handler
+            # No need to call sync_camera_list() manually to avoid conflicts
             return {'FINISHED'}
         except Exception as ex:
             self.report({'ERROR'}, str(ex))
@@ -579,26 +827,39 @@ class LIME_OT_sync_camera_list(Operator):
                     cam_coll = None
 
             cams_in_shot = []
+            shot_idx = 0
             if cam_coll is not None:
                 try:
                     cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
                 except Exception:
                     cams_in_shot = []
+                try:
+                    shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+                except Exception:
+                    shot_idx = 0
 
             if cams_in_shot:
-                try:
-                    result = bpy.ops.lime.rename_shot_cameras('EXEC_DEFAULT')
-                except Exception:
-                    rename_message = 'refresh (rename failed)'
-                else:
-                    if result == {'FINISHED'}:
-                        rename_message = 'combined rename+refresh'
-                        try:
-                            cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
-                        except Exception:
-                            cams_in_shot = []
+                # Only rename if we actually need to (avoid unnecessary renaming)
+                cam_names = [cam.name for cam in cams_in_shot]
+                expected_pattern = f"SHOT_{shot_idx:02d}_CAMERA_"
+                needs_rename = any(not name.startswith(expected_pattern) for name in cam_names)
+
+                if needs_rename:
+                    try:
+                        result = bpy.ops.lime.rename_shot_cameras('EXEC_DEFAULT')
+                    except Exception:
+                        rename_message = 'refresh (rename failed)'
                     else:
-                        rename_message = 'refresh (rename cancelled)'
+                        if result == {'FINISHED'}:
+                            rename_message = 'combined rename+refresh'
+                            try:
+                                cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
+                            except Exception:
+                                cams_in_shot = []
+                        else:
+                            rename_message = 'refresh (rename cancelled)'
+                else:
+                    rename_message = 'refresh (no rename needed)'
 
             if cam_coll is not None:
                 cams = cams_in_shot
@@ -805,12 +1066,17 @@ class LIME_OT_add_camera_rig(Operator):
             print(f"[LimePV] Creation failed: {msg}")
             return {'CANCELLED'}
 
-        # Rename only the new camera(s) directly (no relink or rig changes)
+        # Apply enhancements to newly created rig
         try:
             after_names = {obj.name for obj in bpy.data.objects}
             new_obj_names = [name for name in after_names if name not in before_objs]
             new_objs = [bpy.data.objects[name] for name in new_obj_names]
             print(f"[LimePV] New objects: {[ (o.name, getattr(o,'type',None)) for o in new_objs ]}")
+
+            # Apply initial scale and Root bone color enhancements
+            _apply_initial_rig_scale(new_objs)
+            _set_root_bone_theme03(new_objs)
+
             new_cams = [o for o in new_objs if getattr(o, "type", None) == 'CAMERA']
             if not new_cams:
                 print("[LimePV] No new camera objects detected; aborting rename")
