@@ -23,8 +23,7 @@ from .ui_dimension_utilities import (
     LIME_PT_dimension_utilities,
     LIME_OT_set_unit_preset,
 )
-from .ui_toolbox import LIME_TB_PT_root, LIME_TB_OT_placeholder
-from .ui_toolbox_animation import (
+from .ui_animation_parameters import (
     LIME_TB_PT_animation_params,
     register_anim_params_props,
     unregister_anim_params_props,
@@ -58,8 +57,6 @@ __all__ = [
     "LIME_PT_model_organizer",
     "LIME_PT_dimension_utilities",
     "LIME_OT_set_unit_preset",
-    "LIME_TB_PT_root",
-    "LIME_TB_OT_placeholder",
     "LIME_TB_PT_animation_params",
     "LIME_TB_PT_noisy_movement",
     "LIME_TB_PT_alpha_manager",

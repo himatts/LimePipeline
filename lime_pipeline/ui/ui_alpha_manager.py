@@ -41,6 +41,7 @@ class LIME_TB_PT_alpha_manager(Panel):
     bl_category = CAT
     bl_label = 'Alpha Manager'
     bl_idname = 'LIME_TB_PT_alpha_manager'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, ctx):
         layout = self.layout

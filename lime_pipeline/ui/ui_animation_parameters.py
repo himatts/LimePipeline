@@ -235,6 +235,7 @@ class LIME_TB_PT_animation_params(Panel):
     bl_category = CAT
     bl_label = 'Animation Parameters'
     bl_idname = 'LIME_TB_PT_animation_params'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, ctx):
         layout = self.layout

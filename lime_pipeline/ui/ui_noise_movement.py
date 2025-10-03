@@ -220,6 +220,7 @@ class LIME_TB_PT_noisy_movement(Panel):
     bl_category = CAT
     bl_label = 'Noisy Movement'
     bl_idname = 'LIME_TB_PT_noisy_movement'
+    bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, ctx):
         layout = self.layout

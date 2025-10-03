@@ -40,8 +40,6 @@ from .ops.ops_material_alpha_mix import (
     LIME_OT_apply_object_alpha_mix,
 )
 from .ui import (
-    LIME_TB_PT_root,
-    LIME_TB_OT_placeholder,
     LIME_TB_PT_animation_params,
 )
 from .ui import LIME_TB_PT_noisy_movement
@@ -136,7 +134,6 @@ from .ops.ops_auto_camera_bg import (
 
 NON_PANEL_CLASSES = (
     LimePipelinePrefs,
-    LIME_TB_OT_placeholder,
     LIME_TB_UL_alpha_events,
     LIME_OT_pick_root,
     LIME_OT_ensure_folders,
@@ -216,14 +213,12 @@ OTHER_PANEL_CLASSES = (
 )
 
 TOOLBOX_CATEGORY_PANELS = (
-    LIME_TB_PT_root,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
 )
 
 TOOLBOX_PANEL_CLASSES = (
-    LIME_TB_PT_root,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
