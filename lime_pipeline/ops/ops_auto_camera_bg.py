@@ -97,7 +97,7 @@ def _ensure_plane_properties(plane: bpy.types.Object) -> None:
         min=0.01,
         max=1000.0,
         soft_min=0.1,
-        soft_max=50.0,
+        soft_max=500.0,
         description="Distance from the active camera along its local -Z axis (meters).",
     )
 
@@ -107,9 +107,9 @@ def _ensure_plane_properties(plane: bpy.types.Object) -> None:
     ui_pad.update(
         default=float(DEFAULT_PAD),
         min=1.0,
-        max=2.0,
+        max=10.0,
         soft_min=1.0,
-        soft_max=2.0,
+        soft_max=10.0,
         description="Multiplier that enlarges the plane slightly so it overfills the frame.",
     )
 
