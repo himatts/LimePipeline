@@ -27,12 +27,41 @@ FRAME_TOLERANCE = 1e-4
 # Debug toggle (set to True to get verbose prints)
 _ALPHA_DEBUG = False
 
+# Nota: Mensajes "Skipping light visibility update during playback" pueden aparecer
+# durante reproducción de animaciones. Estos son normales y no indican problemas.
+# Son generados por Blender cuando optimiza el manejo de luces durante playback.
+
 def _alpha_log(msg: str) -> None:
     if _ALPHA_DEBUG:
         try:
             print(f"[LP][Alpha] {msg}")
         except Exception:
             pass
+
+def _diagnose_console_messages() -> str:
+    """Diagnóstico para identificar origen de mensajes en consola durante reproducción."""
+    info = []
+    info.append("=== DIAGNÓSTICO DE MENSAJES EN CONSOLA ===")
+    info.append("")
+    info.append("Mensajes comunes durante reproducción de animaciones:")
+    info.append("")
+    info.append("✓ 'Skipping light visibility update during playback'")
+    info.append("  - Origen: Blender nativo / Sistema de luces")
+    info.append("  - Normal durante reproducción de animaciones")
+    info.append("  - No indica problemas")
+    info.append("  - Se puede ignorar")
+    info.append("")
+    info.append("✓ 'Skipping view layer update during playback'")
+    info.append("  - Origen: Lime Pipeline (Alpha Manager)")
+    info.append("  - Optimización durante reproducción")
+    info.append("  - Se puede desactivar con _ALPHA_DEBUG = False")
+    info.append("")
+    info.append("Si ves otros mensajes sospechosos:")
+    info.append("- Busca en el código fuente del proyecto")
+    info.append("- Verifica otros addons instalados")
+    info.append("- Revisa logs de Blender")
+    info.append("")
+    return "\n".join(info)
 
 
 def _scene_from_context(context) -> bpy.types.Scene | None:

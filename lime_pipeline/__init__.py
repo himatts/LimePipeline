@@ -125,6 +125,13 @@ from .ops.ops_cameras import (
 from .ops.ops_library_override import (
     LIME_OT_make_library_override,
 )
+from .ops.ops_auto_camera_bg import (
+    LIME_OT_auto_camera_background,
+    LIME_OT_auto_camera_background_refresh,
+    LIME_OT_auto_camera_background_toggle_live,
+    LIME_OT_auto_camera_background_bake,
+    LIME_OT_auto_camera_background_cleanup,
+)
 
 
 NON_PANEL_CLASSES = (
@@ -184,6 +191,11 @@ NON_PANEL_CLASSES = (
     LIME_OT_render_invoke,
     LIME_OT_save_as_with_template,
     LIME_OT_make_library_override,
+    LIME_OT_auto_camera_background,
+    LIME_OT_auto_camera_background_refresh,
+    LIME_OT_auto_camera_background_toggle_live,
+    LIME_OT_auto_camera_background_bake,
+    LIME_OT_auto_camera_background_cleanup,
 )
 
 PIPELINE_PANEL_CLASSES = (
