@@ -27,16 +27,53 @@ FRAME_TOLERANCE = 1e-4
 # Debug toggle (set to True to get verbose prints)
 _ALPHA_DEBUG = False
 
+# Control de mensajes durante playback - True = mensajes ocultos (recomendado)
+_HIDE_PLAYBACK_MESSAGES = True
+
 # Nota: Mensajes "Skipping light visibility update during playback" pueden aparecer
 # durante reproducción de animaciones. Estos son normales y no indican problemas.
 # Son generados por Blender cuando optimiza el manejo de luces durante playback.
+# Se pueden ocultar configurando _HIDE_PLAYBACK_MESSAGES = True
 
 def _alpha_log(msg: str) -> None:
-    if _ALPHA_DEBUG:
-        try:
-            print(f"[LP][Alpha] {msg}")
-        except Exception:
-            pass
+    """Log messages with playback filtering."""
+    if not _ALPHA_DEBUG:
+        return
+
+    # Filter out playback-related messages if configured
+    if _HIDE_PLAYBACK_MESSAGES and "playback" in msg.lower():
+        return
+
+    try:
+        print(f"[LP][Alpha] {msg}")
+    except Exception:
+        pass
+
+def toggle_playback_messages(hide: bool = None) -> bool:
+    """Control playback message visibility.
+
+    Args:
+        hide: If True, hide playback messages. If None, toggle current state.
+
+    Returns:
+        New state of message hiding.
+    """
+    global _HIDE_PLAYBACK_MESSAGES
+    if hide is None:
+        _HIDE_PLAYBACK_MESSAGES = not _HIDE_PLAYBACK_MESSAGES
+    else:
+        _HIDE_PLAYBACK_MESSAGES = hide
+
+    print(f"🎭 Lime Pipeline: Mensajes de playback {'ocultos' if _HIDE_PLAYBACK_MESSAGES else 'mostrados'}")
+    return _HIDE_PLAYBACK_MESSAGES
+
+def hide_playback_messages():
+    """Convenience function to hide playback messages immediately."""
+    return toggle_playback_messages(True)
+
+def show_playback_messages():
+    """Convenience function to show playback messages immediately."""
+    return toggle_playback_messages(False)
 
 def _diagnose_console_messages() -> str:
     """Diagnóstico para identificar origen de mensajes en consola durante reproducción."""
@@ -49,12 +86,27 @@ def _diagnose_console_messages() -> str:
     info.append("  - Origen: Blender nativo / Sistema de luces")
     info.append("  - Normal durante reproducción de animaciones")
     info.append("  - No indica problemas")
-    info.append("  - Se puede ignorar")
+    info.append("  - Se puede ocultar con toggle_playback_messages(True)")
     info.append("")
     info.append("✓ 'Skipping view layer update during playback'")
     info.append("  - Origen: Lime Pipeline (Alpha Manager)")
     info.append("  - Optimización durante reproducción")
     info.append("  - Se puede desactivar con _ALPHA_DEBUG = False")
+    info.append("")
+    info.append("Para ocultar TODOS los mensajes durante playback:")
+    info.append("from lime_pipeline.ops.ops_alpha_manager import toggle_playback_messages")
+    info.append("toggle_playback_messages(True)  # Ocultar mensajes")
+    info.append("toggle_playback_messages(False) # Mostrar mensajes")
+    info.append("")
+    info.append("SCRIPT RÁPIDO PARA OCULTAR MENSAJES:")
+    info.append("# Copia y pega esta línea en la consola de Blender:")
+    info.append("from lime_pipeline.ops.ops_alpha_manager import hide_playback_messages; hide_playback_messages()")
+    info.append("")
+    info.append("Opciones avanzadas:")
+    info.append("from lime_pipeline.ops.ops_alpha_manager import toggle_playback_messages, show_playback_messages")
+    info.append("toggle_playback_messages(True)   # Ocultar mensajes")
+    info.append("toggle_playback_messages(False)  # Mostrar mensajes")
+    info.append("show_playback_messages()         # Mostrar mensajes (alternativa)")
     info.append("")
     info.append("Si ves otros mensajes sospechosos:")
     info.append("- Busca en el código fuente del proyecto")
