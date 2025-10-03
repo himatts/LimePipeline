@@ -395,6 +395,12 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
                                 cam.data.name = final + ".Data"
                             except Exception:
                                 pass
+                        # Rename parent armature rig to match new shot and camera indices
+                        try:
+                            from ..ops.ops_cameras import _rename_parent_armature_for_camera
+                            _rename_parent_armature_for_camera(cam, shot_idx_hint=dst_index, cam_idx_hint=i)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
     except Exception:
