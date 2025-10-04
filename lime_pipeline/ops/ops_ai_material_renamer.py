@@ -24,6 +24,7 @@ from ..core.material_naming import (
     parse_name,
     strip_numeric_suffix,
 )
+from ..core.material_taxonomy import get_taxonomy_context
 
 
 def _get_active_scene(context) -> Scene:
@@ -145,7 +146,9 @@ def _write_rows(scene: Scene, items: List[Dict[str, object]], incorrect_count: i
         row.similar_group_id = str(item.get("similar_group_id") or "")
         row.status = str(item.get("notes") or "")
         row.read_only = bool(item.get("read_only") or False)
-        row.needs_rename = bool(item.get("needs_rename", True))  # Default to True if not specified
+        # If not explicitly provided, infer from current material name validity
+        _needs = item.get("needs_rename")
+        row.needs_rename = bool(_needs) if _needs is not None else bool(detect_issues(row.material_name))
 
         if i < 3:  # Debug first 3 items
             print(f"[AI Write Rows] Added item {i}: {row.material_name} -> {row.proposed_name} (needs_rename: {row.needs_rename})")
@@ -227,6 +230,10 @@ def _postprocess_statuses(scene: Scene) -> None:
             if pn in universe and pn != r.material_name:
                 r.status = "NAME_COLLISION"
 
+        # Ensure valid items do not carry proposals
+        if status == "VALID":
+            r.proposed_name = ""
+
         # Do not keep proposals for non-actionable states (VALID/SEQUENCE_GAP only)
         if r.status in ("VALID", "SEQUENCE_GAP"):
             r.proposed_name = ""
@@ -307,26 +314,20 @@ def _system_prompt() -> str:
     return (
         "You are a Blender materials librarian assisting an addon via OpenRouter.\n"
         "TARGET MODEL: google/gemini-2.5-flash-lite-preview-09-2025.\n\n"
-        "Your task is to propose **full, final** material names using the schema:\n"
+        "Your ONLY job: output a final material name using the schema:\n"
         "MAT_{Family}_{Finish}_{V##}\n\n"
-        "Hard Rules:\n"
-        "- `Family` ∈ [Plastic, Metal, Glass, Rubber, Paint, Wood, Fabric, Ceramic, Emissive].\n"
-        "- `Finish`: CamelCase alphanumeric; default to `Generic` if uncertain.\n"
-        "- `Version`: V## (V01..V99). Ensure uniqueness within `(SceneTag, Family, Finish)` by bumping V## only (no _1 or .001 suffixes).\n"
-        "- Respect `read_only`: if linked/overridden, return `read_only=true` and **no** proposal.\n"
-        "- Output MUST follow the provided JSON Schema strictly; no extra fields.\n\n"
-        "Heuristics (when uncertain):\n"
-        "- If `principled.metallic >= 0.5` → `Family=Metal`.\n"
-        "- If `principled.transmission >= 0.3` or glass-like tokens in `texture_basenames` → `Family=Glass`.\n"
-        "- If strong emission (`principled.emission_strength > 0` or emissive tokens) → `Family=Emissive`.\n"
-        "- If `principled.roughness >= 0.6` and not metallic → `Family=Rubber` else default to `Plastic`.\n"
-        "- Infer `Finish` from tokens in `material_name` and `texture_basenames` (e.g., \"Gloss\", \"Matte\", \"Brushed\", \"Rough\", \"Painted\"). Fallback `Generic`.\n"
-        "- Group coherence (bulk): for items with the same `similar_group_id`, prefer consistent `Family/Finish` unless strong conflicting cues.\n"
-        "- If uncertain, prefer conservative defaults (Family/Finish as above) and let V## carry uniqueness.\n\n"
-        "Examples:\n"
-        "- Material.003 with metallic=0.8 → Metal, finish from tokens or Generic, V01.\n"
-        "- Wood-like textures → Wood, finish from tokens, V01.\n"
-        "Keep notes short (e.g., \"Normalized\", \"Numeric suffix removed\", \"Heuristic: Metal\", \"Conflict -> bumped V03\").)"
+        "Rules (HARD):\n"
+        "- Family ∈ [Plastic, Metal, Glass, Rubber, Paint, Wood, Fabric, Ceramic, Emissive, Stone, Concrete, Paper, Leather, Liquid].\n"
+        "- Finish: CamelCase alphanumeric from the provided taxonomy; if none fits, use Generic.\n"
+        "- Version: V01..V99. Ensure uniqueness by bumping V## only (no \"_1\", no \".001\").\n"
+        "- If read_only=true → DO NOT propose a rename (proposed_name empty).\n\n"
+        "Signals:\n"
+        "- Use provided \"family_hint\" and \"finish_candidates\" first.\n"
+        "- Principled heuristics (secondary): metallic≥0.5→Metal; transmission≥0.3 or glass tokens→Glass; emission_strength>0→Emissive; roughness≥0.6 and not metallic→Rubber; else Plastic.\n"
+        "- Texture basenames and object/collection hints can refine finish (e.g., Herringbone, Hex, Brushed, Anodized, Rusty, Marble, Concrete, Velvet, Jean, Leather, PaperOld, Water).\n"
+        "- Prefer specific tokens (Marble, Herringbone, Anodized) over generic ones (Tiles, Fabric).\n\n"
+        "Output format: STRICT JSON schema you will receive (no extra fields).\n"
+        "Short \"notes\" only (e.g., \"Heuristic: Metal\", \"From tokens: Marble\", \"Bumped V03\")."
     )
 
 
@@ -513,27 +514,45 @@ class LIME_TB_OT_ai_rename_single(Operator):
 
         # Try OpenRouter first
         prefs: LimePipelinePrefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences  # type: ignore
+        summary = _summarize_nodes(mat)
+
+        # Determine versioning policy based on material name validity
+        base_name = strip_numeric_suffix(mat.name)
+        parsed = parse_name(base_name)
+        is_currently_valid = parsed is not None
+        versioning_only = is_currently_valid  # If already valid, only bump version; if invalid, allow full reclasification
+
+        # Get taxonomy context
+        taxonomy_context = get_taxonomy_context(
+            mat.name,
+            summary.get("texture_basenames", []),
+            summary.get("object_hints", []),
+            summary.get("collection_hints", []),
+            summary.get("principled", {})
+        )
+
         payload = {
             "model": prefs.openrouter_model or "google/gemini-2.5-flash-lite-preview-09-2025",
             "messages": [
                 {"role": "system", "content": _system_prompt()},
                 {"role": "user", "content": json.dumps({
                     "active_scene": scene.name,
-                    "policy": {"versioning_only": True},
+                    "policy": {"versioning_only": versioning_only},
                     "existing_names": _collect_existing_names(),
+                    "taxonomy_context": taxonomy_context,
                     "material": {
                         "material_name": mat.name,
-                        "linked": False,
-                        "overridden": False,
+                        "linked": bool(mat.library),
+                        "overridden": bool(mat.override_library),
                         "used_in_scenes": [scene.name],
                         "current_tag_guess": None,
                         "has_numeric_suffix": bool(strip_numeric_suffix(mat.name) != mat.name),
-                        "nodes_summary": {k: v for k, v in _summarize_nodes(mat).items() if k in ("ids", "counts")},
-                        "principled": _summarize_nodes(mat).get("principled"),
+                        "nodes_summary": {k: v for k, v in summary.items() if k in ("ids", "counts")},
+                        "principled": summary.get("principled"),
                         "pbr_detected": {},
-                        "texture_basenames": [],
-                        "object_hints": [],
-                        "collection_hints": [],
+                        "texture_basenames": summary.get("texture_basenames", []),
+                        "object_hints": summary.get("object_hints", []),
+                        "collection_hints": summary.get("collection_hints", []),
                         "similar_group_id": _fingerprint_material(mat),
                     },
                 })},
@@ -576,19 +595,34 @@ class LIME_TB_OT_ai_rename_single(Operator):
             parsed = parse_name(base_name)
             family = normalize_family(parsed["familia"] if parsed else "Plastic")
             finish = normalize_finish(parsed["acabado"] if parsed else "Generic")
-            universe = _collect_existing_names()
-            proposed = bump_version_until_unique(universe, "S1", family, finish, start_idx=1)
-            version_block = proposed.split("_")[-1]
-            item = {
-                "material_name": mat.name,
-                "proposed_name": proposed,
-                "family": family,
-                "finish": finish,
-                "version": version_block,
-                "read_only": False,
-                "notes": "Local baseline proposal",
-                "similar_group_id": _fingerprint_material(mat),
-            }
+            # If name is already valid, do not propose a rename
+            if parsed is not None:
+                item = {
+                    "material_name": mat.name,
+                    "proposed_name": "",
+                    "family": family,
+                    "finish": finish,
+                    "version": parsed.get("version") or "V01",
+                    "read_only": False,
+                    "notes": "Already compliant",
+                    "similar_group_id": _fingerprint_material(mat),
+                    "needs_rename": False,
+                }
+            else:
+                universe = _collect_existing_names()
+                proposed = bump_version_until_unique(universe, "S1", family, finish, start_idx=1)
+                version_block = proposed.split("_")[-1]
+                item = {
+                    "material_name": mat.name,
+                    "proposed_name": proposed,
+                    "family": family,
+                    "finish": finish,
+                    "version": version_block,
+                    "read_only": False,
+                    "notes": "Local baseline proposal",
+                    "similar_group_id": _fingerprint_material(mat),
+                    "needs_rename": True,
+                }
 
         _write_rows(scene, [item])
         note = item.get("notes") or ("AI" if used_ai else "Local")
@@ -737,9 +771,13 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                     if proposed not in universe:
                         universe.append(proposed)
                 else:
-                    # Correct item: do not propose rename
+                    # Correct item: do not propose rename and reflect parsed version
                     items.append({
                         "material_name": mat_name,
+                        "proposed_name": "",
+                        "family": normalize_family(parsed["familia"]) if parsed else "Plastic",
+                        "finish": normalize_finish(parsed["acabado"]) if parsed else "Generic",
+                        "version": parsed.get("version") if parsed else "V01",
                         "read_only": False,
                         "notes": "Already compliant",
                         "needs_rename": False,

@@ -25,6 +25,11 @@ ALLOWED_FAMILIES = [
     "Fabric",
     "Ceramic",
     "Emissive",
+    "Stone",
+    "Concrete",
+    "Paper",
+    "Leather",
+    "Liquid",
 ]
 SCENE_TAG_PATTERN = re.compile(r"^(S\d+|Demo|CU)$", re.IGNORECASE)
 LEGACY_NAME_PATTERN = re.compile(
