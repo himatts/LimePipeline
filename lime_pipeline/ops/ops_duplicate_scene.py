@@ -851,6 +851,7 @@ class LIME_OT_duplicate_scene_sequential(Operator):
             _cleanup_tags(source_scene, new_scene)
             return {'CANCELLED'}
 
+
         # Optional: ensure cameras/rigs follow conventions even after user edits
         try:
             for cam in [o for o in new_scene.objects if getattr(o, 'type', None) == 'CAMERA']:
@@ -893,5 +894,3 @@ class LIME_OT_duplicate_scene_sequential(Operator):
 __all__ = [
     "LIME_OT_duplicate_scene_sequential",
 ]
-
-

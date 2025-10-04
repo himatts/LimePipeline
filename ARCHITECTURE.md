@@ -1,21 +1,22 @@
-# Lime Pipeline – Architecture
+# Lime Pipeline - Architecture
 
 This document describes the high-level architecture, responsibilities per module, key flows, and invariants.
 
 ## Overview
-Lime Pipeline is a Blender add-on that standardizes project structure and naming: assists with first save/backup, SHOT collections, render/proposal view outputs, and folder navigation.
+Lime Pipeline is a Blender add-on that standardizes project structure and naming: assists with first save/backup, SHOT collections, render/proposal view outputs, folder navigation, and material normalization.
 
 ## Modules and boundaries
 
 ### core (pure-ish Python)
-- Files: `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py` (uses bpy), `core/__init__.py`
+- Files: `core/material_naming.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/__init__.py`
 - Responsibilities:
-  - Naming: normalize project names, build canonical filenames, detect/parse .blend names
+  - Material naming helpers: parse/build MAT_{TagEscena}_{Familia}_{Acabado}_{V##}, normalize components, enforce version blocks
+  - Project naming: normalize project names, build canonical filenames, detect/parse .blend names
   - Paths: map project type + rev + scene to folder targets
-  - Validate: sanity checks for save operations (errors/warnings, path length)
+  - Validation: sanity checks for save operations (errors/warnings, path length)
   - Scene validation helpers (selection/shot context); note: this file uses bpy
 - Rules:
-  - No `bpy` imports at module level except in `validate_scene.py` where it's inherently needed; prefer local imports
+  - Only `validate_scene.py` imports `bpy` at module import time; the rest keep it local when needed
   - Constants and regex live here (single source of truth)
 
 ### data
@@ -24,6 +25,12 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Declarative templates/constants (e.g., `SHOT_TREE`, collection names and colors)
 - Rules:
   - No imperative code; only data structures
+
+### props
+- Files: `props.py` (WindowManager state), `props_ai_materials.py` (Scene-scoped AI material proposals)
+- Responsibilities:
+  - Centralize PropertyGroup definitions for persistent add-on state
+  - Expose editable collections (`Scene.lime_ai_mat` for AI Material Renamer)
 
 ### scene
 - Files: `scene/scene_utils.py`
@@ -36,7 +43,9 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ### ops (operators)
 - Files: `ops/*`
 - Responsibilities:
-  - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights)
+  - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
+- Highlights:
+  - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
 - Rules:
   - UI feedback via `self.report`
   - Delegate naming/validation/paths to `core`; do not duplicate
@@ -44,8 +53,10 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ### ui (panels)
 - Files: `ui/*`
 - Responsibilities:
-- Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI and measurement unit presets (mm/cm/m/in/ft).
   - Layout and user interactions; no heavy IO
+- Highlights:
+  - `ui_ai_material_renamer.py`: Lime Toolbox / AI Material Renamer panel with simplified UI (2-column editable list, local detection, filtering/ordering)
+  - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI and measurement unit presets (mm/cm/m/in/ft)
 - Rules:
   - Prefer Blender native subpanels for sections (parent/child panels) instead of manual collapsible boxes
   - `draw()` must be fast (no disk scans/hydration); use handlers or cached state
@@ -56,6 +67,17 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - UI uses parent panels with subpanels (`bl_parent_id`) for Settings/Cameras/Outputs (Render) and List/Tools (Shots)
 
 ## Key flows
+
+
+### AI Material Renamer (AI-assisted)
+1. User clicks **Search Materials**. `ops_ai_material_renamer.ai_scan_materials` detects incorrect materials locally using `detect_issues`, marks `needs_rename`, and counts incorrectos/totales.
+2. **Selective AI query**: only materials with `needs_rename=True` are sent to OpenRouter with enriched metadata (`texture_basenames`, `object_hints`, `collection_hints`).
+3. Proposals are stored in `Scene.lime_ai_mat.rows` with `needs_rename`, family/finish/version, and similar_group_id.
+4. UI displays 2-column list: Actual | Propuesto (editable for incorrectos or if unlocked).
+5. User can edit `proposed_name` directly; **Apply Rename** parses/edits, normalizes, bumps V## deterministically, and renames in place.
+6. **Toggle Show/Hide Correct**: filters to show only incorrectos (default) or all.
+7. **Refresh Order**: reorders by `(SceneTag, Family, Finish, V##)` for consistency.
+8. **Clear** removes proposals without renaming.
 
 ### First save (Create .blend)
 1. User selects Project Root, Project Type, Rev letter, Scene (if required)
@@ -79,14 +101,16 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 4. Save image to `editables` folder for corresponding project type
 
 ## Invariants
+- Material names follow `MAT_{TagEscena}_{Familia}_{Acabado}_{V##}` (no `_1`/`.001` suffixes)
 - Project Root matches `RE_PROJECT_DIR = ^[A-Z]{2}-\d{5}\s+(.+)$`
-- Revision letter is a single A–Z
+- Revision letter is a single A-Z
 - Types requiring scene number: `PV, REND, SB, ANIM`
-- Scene number: 1–999; if `free_scene_numbering` is false, must be multiple of `prefs.scene_step`
+- Scene number: 1-999; if `free_scene_numbering` is false, must be multiple of `prefs.scene_step`
 - Paths and names built only through `core` helpers
 
 ## Constants and single sources of truth
 - RAMV base dir: build via `core.paths.paths_for_type` (do not duplicate literals)
+- Material families enum: `core.material_naming.ALLOWED_FAMILIES`
 - Tokens by project type: `core.naming.TOKENS_BY_PTYPE`
 - Filename scheme: `core.naming.make_filename`
 
@@ -108,5 +132,5 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Unit tests for `core` and optional smoke tests in CI
 
 ## Canonical rules and docs maintenance
-- Canonical rules file: `.cursor/rules/limepipelinerules.mdc` (source of truth for editing/architecture rules).
-- If user-visible behavior or architecture changes, also update: `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`.
+- Canonical rules file: `.cursor/rules/limepipelinerules.mdc` (source of truth for editing/architecture rules)
+- If user-visible behavior or architecture changes, also update: `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`

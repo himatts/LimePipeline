@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 2, 1),  # Duplicate scene isolation, camera list filter, modularization
+    "version": (0, 3, 0),  # Material Manager UX refresh
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -47,6 +47,16 @@ from .ui import (
     LIME_TB_PT_alpha_manager,
     LIME_TB_UL_alpha_events,
 )
+from .ui import LIME_TB_PT_ai_material_renamer, LIME_TB_UL_ai_mat_rows
+from .ops.ops_ai_material_renamer import (
+    LIME_TB_OT_ai_test_connection,
+    LIME_TB_OT_ai_rename_single,
+    LIME_TB_OT_ai_scan_materials,
+    LIME_TB_OT_ai_apply_materials,
+    LIME_TB_OT_ai_test_state,
+    LIME_TB_OT_ai_clear_materials,
+)
+from .props_ai_materials import register as register_ai_props, unregister as unregister_ai_props
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_render_shortcut_props, unregister_render_shortcut_props
 from .ui import register_shot_list_props, unregister_shot_list_props
@@ -193,6 +203,13 @@ NON_PANEL_CLASSES = (
     LIME_OT_auto_camera_background_toggle_live,
     LIME_OT_auto_camera_background_bake,
     LIME_OT_auto_camera_background_cleanup,
+    LIME_TB_OT_ai_test_connection,
+    LIME_TB_OT_ai_rename_single,
+    LIME_TB_OT_ai_scan_materials,
+    LIME_TB_OT_ai_apply_materials,
+    LIME_TB_OT_ai_test_state,
+    LIME_TB_OT_ai_clear_materials,
+    LIME_TB_UL_ai_mat_rows,
 )
 
 PIPELINE_PANEL_CLASSES = (
@@ -216,12 +233,14 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
+    LIME_TB_PT_ai_material_renamer,
 )
 
 TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
+    LIME_TB_PT_ai_material_renamer,
 )
 
 def _panel_is_child(cls) -> bool:
@@ -258,6 +277,7 @@ def register():
     register_anim_params_props()
     register_noise_props()
     register_alpha_props()
+    register_ai_props()
     register_camera_list_props()
     register_shot_list_props()
     register_render_shortcut_props()
@@ -349,6 +369,7 @@ def unregister():
     unregister_anim_params_props()
     unregister_noise_props()
     unregister_alpha_props()
+    unregister_ai_props()
     unregister_camera_list_props()
     unregister_shot_list_props()
     unregister_render_shortcut_props()
@@ -390,21 +411,4 @@ def _on_load_post(dummy):
             pass
     except Exception:
         pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

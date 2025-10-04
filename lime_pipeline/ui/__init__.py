@@ -37,6 +37,10 @@ from .ui_alpha_manager import (
     LIME_TB_PT_alpha_manager,
     LIME_TB_UL_alpha_events,
 )
+from .ui_ai_material_renamer import (
+    LIME_TB_PT_ai_material_renamer,
+    LIME_TB_UL_ai_mat_rows,
+)
 
 __all__ = [
     "LIME_PT_project_org",
@@ -60,11 +64,7 @@ __all__ = [
     "LIME_TB_PT_animation_params",
     "LIME_TB_PT_noisy_movement",
     "LIME_TB_PT_alpha_manager",
+    "LIME_TB_PT_ai_material_renamer",
     "LIME_TB_UL_alpha_events",
+    "LIME_TB_UL_ai_mat_rows",
 ]
-
-
-
-
-
-

@@ -47,6 +47,33 @@ class LimePipelinePrefs(AddonPreferences):
         description="Toggle the Dimension Utilities panel (Dimension Checker and measurement presets).",
         default=True,
     )
+    auto_normalize_materials_after_duplicate: BoolProperty(
+        name="Auto-Normalize Materials After Duplicate",
+        description="Automatically scan and rename materials after duplicating a scene.",
+        default=False,
+    )
+    # --- AI Material Renamer (OpenRouter) ---
+    openrouter_api_key: StringProperty(
+        name="OpenRouter API Key",
+        subtype='PASSWORD',
+        default="",
+        description="API key for OpenRouter (used by AI Material Renamer)",
+    )
+    openrouter_model: StringProperty(
+        name="OpenRouter Model",
+        default="google/gemini-2.5-flash-lite-preview-09-2025",
+        description="Default model slug for AI Material Renamer",
+    )
+    http_referer: StringProperty(
+        name="HTTP-Referer (optional)",
+        default="",
+        description="Optional HTTP-Referer header for OpenRouter attribution",
+    )
+    x_title: StringProperty(
+        name="X-Title (optional)",
+        default="",
+        description="Optional X-Title header for OpenRouter attribution",
+    )
     global_render_presets: CollectionProperty(type=LimeRenderPresetSlot, options={'HIDDEN'})
     defaults_render_presets: CollectionProperty(type=LimeRenderPresetSlot, options={'HIDDEN'})
 
@@ -62,7 +89,18 @@ class LimePipelinePrefs(AddonPreferences):
         col.prop(self, "path_block_len")
         col.prop(self, "remember_last_rev")
         col.prop(self, "enable_dimension_utilities")
+        col.prop(self, "auto_normalize_materials_after_duplicate")
         col.separator()
         col.prop(self, "libraries_override_dir")
+        col.separator()
+        box = col.box()
+        box.label(text="AI Material Renamer (OpenRouter)")
+        box.prop(self, "openrouter_api_key")
+        box.prop(self, "openrouter_model")
+        row = box.row()
+        row.prop(self, "http_referer")
+        row.prop(self, "x_title")
+        box.separator()
+        box.operator("lime_tb.ai_test_connection", text="Test Connection")
 
 
