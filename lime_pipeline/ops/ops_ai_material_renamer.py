@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 import urllib.request
@@ -12,16 +13,16 @@ from bpy.types import Material, Operator, Scene
 from ..prefs import LimePipelinePrefs
 from ..props_ai_materials import LimeAIMatRow
 from ..core.material_naming import (
-    ALLOWED_FAMILIES,
+    ALLOWED_MATERIAL_TYPES,
+    PREFIX,
     build_name,
     build_version,
     bump_version_until_unique,
     detect_issues,
-    next_version_index,
-    is_valid_name,
-    normalize_family,
+    normalize_material_type,
     normalize_finish,
     parse_name,
+    parse_version,
     strip_numeric_suffix,
 )
 from ..core.material_taxonomy import get_taxonomy_context
@@ -123,120 +124,349 @@ def _fingerprint_material(mat: Material) -> str:
     return key
 
 
+_SELECTION_REFRESH_GUARD = 0
+_SELECTION_REFRESH_SUSPENDED = False
+
+
+@contextmanager
+def _suspend_selection_refresh() -> Iterable[None]:
+    """Temporarily disable automatic preview recalculation while mutating rows."""
+    global _SELECTION_REFRESH_SUSPENDED
+    previous = _SELECTION_REFRESH_SUSPENDED
+    _SELECTION_REFRESH_SUSPENDED = True
+    try:
+        yield
+    finally:
+        _SELECTION_REFRESH_SUSPENDED = previous
+
+
+def refresh_selection_preview(scene: Optional[Scene] = None) -> None:
+    """Recalculate statuses and sequential previews when selection changes."""
+    global _SELECTION_REFRESH_GUARD
+
+    if _SELECTION_REFRESH_SUSPENDED:
+        return
+
+    if scene is None:
+        try:
+            scene = bpy.context.scene
+        except Exception:
+            scene = None
+    if scene is None:
+        return
+
+    if _SELECTION_REFRESH_GUARD > 0:
+        return
+
+    try:
+        _SELECTION_REFRESH_GUARD += 1
+        _postprocess_statuses(scene)
+    finally:
+        _SELECTION_REFRESH_GUARD -= 1
+
+
 def _write_rows(scene: Scene, items: List[Dict[str, object]], incorrect_count: int = 0, total_count: int = 0) -> None:
     print(f"[AI Write Rows] Starting with {len(items)} items")
     state = scene.lime_ai_mat
     print(f"[AI Write Rows] State before clear: {len(state.rows)} rows")
 
-    state.rows.clear()
-    # scene_tag_used no longer used
-    state.incorrect_count = incorrect_count
-    state.total_count = total_count
+    with _suspend_selection_refresh():
+        state.rows.clear()
+        # scene_tag_used no longer used
+        state.incorrect_count = incorrect_count
+        state.total_count = total_count
 
-    print(f"[AI Write Rows] After clear: {len(state.rows)} rows")
-    print(f"[AI Write Rows] incorrect_count: {incorrect_count}, total_count: {total_count}")
+        print(f"[AI Write Rows] After clear: {len(state.rows)} rows")
+        print(f"[AI Write Rows] incorrect_count: {incorrect_count}, total_count: {total_count}")
 
-    for i, item in enumerate(items):
-        row = state.rows.add()
-        row.material_name = str(item.get("material_name") or "")
-        row.proposed_name = str(item.get("proposed_name") or "")
-        row.family = str(item.get("family") or "Plastic")
-        row.finish = str(item.get("finish") or "Generic")
-        row.version = str(item.get("version") or "V01")
-        row.similar_group_id = str(item.get("similar_group_id") or "")
-        row.status = str(item.get("notes") or "")
-        row.read_only = bool(item.get("read_only") or False)
-        # If not explicitly provided, infer from current material name validity
-        _needs = item.get("needs_rename")
-        row.needs_rename = bool(_needs) if _needs is not None else bool(detect_issues(row.material_name))
+        for i, item in enumerate(items):
+            row = state.rows.add()
+            row.material_name = str(item.get("material_name") or "")
+            row.proposed_name = str(item.get("proposed_name") or "")
+            row.material_type = str(item.get("material_type") or "Plastic")
+            row.finish = str(item.get("finish") or "Generic")
+            row.version_token = str(item.get("version_token") or "V01")
+            row.similar_group_id = str(item.get("similar_group_id") or "")
+            row.status = str(item.get("notes") or "")
+            row.read_only = bool(item.get("read_only") or False)
+            # If not explicitly provided, infer from current material name validity
+            _needs = item.get("needs_rename")
+            row.needs_rename = bool(_needs) if _needs is not None else bool(detect_issues(row.material_name))
+            default_selected = item.get("selected_for_apply")
+            if default_selected is None:
+                default_selected = (not row.read_only) and row.needs_rename
+            row.selected_for_apply = bool(default_selected and not row.read_only)
 
-        if i < 3:  # Debug first 3 items
-            print(f"[AI Write Rows] Added item {i}: {row.material_name} -> {row.proposed_name} (needs_rename: {row.needs_rename})")
+            if i < 3:  # Debug first 3 items
+                print(f"[AI Write Rows] Added item {i}: {row.material_name} -> {row.proposed_name} (needs_rename: {row.needs_rename})")
 
     print(f"[AI Write Rows] Final state: {len(state.rows)} rows")
-    _postprocess_statuses(scene)
+    refresh_selection_preview(scene)
 
+
+@dataclass
+class _ResequenceCandidate:
+    row: LimeAIMatRow
+    material_type: str
+    finish: str
+    version_width: int
+    version_index_hint: int
+    order_key: Tuple[str, str, int, str, int]
+    source_token: str
+
+
+def _version_width(token: str) -> int:
+    if not token or not token.startswith("V"):
+        return 2
+    digits = token[1:]
+    return max(2, len(digits)) if digits.isdigit() else 2
+
+
+def _derive_row_target(row: LimeAIMatRow) -> Tuple[str, str, str, int]:
+    """Return normalized material type, finish, raw version token and index hint for a row."""
+    if row.proposed_name:
+        parsed = parse_name(row.proposed_name)
+        if parsed:
+            token = row.proposed_name.split("_")[-1]
+            if not (token.startswith("V") and token[1:].isdigit()):
+                token = parsed["version"]
+            version_idx = parsed.get("version_index") or parse_version(token) or 1
+            return (
+                normalize_material_type(parsed["material_type"]),
+                normalize_finish(parsed["finish"]),
+                token,
+                version_idx,
+            )
+
+    current_candidate = strip_numeric_suffix(row.material_name or "")
+    if current_candidate:
+        parsed = parse_name(current_candidate)
+        if parsed:
+            token = current_candidate.split("_")[-1]
+            if not (token.startswith("V") and token[1:].isdigit()):
+                token = parsed["version"]
+            version_idx = parsed.get("version_index") or parse_version(token) or 1
+            return (
+                normalize_material_type(parsed["material_type"]),
+                normalize_finish(parsed["finish"]),
+                token,
+                version_idx,
+            )
+
+    material_type = normalize_material_type(getattr(row, "material_type", "") or "Plastic")
+    finish = normalize_finish(getattr(row, "finish", "") or "Generic")
+    token = getattr(row, "version_token", "") or "V01"
+    version_idx = parse_version(token) or 1
+    if not (token.startswith("V") and token[1:].isdigit()):
+        token = f"V{version_idx:02d}"
+    return material_type, finish, token, version_idx
+
+
+def _resequence_selected_rows(rows: Iterable[LimeAIMatRow], existing_names: List[str]) -> None:
+    """Assign sequential version tokens to selected actionable rows without collisions."""
+    candidates: List[_ResequenceCandidate] = []
+    selected_current_names: set[str] = set()
+
+    for idx, row in enumerate(rows):
+        status = (row.status or "").upper()
+        if row.read_only or not row.selected_for_apply:
+            continue
+        if not (status.startswith("NEEDS_RENAME") or status.startswith("NAME_COLLISION")):
+            continue
+        material_type, finish, token, version_idx = _derive_row_target(row)
+        order_key = (
+            material_type,
+            finish,
+            int(version_idx or 0),
+            (row.material_name or "").lower(),
+            idx,
+        )
+        candidates.append(
+            _ResequenceCandidate(
+                row=row,
+                material_type=material_type,
+                finish=finish,
+                version_width=_version_width(token),
+                version_index_hint=int(version_idx or 0),
+                order_key=order_key,
+                source_token=token,
+            )
+        )
+        selected_current_names.add(row.material_name)
+
+    if not candidates:
+        return
+
+    existing_name_set = set(existing_names or [])
+    group_used_versions: Dict[Tuple[str, str], set[int]] = {}
+    group_width_map: Dict[Tuple[str, str], int] = {}
+
+    for name in existing_names or []:
+        if not name:
+            continue
+        base_name = strip_numeric_suffix(name)
+        parsed = parse_name(base_name)
+        if not parsed:
+            continue
+        key = (parsed["material_type"], parsed["finish"])
+        token_raw = base_name.split("_")[-1]
+        group_width_map[key] = max(group_width_map.get(key, 2), _version_width(token_raw))
+        if name in selected_current_names:
+            continue
+        version_idx = parsed.get("version_index")
+        if isinstance(version_idx, int):
+            group_used_versions.setdefault(key, set()).add(version_idx)
+
+    group_map: Dict[Tuple[str, str], List[_ResequenceCandidate]] = {}
+    for candidate in candidates:
+        key = (candidate.material_type, candidate.finish)
+        group_width_map[key] = max(group_width_map.get(key, 2), candidate.version_width)
+        group_map.setdefault(key, []).append(candidate)
+
+    assigned_names: set[str] = set()
+
+    for key, group_candidates in group_map.items():
+        group_candidates.sort(key=lambda c: c.order_key)
+        used_versions = set(group_used_versions.get(key, set()))
+        width = group_width_map.get(key, 2)
+        current_version = 1
+        while current_version in used_versions:
+            current_version += 1
+
+        for candidate in group_candidates:
+            while True:
+                if current_version in used_versions:
+                    current_version += 1
+                    continue
+                token = f"V{current_version:0{width}d}"
+                name = f"{PREFIX}_{candidate.material_type}_{candidate.finish}_{token}"
+                if name in assigned_names:
+                    current_version += 1
+                    continue
+                if name in existing_name_set and name not in selected_current_names:
+                    current_version += 1
+                    continue
+                break
+
+            candidate.row.proposed_name = name
+            candidate.row.material_type = candidate.material_type
+            candidate.row.finish = candidate.finish
+            candidate.row.version_token = token
+
+            assigned_names.add(name)
+            used_versions.add(current_version)
+            existing_name_set.add(name)
+            current_version += 1
 
 def _postprocess_statuses(scene: Scene) -> None:
-    """Compute status badges, sequence gaps, and actionable proposals.
-
-    Status values:
-    - VALID
-    - NEEDS_RENAME
-    - SEQUENCE_GAP
-    - NAME_COLLISION
-    - UNPARSEABLE
-
-    Proposed name must be present only for NEEDS_RENAME or NAME_COLLISION.
-    """
+    """Compute status badges, sequence gaps and resequenced proposals."""
     try:
         state = scene.lime_ai_mat
     except Exception:
         return
+
     rows = list(state.rows)
-    universe = set(_collect_existing_names())
+    if not rows:
+        return
 
-    # First pass: parse current names and build grouping key (base)
-    parsed_info = []
+    existing_names = list(_collect_existing_names())
+    existing_name_set = set(existing_names)
+
+    parsed_info: List[Tuple[LimeAIMatRow, Optional[Dict[str, object]], str]] = []
     group_to_versions: Dict[Tuple[str, str], List[int]] = {}
-    for r in rows:
-        parsed = parse_name(strip_numeric_suffix(r.material_name))
-        if parsed is None:
-            # Current name not parseable
-            status = "NEEDS_RENAME" if r.needs_rename or r.proposed_name else "UNPARSEABLE"
-        else:
-            # Current name parseable
-            status = "VALID" if not r.needs_rename else "NEEDS_RENAME"
-            key = (parsed["familia"], parsed["acabado"])
-            ver = int(parsed.get("version_index") or 0)
-            group_to_versions.setdefault(key, []).append(ver)
-        parsed_info.append((r, parsed, status))
 
-    # Detect sequence gaps per group
+    for row in rows:
+        current_name = strip_numeric_suffix(row.material_name or "")
+        parsed = parse_name(current_name)
+        if parsed is None:
+            status = "NEEDS_RENAME" if row.needs_rename or row.proposed_name else "UNPARSEABLE"
+        else:
+            status = "VALID" if not row.needs_rename else "NEEDS_RENAME"
+            key = (parsed["material_type"], parsed["finish"])
+            version_idx = parsed.get("version_index")
+            if isinstance(version_idx, int):
+                group_to_versions.setdefault(key, []).append(version_idx)
+            # Keep normalized metadata in sync with actual name
+            row.material_type = parsed["material_type"]
+            row.finish = parsed["finish"]
+            row.version_token = parsed["version"]
+
+        parsed_info.append((row, parsed, status))
+
     group_missing: Dict[Tuple[str, str], List[int]] = {}
     for key, versions in group_to_versions.items():
         if not versions:
             continue
-        lo, hi = min(versions), max(versions)
-        missing = [v for v in range(lo, hi + 1) if v not in versions]
+        normalized_versions = sorted(v for v in versions if isinstance(v, int))
+        if not normalized_versions:
+            continue
+        lo, hi = normalized_versions[0], normalized_versions[-1]
+        missing = [v for v in range(lo, hi + 1) if v not in normalized_versions]
         if missing:
             group_missing[key] = missing
 
-    # Second pass: finalize statuses and proposals
-    for r, parsed, baseline_status in parsed_info:
+    for row, parsed, baseline_status in parsed_info:
         status = baseline_status
-        # Mark sequence gaps for VALID rows in groups with missing versions (informational)
-        if parsed is not None:
-            key = (parsed["familia"], parsed["acabado"])
-            if status == "VALID" and key in group_missing:
-                status = "SEQUENCE_GAP"
+        if parsed is not None and status == "VALID":
+            key = (parsed["material_type"], parsed["finish"])
+            if key in group_missing:
                 missing_tokens = ", ".join(f"V{m:02d}" for m in group_missing[key][:6])
-                r.status = f"SEQUENCE_GAP: Missing {missing_tokens}"
+                row.status = f"SEQUENCE_GAP: Missing {missing_tokens}"
             else:
-                r.status = status
+                row.status = status
         else:
-            r.status = status
+            row.status = status
 
-        # If proposed equals current, it's effectively non-actionable
-        if r.proposed_name and r.proposed_name == r.material_name:
-            r.proposed_name = ""
-            if status == "NEEDS_RENAME":
-                r.status = "VALID"
+        if row.proposed_name and row.proposed_name == row.material_name:
+            row.proposed_name = ""
 
-        # Collision check for actionable items with proposed name
-        actionable = r.status in ("NEEDS_RENAME", "NAME_COLLISION") and not r.read_only and bool(r.proposed_name)
-        if actionable:
-            pn = r.proposed_name
-            if pn in universe and pn != r.material_name:
-                r.status = "NAME_COLLISION"
+        if row.status in ("VALID", "SEQUENCE_GAP"):
+            row.proposed_name = ""
 
-        # Ensure valid items do not carry proposals
-        if status == "VALID":
-            r.proposed_name = ""
+        if row.read_only or row.status not in ("NEEDS_RENAME", "NAME_COLLISION"):
+            row.selected_for_apply = False
 
-        # Do not keep proposals for non-actionable states (VALID/SEQUENCE_GAP only)
-        if r.status in ("VALID", "SEQUENCE_GAP"):
-            r.proposed_name = ""
+    _resequence_selected_rows(rows, existing_names)
+
+    assigned_targets: set[str] = set()
+
+    for row in rows:
+        status = (row.status or "").upper()
+        if status in ("NEEDS_RENAME", "NAME_COLLISION") and not row.read_only:
+            target = row.proposed_name or ""
+            if target:
+                parsed_target = parse_name(target)
+                if parsed_target:
+                    row.material_type = parsed_target["material_type"]
+                    row.finish = parsed_target["finish"]
+                    row.version_token = parsed_target["version"]
+                if target in existing_name_set and target != row.material_name:
+                    row.status = "NAME_COLLISION"
+                elif target in assigned_targets:
+                    row.status = "NAME_COLLISION"
+                else:
+                    row.status = "NEEDS_RENAME"
+                    assigned_targets.add(target)
+        else:
+            if status not in ("SEQUENCE_GAP", "VALID"):
+                row.proposed_name = ""
+
+        if row.status in ("VALID", "SEQUENCE_GAP"):
+            row.selected_for_apply = False
+
+
+def _is_row_visible(row: LimeAIMatRow, view_filter: str) -> bool:
+    status = (row.status or "").upper()
+    if view_filter == 'ALL':
+        return True
+    if view_filter == 'CORRECT':
+        return status.startswith('VALID')
+    return (
+        status.startswith('NEEDS_RENAME')
+        or status.startswith('NAME_COLLISION')
+        or status.startswith('UNPARSEABLE')
+        or status.startswith('SEQUENCE_GAP')
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -311,23 +541,24 @@ def _http_post_json(url: str, payload: Dict[str, object], headers: Dict[str, str
 
 
 def _system_prompt() -> str:
+    allowed = ", ".join(ALLOWED_MATERIAL_TYPES)
     return (
         "You are a Blender materials librarian assisting an addon via OpenRouter.\n"
         "TARGET MODEL: google/gemini-2.5-flash-lite-preview-09-2025.\n\n"
         "Your ONLY job: output a final material name using the schema:\n"
-        "MAT_{Family}_{Finish}_{V##}\n\n"
+        "MAT_{MaterialType}_{MaterialFinish}_{Version}\n\n"
         "Rules (HARD):\n"
-        "- Family ∈ [Plastic, Metal, Glass, Rubber, Paint, Wood, Fabric, Ceramic, Emissive, Stone, Concrete, Paper, Leather, Liquid].\n"
-        "- Finish: CamelCase alphanumeric from the provided taxonomy; if none fits, use Generic.\n"
-        "- Version: V01..V99. Ensure uniqueness by bumping V## only (no \"_1\", no \".001\").\n"
-        "- If read_only=true → DO NOT propose a rename (proposed_name empty).\n\n"
+        f"- MaterialType must be one of [{allowed}].\n"
+        "- Version token is V01..V99 and must appear at the end. Ensure uniqueness by bumping V## only (never add '_1' or '.001').\n"
+        "- MaterialFinish must be CamelCase alphanumeric from the provided taxonomy; if none fits, use Generic.\n"
+        "- If read_only=true -> do not propose a rename (leave proposed_name empty).\n\n"
         "Signals:\n"
-        "- Use provided \"family_hint\" and \"finish_candidates\" first.\n"
-        "- Principled heuristics (secondary): metallic≥0.5→Metal; transmission≥0.3 or glass tokens→Glass; emission_strength>0→Emissive; roughness≥0.6 and not metallic→Rubber; else Plastic.\n"
+        "- Use provided \"material_type_hint\" and \"finish_candidates\" first.\n"
+        "- Principled heuristics (secondary): metallic>=0.5 -> Metal; transmission>=0.3 or glass tokens -> Glass; emission_strength>0 -> Emissive; roughness>=0.6 and metallic<0.5 -> Rubber; otherwise Plastic.\n"
         "- Texture basenames and object/collection hints can refine finish (e.g., Herringbone, Hex, Brushed, Anodized, Rusty, Marble, Concrete, Velvet, Jean, Leather, PaperOld, Water).\n"
         "- Prefer specific tokens (Marble, Herringbone, Anodized) over generic ones (Tiles, Fabric).\n\n"
         "Output format: STRICT JSON schema you will receive (no extra fields).\n"
-        "Short \"notes\" only (e.g., \"Heuristic: Metal\", \"From tokens: Marble\", \"Bumped V03\")."
+        "Provide short 'notes' only (e.g., 'Heuristic: Metal', 'From tokens: Marble', 'Bumped V03')."
     )
 
 
@@ -349,9 +580,9 @@ def _schema_single() -> Dict[str, object]:
                         "properties": {
                             "material_name": {"type": "string"},
                             "proposed_name": {"type": "string"},
-                            "family": {"type": "string"},
+                            "material_type": {"type": "string"},
                             "finish": {"type": "string"},
-                            "version": {"type": "string"},
+                            "version_token": {"type": "string"},
                             "read_only": {"type": "boolean"},
                             "notes": {"type": "string"},
                         },
@@ -382,9 +613,9 @@ def _schema_bulk() -> Dict[str, object]:
                             "properties": {
                                 "material_name": {"type": "string"},
                                 "proposed_name": {"type": "string"},
-                                "family": {"type": "string"},
+                                "material_type": {"type": "string"},
                                 "finish": {"type": "string"},
-                                "version": {"type": "string"},
+                                "version_token": {"type": "string"},
                                 "read_only": {"type": "boolean"},
                                 "similar_group_id": {"type": "string"},
                                 "notes": {"type": "string"},
@@ -554,6 +785,9 @@ class LIME_TB_OT_ai_rename_single(Operator):
                         "object_hints": summary.get("object_hints", []),
                         "collection_hints": summary.get("collection_hints", []),
                         "similar_group_id": _fingerprint_material(mat),
+                        "material_type_hint": taxonomy_context.get("material_type_hint"),
+                        "finish_candidates": taxonomy_context.get("finish_candidates"),
+                        "allowed_material_types": taxonomy_context.get("allowed_material_types"),
                     },
                 })},
             ],
@@ -593,35 +827,38 @@ class LIME_TB_OT_ai_rename_single(Operator):
             # Fallback local baseline
             base_name = strip_numeric_suffix(mat.name)
             parsed = parse_name(base_name)
-            family = normalize_family(parsed["familia"] if parsed else "Plastic")
-            finish = normalize_finish(parsed["acabado"] if parsed else "Generic")
+            material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
+            finish = normalize_finish(parsed["finish"] if parsed else "Generic")
             # If name is already valid, do not propose a rename
             if parsed is not None:
                 item = {
                     "material_name": mat.name,
                     "proposed_name": "",
-                    "family": family,
+                    "material_type": material_type,
                     "finish": finish,
-                    "version": parsed.get("version") or "V01",
+                    "version_token": parsed.get("version") or "V01",
                     "read_only": False,
                     "notes": "Already compliant",
                     "similar_group_id": _fingerprint_material(mat),
                     "needs_rename": False,
+                    "selected_for_apply": False,
                 }
             else:
                 universe = _collect_existing_names()
-                proposed = bump_version_until_unique(universe, "S1", family, finish, start_idx=1)
-                version_block = proposed.split("_")[-1]
+                proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
+                parts = proposed.split("_")
+                version_block = parts[-1] if len(parts) > 2 else "V01"
                 item = {
                     "material_name": mat.name,
                     "proposed_name": proposed,
-                    "family": family,
+                    "material_type": material_type,
                     "finish": finish,
-                    "version": version_block,
+                    "version_token": version_block,
                     "read_only": False,
                     "notes": "Local baseline proposal",
                     "similar_group_id": _fingerprint_material(mat),
                     "needs_rename": True,
+                    "selected_for_apply": True,
                 }
 
         _write_rows(scene, [item])
@@ -640,6 +877,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
         prefs: LimePipelinePrefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences  # type: ignore
         existing_names = _collect_existing_names()
         mats = list(sorted(bpy.data.materials, key=lambda m: m.name.lower()))
+        allowed_material_types: List[str] = []
 
         # Detección local previa: marcar needs_rename y contar
         incorrect_count = 0
@@ -658,6 +896,15 @@ class LIME_TB_OT_ai_scan_materials(Operator):
             else:
                 print(f"[AI Scan] Material '{mat.name}' is OK (issues: {issues})")
             summary = _summarize_nodes(mat)
+            taxonomy_context = get_taxonomy_context(
+                mat.name,
+                summary.get("texture_basenames", []),
+                summary.get("object_hints", []),
+                summary.get("collection_hints", []),
+                summary.get("principled", {})
+            )
+            if not allowed_material_types:
+                allowed_material_types = list(taxonomy_context.get("allowed_material_types") or [])
             payload_materials.append({
                 "material_name": mat.name,
                 "linked": bool(mat.library),
@@ -672,6 +919,10 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 "object_hints": summary.get("object_hints", []),
                 "collection_hints": summary.get("collection_hints", []),
                 "similar_group_id": _fingerprint_material(mat),
+                "material_type_hint": taxonomy_context.get("material_type_hint"),
+                "finish_candidates": taxonomy_context.get("finish_candidates"),
+                "allowed_material_types": taxonomy_context.get("allowed_material_types"),
+                "taxonomy_context": taxonomy_context,
                 "needs_rename": needs_rename,
             })
         print(f"[AI Scan] Incorrect count: {incorrect_count}, Total: {total_count}")
@@ -685,8 +936,9 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 {"role": "system", "content": _system_prompt()},
                 {"role": "user", "content": json.dumps({
                     "active_scene": scene.name,
-                    "policy": {"align_scene_tag": True, "respect_read_only": True, "versioning_only": True},
+                    "policy": {"align_material_type_hint": True, "respect_read_only": True, "versioning_only": False},
                     "existing_names": existing_names,
+                    "allowed_material_types": allowed_material_types,
                     "materials": payload_materials_filtered,
                 })},
             ],
@@ -751,18 +1003,17 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                     continue
                 parsed = parse_name(strip_numeric_suffix(mat_name))
                 if mat_data["needs_rename"]:
-                    family = normalize_family(parsed["familia"] if parsed else "Plastic")
-                    finish = normalize_finish(parsed["acabado"] if parsed else "Generic")
-                    # Build proposal without scene tag: use family/finish only
-                    # For simplicity, re-use build_name with a neutral tag "S1" then strip it visually in UI
-                    proposed = bump_version_until_unique(universe, "S1", family, finish, start_idx=1)
-                    version_block = proposed.split("_")[-1]
+                    material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
+                    finish = normalize_finish(parsed["finish"] if parsed else "Generic")
+                    proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
+                    parts = proposed.split("_")
+                    version_block = parts[-1] if len(parts) > 2 else "V01"
                     items.append({
                         "material_name": mat_name,
                         "proposed_name": proposed,
-                        "family": family,
+                        "material_type": material_type,
                         "finish": finish,
-                        "version": version_block,
+                        "version_token": version_block,
                         "read_only": False,
                         "notes": "Local baseline proposal",
                         "similar_group_id": _fingerprint_material(mat),
@@ -775,9 +1026,9 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                     items.append({
                         "material_name": mat_name,
                         "proposed_name": "",
-                        "family": normalize_family(parsed["familia"]) if parsed else "Plastic",
-                        "finish": normalize_finish(parsed["acabado"]) if parsed else "Generic",
-                        "version": parsed.get("version") if parsed else "V01",
+                        "material_type": normalize_material_type(parsed["material_type"]) if parsed else "Plastic",
+                        "finish": normalize_finish(parsed["finish"]) if parsed else "Generic",
+                        "version_token": parsed.get("version") if parsed else "V01",
                         "read_only": False,
                         "notes": "Already compliant",
                         "needs_rename": False,
@@ -801,16 +1052,17 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         if mat_data["needs_rename"]:
                             # provide a conservative proposal
                             parsed = parse_name(strip_numeric_suffix(mat_name))
-                            family = normalize_family(parsed["familia"] if parsed else "Plastic")
-                            finish = normalize_finish(parsed["acabado"] if parsed else "Generic")
-                            proposed = bump_version_until_unique(universe, "S1", family, finish, start_idx=1)
-                            version_block = proposed.split("_")[-1]
+                            material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
+                            finish = normalize_finish(parsed["finish"] if parsed else "Generic")
+                            proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
+                            parts = proposed.split("_")
+                            version_block = parts[-1] if len(parts) > 2 else "V01"
                             items.append({
                                 "material_name": mat_name,
                                 "proposed_name": proposed,
-                                "family": family,
+                                "material_type": material_type,
                                 "finish": finish,
-                                "version": version_block,
+                                "version_token": version_block,
                                 "read_only": False,
                                 "notes": "Local baseline proposal",
                                 "similar_group_id": _fingerprint_material(mat),
@@ -854,81 +1106,52 @@ class LIME_TB_OT_ai_apply_materials(Operator):
             return {'CANCELLED'}
 
         universe = set(_collect_existing_names())
-        # Refresh statuses before apply to avoid surprises
-        _postprocess_statuses(scene)
+        # Refresh statuses before apply to align preview with selection
+        refresh_selection_preview(scene)
         rows = list(state.rows)
         renamed = 0
-        for row in sorted(rows, key=lambda r: r.material_name.lower()):
-            status = (row.status or "").upper()
-            # Apply only actionable items
-            if not (status.startswith("NEEDS_RENAME") or status.startswith("NAME_COLLISION")):
-                continue
-            if row.read_only:
-                continue
-            mat: Optional[Material] = bpy.data.materials.get(row.material_name)
-            if not mat:
-                continue
 
-            # Si el usuario editó proposed_name, usarlo como fuente de verdad
-            proposed_name = row.proposed_name or mat.name
-            if proposed_name != mat.name:
-                # Intentar parsear el nombre propuesto
-                parsed = parse_name(proposed_name)
-                if parsed:
-                    # Usar valores parseados
-                    family = normalize_family(parsed["familia"] or "Plastic")
-                    finish = normalize_finish(parsed["acabado"] or "Generic")
-                    version_str = parsed["version"] or "V01"
+        with _suspend_selection_refresh():
+            for row in sorted(rows, key=lambda r: r.material_name.lower()):
+                status = (row.status or '').upper()
+                # Apply only actionable items
+                if not (status.startswith('NEEDS_RENAME') or status.startswith('NAME_COLLISION')):
+                    continue
+                if row.read_only:
+                    continue
+                if not row.selected_for_apply:
+                    continue
+                mat: Optional[Material] = bpy.data.materials.get(row.material_name)
+                if not mat:
+                    continue
+
+                material_type, finish, version_token, version_idx = _derive_row_target(row)
+                if not version_token or not (version_token.startswith('V') and version_token[1:].isdigit()):
+                    version_idx = max(1, int(version_idx or 1))
+                    version_token = f"V{version_idx:02d}"
                 else:
-                    # Fallback: normalizar por heurística
-                    family = normalize_family("Plastic")  # Default
-                    finish = normalize_finish("Generic")  # Default
-                    version_str = "V01"
-                    # Intentar extraer versión del final
-                    parts = proposed_name.split("_")
-                    if len(parts) >= 4 and parts[-1].startswith("V") and parts[-1][1:].isdigit():
-                        version_str = parts[-1]
-                        finish = normalize_finish("_".join(parts[2:-1]) or "Generic")
+                    version_idx = parse_version(version_token) or max(1, int(version_idx or 1))
 
-                # Calcular versión única
-                try:
-                    version_idx = int(version_str[1:]) if version_str.startswith('V') and version_str[1:].isdigit() else 1
-                except Exception:
-                    version_idx = 1
-
-                target_name = build_name("S1", family, finish, build_version(version_idx))
+                target_name = f"{PREFIX}_{material_type}_{finish}_{version_token}"
                 if target_name in universe and target_name != mat.name:
-                    # Do not auto-bump on explicit NAME_COLLISION to avoid surprises
-                    if status.startswith("NAME_COLLISION"):
-                        row.status = "NAME_COLLISION"
-                        continue
-                    target_name = bump_version_until_unique(universe, "S1", family, finish, start_idx=version_idx)
-            else:
-                # Usar valores originales de la fila
-                family = normalize_family(row.family or "Plastic")
-                finish = normalize_finish(row.finish or "Generic")
-                version_str = row.version or "V01"
-                try:
-                    version_idx = int(version_str[1:]) if version_str.startswith('V') and version_str[1:].isdigit() else 1
-                except Exception:
-                    version_idx = 1
+                    bumped = bump_version_until_unique(universe, material_type, finish, start_idx=version_idx)
+                    target_name = bumped
+                    version_token = target_name.split('_')[-1]
+                    version_idx = parse_version(version_token) or version_idx
 
-                target_name = build_name("S1", family, finish, build_version(version_idx))
-                if target_name in universe and target_name != mat.name:
-                    target_name = bump_version_until_unique(universe, "S1", family, finish, start_idx=version_idx)
-
-            if mat.name != target_name:
-                mat.name = target_name
-                renamed += 1
+                if mat.name != target_name:
+                    mat.name = target_name
+                    renamed += 1
                 universe.add(target_name)
 
-            # reflect final
-            row.proposed_name = ""
-            row.family = family
-            row.finish = finish
-            row.version = mat.name.split("_")[-1]
-            row.status = "VALID"
+                row.proposed_name = ''
+                row.material_type = material_type
+                row.finish = finish
+                row.version_token = version_token
+                row.status = 'VALID'
+                row.selected_for_apply = False
 
+        refresh_selection_preview(scene)
         # Scene tag no longer used
 
         self.report({'INFO'}, f"Renamed {renamed} materials")
@@ -985,6 +1208,67 @@ class LIME_TB_OT_ai_clear_materials(Operator):
         return {'FINISHED'}
 
 
+class LIME_TB_OT_ai_select_all(Operator):
+    bl_idname = "lime_tb.ai_select_all"
+    bl_label = "AI: Select All"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = _get_active_scene(context)
+        state = scene.lime_ai_mat
+        if not state.rows:
+            self.report({'INFO'}, "No AI proposals to select")
+            return {'CANCELLED'}
+
+        refresh_selection_preview(scene)
+        view = getattr(state, 'view_filter', 'NEEDS')
+        selected = 0
+        with _suspend_selection_refresh():
+            for row in state.rows:
+                if not _is_row_visible(row, view):
+                    continue
+                if row.read_only:
+                    row.selected_for_apply = False
+                    continue
+                status = (row.status or "").upper()
+                actionable = status.startswith("NEEDS_RENAME") or status.startswith("NAME_COLLISION")
+                row.selected_for_apply = actionable
+                if row.selected_for_apply:
+                    selected += 1
+
+        refresh_selection_preview(scene)
+        self.report({'INFO'}, f"Selected {selected} items")
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_ai_select_none(Operator):
+    bl_idname = "lime_tb.ai_select_none"
+    bl_label = "AI: Select None"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = _get_active_scene(context)
+        state = scene.lime_ai_mat
+        if not state.rows:
+            self.report({'INFO'}, "No AI proposals to deselect")
+            return {'CANCELLED'}
+
+        refresh_selection_preview(scene)
+        view = getattr(state, 'view_filter', 'NEEDS')
+        deselected = 0
+        with _suspend_selection_refresh():
+            for row in state.rows:
+                if not _is_row_visible(row, view):
+                    continue
+                if row.selected_for_apply:
+                    deselected += 1
+                row.selected_for_apply = False
+
+        refresh_selection_preview(scene)
+        self.report({'INFO'}, f"Deselected {deselected} items")
+        return {'FINISHED'}
+
+
 __all__ = [
     "LIME_TB_OT_ai_test_connection",
     "LIME_TB_OT_ai_rename_single",
@@ -992,6 +1276,8 @@ __all__ = [
     "LIME_TB_OT_ai_apply_materials",
     "LIME_TB_OT_ai_test_state",
     "LIME_TB_OT_ai_clear_materials",
+    "LIME_TB_OT_ai_select_all",
+    "LIME_TB_OT_ai_select_none",
 ]
 
 
