@@ -5,8 +5,10 @@ from bpy.props import (
     CollectionProperty,
     IntProperty,
 )
+from pathlib import Path
 
 from ..core import validate_scene
+from ..scene.scene_utils import ensure_camera_margin_backgrounds
 
 
 CAT = "Lime Pipeline"
@@ -44,6 +46,74 @@ class LIME_PT_render_cameras(Panel):
         col.separator()
         col.operator("lime.duplicate_active_camera", text='', icon='DUPLICATE')
         col.operator("lime.sync_camera_list", text='', icon='FILE_REFRESH')
+
+        # -- Márgenes / Backgrounds section for selected camera --
+        cam = getattr(scene, 'camera', None)
+        if cam is not None and getattr(cam, 'type', None) == 'CAMERA':
+            cam_data = getattr(cam, 'data', None)
+            if cam_data is not None:
+                layout.separator()
+                layout.label(text="Márgenes / Backgrounds:")
+
+                # Toggle for show_background_images with status message
+                row = layout.row(align=True)
+                row.prop(cam_data, 'show_background_images', text="Mostrar fondos")
+                if not getattr(cam_data, 'show_background_images', True):
+                    row.label(text="", icon='INFO')
+                    activate_op = row.operator("lime.retry_camera_margin_backgrounds", text="Activar fondos", icon='CHECKBOX_HLT')
+                    if activate_op is not None:
+                        activate_op.set_visible = True
+
+                # Sliders for each margin image if visible or show toggle is off
+                if getattr(cam_data, 'show_background_images', True) or True:  # Always show sliders for config
+                    # Target aliases in fixed order
+                    margin_aliases = ["Box Horizontal", "Box", "Box Vertical"]
+                    for alias in margin_aliases:
+                        # Find matching background entry by checking if any entry's image name/filepath matches our target
+                        entry = None
+                        try:
+                            for bg_entry in list(getattr(cam_data, 'background_images', []) or []):
+                                try:
+                                    img = getattr(bg_entry, 'image', None)
+                                    fp = getattr(img, 'filepath', '') if img else ''
+                                    name = getattr(img, 'name', '') if img else ''
+                                    base = (Path(fp).name if fp else (name or '')).lower()
+                                    target_base = alias.lower().replace(' ', '_') + '_margins.png'
+                                    if target_base in base:
+                                        entry = bg_entry
+                                        break
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+
+                        if entry is not None:
+                            # Show slider with current alpha
+                            row = layout.row(align=True)
+                            alpha_slider = row.prop(entry, 'alpha', text=alias, slider=True)
+                            row.scale_x = 0.7
+
+                            # Visual indicator when alpha is 0
+                            current_alpha = getattr(entry, 'alpha', 0.5)
+                            if current_alpha == 0:
+                                # Add a small visual indicator for zero opacity
+                                indicator = row.row(align=True)
+                                indicator.scale_x = 0.3
+                                indicator.label(text="", icon='HIDE_OFF')
+                                # Add quick reset button
+                                reset_btn = indicator.row(align=True)
+                                reset_btn.scale_x = 0.7
+                                reset_op = reset_btn.operator("lime.reset_margin_alpha", text="0.5", icon='LOOP_BACK')
+                                if reset_op is not None:
+                                    reset_op.alias = alias
+                                    reset_op.target_alpha = 0.5
+                        else:
+                            # Show missing entry with retry button
+                            row = layout.row(align=True)
+                            row.label(text=f"{alias}:", icon='ERROR')
+                            retry_op = row.operator("lime.retry_camera_margin_backgrounds", text="Reintentar", icon='FILE_REFRESH')
+                            if retry_op is not None:
+                                retry_op.alias = alias
 
 
 class LimeRenderCamItem(PropertyGroup):

@@ -9,6 +9,7 @@ De forma practica, el add-on:
 - Presenta paneles en el Sidebar para flujo de archivos y preparacion interna de la escena.
 - Ofrece un Material Manager manual-first (Scan -> Correct -> Apply) para mantener nombres MAT_S# sin sufijos duplicados.
 - Incluye un AI Material Renamer asistido por IA (OpenRouter + Gemini) para proponer y aplicar nombres de materiales cumpliendo el esquema MAT_S# de forma automática y eficiente.
+- Aplica automáticamente imágenes-guía de márgenes como fondos de cámara al crear o duplicar cámaras, con controles de opacidad en el panel Cameras.
 - Permite medir selecciones con el Dimension Checker desde el panel Dimension Utilities, incluyendo presets de unidades.
 
 - Target: Blender 4.5 LTS

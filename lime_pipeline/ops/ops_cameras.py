@@ -1,9 +1,11 @@
 import bpy
 from bpy.types import Operator
-from bpy.props import StringProperty, IntProperty, EnumProperty
+from bpy.props import StringProperty, IntProperty, EnumProperty, FloatProperty
+from pathlib import Path
 
 from ..core import validate_scene
 from ..data.templates import C_CAM
+from ..scene.scene_utils import ensure_camera_margin_backgrounds
 
 
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff'}
@@ -362,6 +364,17 @@ class LIME_OT_duplicate_active_camera(Operator):
 
                 # Ensure rig functionality is preserved for duplicated cameras
                 _ensure_rig_functionality(original_to_copy)
+
+                # Attach/update camera background margin guides for duplicated cameras
+                try:
+                    for orig_obj, new_obj in original_to_copy.items():
+                        if getattr(orig_obj, 'type', None) == 'CAMERA':
+                            try:
+                                ensure_camera_margin_backgrounds(new_obj, set_visible=True, defaults_alpha=0.5)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
             finally:
                 # Re-enable camera list auto-update after duplication
                 if handler_was_active and _CAM_LIST_HANDLER is not None:
@@ -491,6 +504,14 @@ __all__ = [
     "LIME_OT_set_active_camera",
     "LIME_OT_render_invoke",
     "LIME_OT_duplicate_active_camera",
+    "LIME_OT_rename_shot_cameras",
+    "LIME_OT_delete_camera_rig",
+    "LIME_OT_pose_camera_rig",
+    "LIME_OT_sync_camera_list",
+    "LIME_OT_delete_camera_rig_and_sync",
+    "LIME_OT_reset_margin_alpha",
+    "LIME_OT_retry_camera_margin_backgrounds",
+    "LIME_OT_add_camera_rig",
 ]
 
 
@@ -590,9 +611,6 @@ class LIME_OT_rename_shot_cameras(Operator):
 
         self.report({'INFO'}, f"Renamed {renamed} cameras in {shot.name}")
         return {'FINISHED'}
-
-
-__all__.append("LIME_OT_rename_shot_cameras")
 
 
 class LIME_OT_delete_camera_rig(Operator):
@@ -891,13 +909,7 @@ class LIME_OT_sync_camera_list(Operator):
             self.report({'WARNING'}, 'Could not refresh camera list')
             return {'CANCELLED'}
         self.report({'INFO'}, f"Camera list {rename_message}: {len(items)} items")
-        return {'FINISHED'}
-
-
-__all__.append('LIME_OT_sync_camera_list')
-
-
-## Removed: LIME_OT_add_camera_rig_and_sync (merged into LIME_OT_add_camera_rig)
+        return {'FINISHED'}## Removed: LIME_OT_add_camera_rig_and_sync (merged into LIME_OT_add_camera_rig)
 
 
 class LIME_OT_delete_camera_rig_and_sync(Operator):
@@ -925,9 +937,100 @@ class LIME_OT_delete_camera_rig_and_sync(Operator):
         return {'FINISHED'}
 
 
-__all__.append('LIME_OT_delete_camera_rig_and_sync')
-__all__.append("LIME_OT_delete_camera_rig")
-__all__.append("LIME_OT_pose_camera_rig")
+class LIME_OT_reset_margin_alpha(Operator):
+    bl_idname = "lime.reset_margin_alpha"
+    bl_label = "Reset Alpha"
+    bl_description = "Reset margin background alpha to specified value"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    alias: bpy.props.StringProperty(name="Alias", default="")
+    target_alpha: bpy.props.FloatProperty(name="Target Alpha", default=0.5, min=0.0, max=1.0)
+
+    @classmethod
+    def poll(cls, ctx):
+        cam = getattr(getattr(ctx, 'scene', None), 'camera', None)
+        return cam is not None and getattr(cam, 'type', None) == 'CAMERA'
+
+    def execute(self, context):
+        scene = context.scene
+        cam = scene.camera
+        if cam is None or getattr(cam, 'type', None) != 'CAMERA':
+            self.report({'ERROR'}, "No active camera in the scene")
+            return {'CANCELLED'}
+
+        cam_data = getattr(cam, 'data', None)
+        if cam_data is None:
+            self.report({'ERROR'}, "Camera has no data")
+            return {'CANCELLED'}
+
+        # Find the matching background entry
+        entry = None
+        try:
+            for bg_entry in list(getattr(cam_data, 'background_images', []) or []):
+                try:
+                    img = getattr(bg_entry, 'image', None)
+                    fp = getattr(img, 'filepath', '') if img else ''
+                    name = getattr(img, 'name', '') if img else ''
+                    base = (Path(fp).name if fp else (name or '')).lower()
+                    target_base = self.alias.lower().replace(' ', '_') + '_margins.png'
+                    if target_base in base:
+                        entry = bg_entry
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        if entry is None:
+            self.report({'WARNING'}, f"Could not find margin entry for '{self.alias}'")
+            return {'CANCELLED'}
+
+        try:
+            entry.alpha = self.target_alpha
+            self.report({'INFO'}, f"Set '{self.alias}' alpha to {self.target_alpha}")
+            return {'FINISHED'}
+        except Exception as ex:
+            self.report({'ERROR'}, f"Error setting alpha: {ex}")
+            return {'CANCELLED'}
+
+
+class LIME_OT_retry_camera_margin_backgrounds(Operator):
+    bl_idname = "lime.retry_camera_margin_backgrounds"
+    bl_label = "Reintentar Márgenes"
+    bl_description = "Reintentar cargar imágenes de márgenes faltantes para la cámara activa"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    set_visible: bpy.props.BoolProperty(name="Set Visible", default=True)
+    alias: bpy.props.StringProperty(name="Alias", default="")
+
+    @classmethod
+    def poll(cls, ctx):
+        cam = getattr(getattr(ctx, 'scene', None), 'camera', None)
+        return cam is not None and getattr(cam, 'type', None) == 'CAMERA'
+
+    def execute(self, context):
+        scene = context.scene
+        cam = scene.camera
+        if cam is None or getattr(cam, 'type', None) != 'CAMERA':
+            self.report({'ERROR'}, "No active camera in the scene")
+            return {'CANCELLED'}
+
+        try:
+            status = ensure_camera_margin_backgrounds(cam, set_visible=self.set_visible, defaults_alpha=0.5)
+            if "error" in status:
+                self.report({'ERROR'}, f"Error retrying margins: {status['message']}")
+                return {'CANCELLED'}
+
+            success_count = sum(1 for v in status.values() if v.get('found', False))
+            if self.alias:
+                self.report({'INFO'}, f"Reintentado '{self.alias}': {success_count}/3 imágenes actualizadas")
+            else:
+                self.report({'INFO'}, f"Reintentado márgenes: {success_count}/3 imágenes actualizadas")
+            return {'FINISHED'}
+
+        except Exception as ex:
+            self.report({'ERROR'}, f"Error retrying margins: {ex}")
+            return {'CANCELLED'}
 
 
 class LIME_OT_add_camera_rig(Operator):
@@ -1105,10 +1208,16 @@ class LIME_OT_add_camera_rig(Operator):
             pass
 
         self.report({'INFO'}, f"Camera created in {shot.name}/{C_CAM}")
+        # Attach/update camera background margin guides for newly created cameras
+        try:
+            cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
+            if cam_coll is not None:
+                new_cams = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
+                for cam_obj in new_cams:
+                    try:
+                        ensure_camera_margin_backgrounds(cam_obj, set_visible=True, defaults_alpha=0.5)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         return {'FINISHED'}
-
-
-__all__.append('LIME_OT_add_camera_rig')
-
-
-

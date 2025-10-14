@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 import re
+from pathlib import Path
 
 import bpy
 
@@ -410,4 +411,155 @@ def duplicate_shot(scene: bpy.types.Scene, src_shot: bpy.types.Collection, dst_i
 
 
 
+
+
+# -- Camera background margins helper ---------------------------------------------------------
+
+def ensure_camera_margin_backgrounds(cam: bpy.types.Object, *, set_visible: bool = True, defaults_alpha: float = 0.5) -> dict:
+    """Ensure the three margin guide images are present as Background Images on the camera.
+
+    - Adds/updates entries for Box_Horizontal_Margins.png, Box_Margins.png, Box_Vertical_Margins.png
+    - Applies frame_method='CROP', display_depth='FRONT', alpha=defaults_alpha for new entries
+    - Avoids duplicates by matching existing entries by basename
+
+    Returns a dict keyed by alias with fields: {found: bool, path_ok: bool}
+    """
+    status = {}
+    try:
+        if getattr(cam, 'type', None) != 'CAMERA':
+            return {"error": True, "message": "Object is not a camera"}
+        data = getattr(cam, 'data', None)
+        if data is None:
+            return {"error": True, "message": "Camera has no data"}
+
+        # Resolve libraries directory: <addon>/lime_pipeline/data/libraries
+        try:
+            addon_root = Path(__file__).resolve().parents[1]
+        except Exception:
+            addon_root = Path(bpy.path.abspath('//'))
+        libraries_dir = addon_root / 'data' / 'libraries'
+
+        targets = [
+            ("Box Horizontal", libraries_dir / 'Box_Horizontal_Margins.png'),
+            ("Box",            libraries_dir / 'Box_Margins.png'),
+            ("Box Vertical",   libraries_dir / 'Box_Vertical_Margins.png'),
+        ]
+
+        if set_visible:
+            try:
+                data.show_background_images = True
+            except Exception:
+                pass
+
+        # Build a lookup from existing entries by basename
+        existing_by_basename = {}
+        try:
+            for entry in list(getattr(data, 'background_images', []) or []):
+                try:
+                    img = getattr(entry, 'image', None)
+                    fp = getattr(img, 'filepath', '') if img else ''
+                    name = getattr(img, 'name', '') if img else ''
+                    base = (Path(fp).name if fp else (name or '')).lower()
+                    if base:
+                        existing_by_basename[base] = entry
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        def _ensure_entry(alias: str, path: Path) -> tuple[bool, bool]:
+            ok_found = False
+            ok_path = False
+            base = path.name.lower()
+            entry = existing_by_basename.get(base)
+
+            if entry is None:
+                # Try to add a new background image entry
+                try:
+                    # Prefer RNA path without operator if available
+                    coll = getattr(data, 'background_images', None)
+                    if coll is not None and hasattr(coll, 'new'):
+                        entry = coll.new()
+                    else:
+                        # Fallback: use operator with a VIEW_3D override
+                        win = None; area = None; region = None
+                        for w in bpy.context.window_manager.windows:
+                            for a in w.screen.areas:
+                                if a.type == 'VIEW_3D':
+                                    r = next((rg for rg in a.regions if rg.type == 'WINDOW'), None)
+                                    if r is not None:
+                                        win = w; area = a; region = r
+                                        break
+                            if win:
+                                break
+                        if win and area and region:
+                            with bpy.context.temp_override(window=win, area=area, region=region, scene=bpy.context.scene, view_layer=bpy.context.view_layer, active_object=cam):
+                                try:
+                                    res = bpy.ops.view3d.camera_background_image_add('EXEC_DEFAULT')
+                                    if res == {'FINISHED'}:
+                                        entry = list(data.background_images)[-1]
+                                except Exception:
+                                    entry = None
+                        else:
+                            entry = None
+                except Exception:
+                    entry = None
+
+            if entry is not None:
+                ok_found = True
+                # Load or reuse image
+                img = getattr(entry, 'image', None)
+                try:
+                    img_path = str(path)
+                    if path.exists():
+                        ok_path = True
+                        if img is None or not getattr(img, 'filepath', ''):
+                            try:
+                                img = bpy.data.images.load(img_path, check_existing=True)
+                            except Exception:
+                                img = None
+                        else:
+                            # If existing image points elsewhere, attempt to relink
+                            try:
+                                current = Path(bpy.path.abspath(img.filepath)) if getattr(img, 'filepath', '') else None
+                                if not current or current.name.lower() != base:
+                                    img = bpy.data.images.load(img_path, check_existing=True)
+                            except Exception:
+                                pass
+                        if img is not None:
+                            try:
+                                entry.image = img
+                            except Exception:
+                                pass
+                    else:
+                        ok_path = False
+                except Exception:
+                    pass
+
+                # Apply default visual config
+                try:
+                    entry.frame_method = 'CROP'
+                except Exception:
+                    pass
+                try:
+                    entry.display_depth = 'FRONT'
+                except Exception:
+                    pass
+                try:
+                    if not isinstance(getattr(entry, 'alpha', 0.5), float) or getattr(entry, 'alpha', None) is None:
+                        pass
+                    entry.alpha = defaults_alpha if getattr(entry, 'alpha', None) is None else entry.alpha
+                except Exception:
+                    pass
+
+            return ok_found, ok_path
+
+        for alias, p in targets:
+            found, path_ok = _ensure_entry(alias, p)
+            status[alias] = {"found": found, "path_ok": path_ok, "path": str(p)}
+
+    except Exception as exc:
+        return {"error": True, "message": str(exc)}
+
+    return status
 

@@ -37,6 +37,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Responsibilities:
   - Create/instance/duplicate SHOT collections and subtrees based on templates
   - Renaming and remapping for duplicated objects
+  - Camera background margin guides: `ensure_camera_margin_backgrounds` helper for automatic setup
 - Dependencies:
   - Uses `bpy` and consumes `data/templates.py` and `core/validate_scene.py`
 
@@ -46,6 +47,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
   - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
+  - Camera operations (`ops_cameras.py`): automatic margin background setup on camera creation/duplication
 - Rules:
   - UI feedback via `self.report`
   - Delegate naming/validation/paths to `core`; do not duplicate

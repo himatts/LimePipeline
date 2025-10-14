@@ -55,6 +55,8 @@ from .ops.ops_ai_material_renamer import (
     LIME_TB_OT_ai_apply_materials,
     LIME_TB_OT_ai_test_state,
     LIME_TB_OT_ai_clear_materials,
+    LIME_TB_OT_ai_select_all,
+    LIME_TB_OT_ai_select_none,
 )
 from .props_ai_materials import register as register_ai_props, unregister as unregister_ai_props
 from .ui import register_camera_list_props, unregister_camera_list_props
@@ -129,6 +131,8 @@ from .ops.ops_cameras import (
     LIME_OT_delete_camera_rig,
     LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
+    LIME_OT_retry_camera_margin_backgrounds,
+    LIME_OT_reset_margin_alpha,
 )
 from .ops.ops_library_override import (
     LIME_OT_make_library_override,
@@ -196,6 +200,8 @@ NON_PANEL_CLASSES = (
     LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
     LIME_OT_render_invoke,
+    LIME_OT_retry_camera_margin_backgrounds,
+    LIME_OT_reset_margin_alpha,
     LIME_OT_save_as_with_template,
     LIME_OT_make_library_override,
     LIME_OT_auto_camera_background,
@@ -209,6 +215,8 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_ai_apply_materials,
     LIME_TB_OT_ai_test_state,
     LIME_TB_OT_ai_clear_materials,
+    LIME_TB_OT_ai_select_all,
+    LIME_TB_OT_ai_select_none,
     LIME_TB_UL_ai_mat_rows,
 )
 
