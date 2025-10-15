@@ -27,6 +27,11 @@ ALLOWED_MATERIAL_TYPES = [
     "Paper",
     "Leather",
     "Liquid",
+    # Extended families for organic/anatomical and text/annotation use cases
+    "Organic",
+    "Tissue",
+    "Tooth",
+    "Text",
 ]
 # Backwards compatibility with older constants.
 ALLOWED_FAMILIES = ALLOWED_MATERIAL_TYPES

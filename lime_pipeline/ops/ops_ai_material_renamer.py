@@ -25,7 +25,7 @@ from ..core.material_naming import (
     parse_version,
     strip_numeric_suffix,
 )
-from ..core.material_taxonomy import get_taxonomy_context
+from ..core.material_taxonomy import get_taxonomy_context, get_allowed_material_types
 
 
 def _get_active_scene(context) -> Scene:
@@ -541,24 +541,32 @@ def _http_post_json(url: str, payload: Dict[str, object], headers: Dict[str, str
 
 
 def _system_prompt() -> str:
-    allowed = ", ".join(ALLOWED_MATERIAL_TYPES)
+    # Use taxonomy-driven allowed types to avoid divergence from core
+    allowed_types = get_allowed_material_types()
+    allowed = ", ".join(allowed_types)
     return (
         "You are a Blender materials librarian assisting an addon via OpenRouter.\n"
         "TARGET MODEL: google/gemini-2.5-flash-lite-preview-09-2025.\n\n"
         "Your ONLY job: output a final material name using the schema:\n"
         "MAT_{MaterialType}_{MaterialFinish}_{Version}\n\n"
-        "Rules (HARD):\n"
+        "Deliberate internally (do not reveal chain-of-thought). Return only JSON with a short 'notes'.\n\n"
+        "Hard rules:\n"
         f"- MaterialType must be one of [{allowed}].\n"
-        "- Version token is V01..V99 and must appear at the end. Ensure uniqueness by bumping V## only (never add '_1' or '.001').\n"
-        "- MaterialFinish must be CamelCase alphanumeric from the provided taxonomy; if none fits, use Generic.\n"
+        "- Version token is V01..V99 at the end. Ensure uniqueness by bumping V## only (never add '_1' or '.001').\n"
+        "- MaterialFinish must be CamelCase alphanumeric; if none fits, use Generic.\n"
         "- If read_only=true -> do not propose a rename (leave proposed_name empty).\n\n"
-        "Signals:\n"
-        "- Use provided \"material_type_hint\" and \"finish_candidates\" first.\n"
-        "- Principled heuristics (secondary): metallic>=0.5 -> Metal; transmission>=0.3 or glass tokens -> Glass; emission_strength>0 -> Emissive; roughness>=0.6 and metallic<0.5 -> Rubber; otherwise Plastic.\n"
-        "- Texture basenames and object/collection hints can refine finish (e.g., Herringbone, Hex, Brushed, Anodized, Rusty, Marble, Concrete, Velvet, Jean, Leather, PaperOld, Water).\n"
-        "- Prefer specific tokens (Marble, Herringbone, Anodized) over generic ones (Tiles, Fabric).\n\n"
-        "Output format: STRICT JSON schema you will receive (no extra fields).\n"
-        "Provide short 'notes' only (e.g., 'Heuristic: Metal', 'From tokens: Marble', 'Bumped V03')."
+        "Deliberative rubric (internal):\n"
+        "1) Understand: Does the current name precisely describe the real-world material? Identify domain: architectural (Concrete/Brick/Tile/Marble/Granite/Slate/Herringbone/Hex), product/industrial (ABS/PC/Steel/Aluminum/Anodized/Brushed/Galvanized), natural (Wood/Leather/Paper/Cardboard/Stone), textiles (Velvet/Denim/Knitting/Embroidery), coatings/paint (Paint/Varnish/Polished/Rough/Matte/Gloss), liquids (Water/Oil), optics (Glass/Frosted/Tint), decals/signage (Decal/Sticker/Label), FX/emissive (Emissive/Neon), and organic/anatomical (Skin/Iris/Sclera/Cornea/Pupil/Hair/Beard/Eyelash/Eyebrow/Nail/Tooth/Gum/Tongue).\n"
+        "2) Decide: If the name is expressive and compliant, do not rename. Otherwise, transform to the schema preserving as much descriptive semantics as possible in Finish (e.g., for 'HairMatAniso' → 'MAT_Organic_Hair_V01' with 'Aniso' as sub-element if needed; for 'Eyeball' → 'MAT_Tissue_Eyeball_V01'). Select the closest MaterialType from the allowed list, but prioritize preserving key terms in Finish for clarity and replicability (e.g., Hair, Eyeball, Skin, Tooth).\n"
+        "3) Validate: Ensure the final name strictly matches the schema and does not conflict with existing names; only bump V## for uniqueness.\n\n"
+        "Signals (use in order):\n"
+        "- Use 'material_type_hint' and 'finish_candidates'. Respect policy flags (versioning_only, preserve_semantics).\n"
+        "- Principled heuristics: metallic>=0.5→Metal; transmission>=0.3→Glass/Liquid (favor Glass for solids, Liquid for fluids); emission_strength>0→Emissive; roughness>=0.6 & metallic<0.5→Rubber; else Plastic.\n"
+        "- Tokens by domain (non-exhaustive): Architecture (Concrete, Brick, Tile, Herringbone, Hex, Marble, Granite, Slate), Product (ABS, PC, Steel, Aluminum, Anodized, Brushed, Galvanized), Natural (Wood, Leather, Paper, Cardboard, Stone), Textiles (Denim, Velvet, Knitting, Embroidery), Coatings (Paint, Varnish, Polished, Rough, Matte, Gloss), Liquids (Water, Oil), Optics (Glass, Frosted, Tint), Decals (Decal, Sticker, Label), FX (Emissive, Neon), Organics (Skin, Iris, Tooth, Hair, etc.).\n"
+        "- Prefer specific tokens over generic ones (e.g., Herringbone over Tiles; ToothEnamel over Tooth).\n\n"
+        "Output: STRICT JSON per provided schema (no extra fields).\n"
+        "Notes examples: 'Preserved semantics: Hair', 'From tokens: Eyeball', 'Heuristic: Glass', 'Bumped V03'.\n"
+        "Examples for organic: 'HairMatAniso' → 'MAT_Organic_Hair_V01' (preserve 'Hair' in Finish); 'Eyeball' → 'MAT_Tissue_Eyeball_V01' (use 'Eyeball' as Finish)."
     )
 
 
@@ -768,7 +776,11 @@ class LIME_TB_OT_ai_rename_single(Operator):
                 {"role": "system", "content": _system_prompt()},
                 {"role": "user", "content": json.dumps({
                     "active_scene": scene.name,
-                    "policy": {"versioning_only": versioning_only},
+                    "policy": {
+                        "versioning_only": versioning_only,
+                        "preserve_semantics": True,
+                        "organic_material_types": ["Organic", "Tissue", "Tooth"],
+                    },
                     "existing_names": _collect_existing_names(),
                     "taxonomy_context": taxonomy_context,
                     "material": {
@@ -936,7 +948,13 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 {"role": "system", "content": _system_prompt()},
                 {"role": "user", "content": json.dumps({
                     "active_scene": scene.name,
-                    "policy": {"align_material_type_hint": True, "respect_read_only": True, "versioning_only": False},
+                    "policy": {
+                        "align_material_type_hint": True,
+                        "respect_read_only": True,
+                        "versioning_only": False,
+                        "preserve_semantics": True,
+                        "organic_material_types": ["Organic", "Tissue", "Tooth"],
+                    },
                     "existing_names": existing_names,
                     "allowed_material_types": allowed_material_types,
                     "materials": payload_materials_filtered,
