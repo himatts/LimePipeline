@@ -1,9 +1,6 @@
-"""
-Material naming utilities for Lime Pipeline.
+"""Material naming utilities for Lime Pipeline.
 
-Provides parsing, building and normalization helpers for the schemas:
-Legacy: MAT_{TagEscena}_{Familia}_{Acabado}_{V##}
-New (tagless): MAT_{Familia}_{Acabado}_{V##}
+Defines helpers for the schema `MAT_{MaterialType}_{MaterialFinish}_{Version}`.
 """
 
 from __future__ import annotations
@@ -15,7 +12,7 @@ PREFIX = "MAT"
 SEPARATOR = "_"
 VERSION_PREFIX = "V"
 MAX_LENGTH = 64
-ALLOWED_FAMILIES = [
+ALLOWED_MATERIAL_TYPES = [
     "Plastic",
     "Metal",
     "Glass",
@@ -31,60 +28,44 @@ ALLOWED_FAMILIES = [
     "Leather",
     "Liquid",
 ]
-SCENE_TAG_PATTERN = re.compile(r"^(S\d+|Demo|CU)$", re.IGNORECASE)
-LEGACY_NAME_PATTERN = re.compile(
-    rf"^{re.escape(PREFIX)}{re.escape(SEPARATOR)}"
-    r"([A-Za-z0-9]+)"             # tag
-    rf"{re.escape(SEPARATOR)}"
-    r"([A-Za-z]+)"                # family
-    rf"{re.escape(SEPARATOR)}"
-    r"([A-Za-z0-9]+)"             # finish
-    rf"{re.escape(SEPARATOR)}"
-    r"([A-Za-z0-9]+)$"            # version block
-)
-NAME_PATTERN = re.compile(
-    rf"^{re.escape(PREFIX)}{re.escape(SEPARATOR)}"
-    r"([A-Za-z]+)"                # family
-    rf"{re.escape(SEPARATOR)}"
-    r"([A-Za-z0-9]+)"             # finish
-    rf"{re.escape(SEPARATOR)}"
-    r"([A-Za-z0-9]+)$"            # version block
-)
+# Backwards compatibility with older constants.
+ALLOWED_FAMILIES = ALLOWED_MATERIAL_TYPES
+
 INVALID_CHARS_PATTERN = re.compile(r"[^A-Za-z0-9_]")
 NUMERIC_SUFFIX_PATTERN = re.compile(r"\.(\d{3})$")
 
 
 # -----------------------------------------------------------------------------
-# Helper utilities
+# Normalization helpers
 # -----------------------------------------------------------------------------
 
+def normalize_material_type(value: str) -> str:
+    """Return a valid material type value (defaults to Plastic)."""
+    if not value:
+        return "Plastic"
+    normalized = value[0].upper() + value[1:].lower()
+    return normalized if normalized in ALLOWED_MATERIAL_TYPES else "Plastic"
+
+
 def normalize_finish(value: str) -> str:
-    """Sanitize finish tokens and provide a Generic fallback."""
+    """Return a CamelCase alphanumeric finish or Generic."""
     if not value:
         return "Generic"
-    # Keep existing capitalization, only remove invalid chars and ensure CamelCase-like format
     cleaned = re.sub(r"[^0-9A-Za-z]", "", value)
     if not cleaned:
         return "Generic"
-    # Capitalize first letter only if it's not already capitalized
-    if cleaned and cleaned[0].islower():
+    if cleaned[0].islower():
         cleaned = cleaned[0].upper() + cleaned[1:]
     return cleaned
 
 
-def normalize_family(value: str) -> str:
-    """Return a valid family value, defaulting to Plastic."""
-    if not value:
-        return "Plastic"
-    normalized = value[0].upper() + value[1:].lower()
-    return normalized if normalized in ALLOWED_FAMILIES else "Plastic"
-
+# -----------------------------------------------------------------------------
+# Version helpers
+# -----------------------------------------------------------------------------
 
 def parse_version(block: str) -> Optional[int]:
     """Return the integer index represented by a V## block."""
-    if not block or len(block) < 2:
-        return None
-    if not block.startswith(VERSION_PREFIX):
+    if not block or len(block) < 2 or not block.startswith(VERSION_PREFIX):
         return None
     digits = block[1:]
     if not digits.isdigit():
@@ -94,83 +75,55 @@ def parse_version(block: str) -> Optional[int]:
 
 
 def build_version(index: int) -> str:
-    """Build a `V##` block from an integer index (clamped to 1..99)."""
+    """Build a `V##` block from an integer index (clamped 1..99)."""
     idx = max(1, min(int(index or 1), 99))
     return f"{VERSION_PREFIX}{idx:02d}"
 
 
-def validate_scene_tag(tag: str) -> Optional[str]:
-    if not tag:
-        return None
-    norm = tag.strip()
-    if norm in RESERVED_SCENE_TAGS:
-        return norm
-    if not SCENE_TAG_PATTERN.match(norm):
-        return None
-    if norm[0].upper() != "S":
-        return norm
-    return f"S{int(norm[1:]):d}"
-
-
-def group_key(tag: str, family: str, finish: str) -> Tuple[str, str, str]:
-    """Return normalized tuple used to group versions (tag kept for legacy)."""
-    return (
-        validate_scene_tag(tag) or "S1",
-        normalize_family(family),
-        normalize_finish(finish),
-    )
-
-
 # -----------------------------------------------------------------------------
-# Parsing and building
+# Parsing / building
 # -----------------------------------------------------------------------------
 
 def parse_name(name: str) -> Optional[Dict[str, str]]:
-    """Parse a material name into schema components."""
-    if not name or len(name) > MAX_LENGTH:
+    """Parse material names adhering to MAT_{MaterialType}_{MaterialFinish}_{Version}."""
+    if not name or INVALID_CHARS_PATTERN.search(name):
         return None
 
-    # Try legacy pattern (with tag)
-    m = LEGACY_NAME_PATTERN.match(name)
-    if m:
-        raw_tag, raw_family, raw_finish, raw_version = m.groups()
-        tag = validate_scene_tag(raw_tag)
-        family = normalize_family(raw_family)
-        version_idx = parse_version(raw_version)
-        finish = normalize_finish(raw_finish)
-        if tag is None or raw_family not in ALLOWED_FAMILIES or version_idx is None:
-            return None
-        return {
-            "tag": tag,
-            "familia": family,
-            "acabado": finish,
-            "version": build_version(version_idx),
-            "version_index": version_idx,
-        }
+    parts = name.split(SEPARATOR)
+    if len(parts) < 4 or parts[0] != PREFIX:
+        return None
 
-    # Try tagless pattern and assign a neutral tag for legacy callers
-    m2 = NAME_PATTERN.match(name)
-    if not m2:
+    material_type_raw = parts[1]
+    version_block = parts[-1]
+    if len(parts) == 3:
+        finish_raw = parts[2]
+    else:
+        finish_raw = SEPARATOR.join(parts[2:-1])
+
+    version_idx = parse_version(version_block)
+    if version_idx is None:
         return None
-    raw_family, raw_finish, raw_version = m2.groups()
-    family = normalize_family(raw_family)
-    version_idx = parse_version(raw_version)
-    finish = normalize_finish(raw_finish)
-    if raw_family not in ALLOWED_FAMILIES or version_idx is None:
+
+    material_type = normalize_material_type(material_type_raw)
+    if material_type not in ALLOWED_MATERIAL_TYPES:
         return None
+
+    finish = normalize_finish(finish_raw)
+    if not finish:
+        return None
+
     return {
-        "tag": "S1",
-        "familia": family,
-        "acabado": finish,
+        "material_type": material_type,
+        "finish": finish,
         "version": build_version(version_idx),
         "version_index": version_idx,
     }
 
 
-def build_name(tag: str, familia: str, acabado: str, version: str | int) -> str:
+def build_name(material_type: str, version: int | str, finish: str) -> str:
     """Build a normalized material name from components."""
-    family_normalized = normalize_family(familia)
-    finish_normalized = normalize_finish(acabado)
+    material_type_normalized = normalize_material_type(material_type)
+    finish_normalized = normalize_finish(finish)
 
     if isinstance(version, int):
         version_block = build_version(version)
@@ -178,17 +131,16 @@ def build_name(tag: str, familia: str, acabado: str, version: str | int) -> str:
         parsed_idx = parse_version(version)
         version_block = build_version(parsed_idx or 1)
 
-    parts = [PREFIX, family_normalized, finish_normalized, version_block]
+    parts = [PREFIX, material_type_normalized, finish_normalized, version_block]
     name = SEPARATOR.join(parts)
     if len(name) <= MAX_LENGTH:
         return name
 
-    # Truncate finish to satisfy max length.
-    # Ensure we always keep at least one character from finish.
-    head_len = len(SEPARATOR.join([PREFIX, family_normalized])) + len(SEPARATOR) + len(version_block)
+    # Truncate finish to satisfy max length, keeping at least one character.
+    head_len = len(SEPARATOR.join([PREFIX, material_type_normalized])) + len(SEPARATOR) + len(version_block)
     max_finish_len = max(1, MAX_LENGTH - head_len)
     truncated_finish = finish_normalized[:max_finish_len]
-    return SEPARATOR.join([PREFIX, tag_normalized, family_normalized, truncated_finish, version_block])
+    return SEPARATOR.join([PREFIX, material_type_normalized, truncated_finish, version_block])
 
 
 def is_valid_name(name: str) -> bool:
@@ -196,62 +148,46 @@ def is_valid_name(name: str) -> bool:
 
 
 # -----------------------------------------------------------------------------
-# Legacy helpers
+# Uniqueness helpers
 # -----------------------------------------------------------------------------
 
-def detect_issues(name: str) -> list[str]:
-    """Detect schema issues for legacy panels."""
-    issues: list[str] = []
-    if not name:
-        issues.append("Empty name")
-        return issues
-
-    if len(name) > MAX_LENGTH:
-        issues.append("Exceeds maximum length")
-
-    if INVALID_CHARS_PATTERN.search(name):
-        issues.append("Contains invalid characters (spaces, special chars)")
-
-    parsed = parse_name(name)
-    if parsed is None:
-        issues.append("Does not match MAT_{Tag}_{Familia}_{Acabado}_{V##} schema")
-    else:
-        if NUMERIC_SUFFIX_PATTERN.search(name):
-            issues.append("Has numeric suffix (.###)")
-    return issues
+def group_key(material_type: str, finish: str) -> Tuple[str, str]:
+    """Normalized grouping key for version uniqueness."""
+    return normalize_material_type(material_type), normalize_finish(finish)
 
 
-def iter_group_versions(universe: Iterable[str], tag: str, familia: str, acabado: str) -> Iterable[int]:
-    """Yield version indices already used for the provided group (tag ignored)."""
-    key = group_key(tag, familia, acabado)
-    pattern = re.compile(
-        rf"^{PREFIX}_{re.escape(key[0])}_{re.escape(key[1])}_{VERSION_PREFIX}(\d{{2}})$"
-    )
+def iter_group_versions(universe: Iterable[str], material_type: str, finish: str) -> Iterable[int]:
+    """Yield version indices already used for (material_type, finish)."""
+    target_type = normalize_material_type(material_type)
+    target_finish = normalize_finish(finish)
     for name in universe:
-        match = pattern.match(name)
-        if not match:
+        parsed = parse_name(name)
+        if not parsed:
             continue
-        try:
-            yield int(match.group(1))
-        except ValueError:
+        if parsed["material_type"] != target_type:
             continue
+        if normalize_finish(parsed["finish"]) != target_finish:
+            continue
+        version_index = parsed.get("version_index")
+        if isinstance(version_index, int):
+            yield version_index
 
 
-def next_version_index(universe_names: Iterable[str], tag: str, familia: str, acabado: str, start: int = 1) -> int:
-    """Return the next available version index within the provided group."""
-    used = set(iter_group_versions(universe_names, tag, familia, acabado))
+def next_version_index(universe_names: Iterable[str], material_type: str, finish: str, start: int = 1) -> int:
+    """Return the next available version index for the provided group."""
+    used = set(iter_group_versions(universe_names, material_type, finish))
     idx = max(1, int(start))
     while idx in used:
         idx += 1
     return idx
 
 
-def bump_version_until_unique(universe_names: Iterable[str], tag: str, familia: str, acabado: str, start_idx: int = 1) -> str:
-    """Build names by incrementing V## until unique within the universe."""
+def bump_version_until_unique(universe_names: Iterable[str], material_type: str, finish: str, start_idx: int = 1) -> str:
+    """Increment version index until a unique name is found."""
     idx = max(1, int(start_idx))
     universe = set(universe_names)
     while True:
-        candidate = build_name(tag, familia, acabado, build_version(idx))
+        candidate = build_name(material_type, idx, finish)
         if candidate not in universe:
             return candidate
         idx += 1
@@ -265,20 +201,46 @@ def strip_numeric_suffix(name: str) -> str:
     return name[: -len(match.group(0))]
 
 
+# -----------------------------------------------------------------------------
+# Validation helpers
+# -----------------------------------------------------------------------------
+
+def detect_issues(name: str) -> list[str]:
+    """Return human-readable issues describing why a name is out of spec."""
+    issues: list[str] = []
+    if not name:
+        issues.append("Empty name")
+        return issues
+
+    if len(name) > MAX_LENGTH:
+        issues.append("Exceeds maximum length")
+
+    if INVALID_CHARS_PATTERN.search(name):
+        issues.append("Contains invalid characters (spaces, special chars)")
+
+    parsed = parse_name(name)
+    if parsed is None:
+        issues.append("Does not match MAT_{MaterialType}_{MaterialFinish}_{Version} schema")
+    else:
+        if NUMERIC_SUFFIX_PATTERN.search(name):
+            issues.append("Has numeric suffix (.###)")
+    return issues
+
+
 __all__ = [
+    "ALLOWED_MATERIAL_TYPES",
     "ALLOWED_FAMILIES",
     "PREFIX",
     "build_name",
     "build_version",
+    "bump_version_until_unique",
     "detect_issues",
     "group_key",
     "is_valid_name",
-    "normalize_family",
+    "next_version_index",
     "normalize_finish",
+    "normalize_material_type",
     "parse_name",
     "parse_version",
     "strip_numeric_suffix",
-    "next_version_index",
-    "bump_version_until_unique",
-    "validate_scene_tag",
 ]

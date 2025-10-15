@@ -21,3 +21,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Repomix output files
+.repomix/
+repomix-output.xml

@@ -10,8 +10,12 @@ class LIME_TB_UL_ai_mat_rows(UIList):
         scene = context.scene
         state = getattr(scene, 'lime_ai_mat', None)
 
-        # Two columns: Current | Proposed
-        split = layout.split(factor=0.5)
+        row_layout = layout.row(align=True)
+        checkbox_col = row_layout.column()
+        checkbox_col.enabled = not row.read_only
+        checkbox_col.prop(row, "selected_for_apply", text="", emboss=True)
+
+        split = row_layout.split(factor=0.5)
         left = split.column()
         left_row = left.row(align=True)
         left_row.label(text=row.material_name or "<no name>")
@@ -33,7 +37,7 @@ class LIME_TB_UL_ai_mat_rows(UIList):
         if actionable:
             right.prop(row, "proposed_name", text="")
         else:
-            right.label(text=row.proposed_name if row.proposed_name else "—")
+            right.label(text=row.proposed_name if row.proposed_name else "-")
 
     def filter_items(self, context, data, propname):
         """Filtrar y ordenar items según estado.
@@ -82,21 +86,23 @@ class LIME_TB_UL_ai_mat_rows(UIList):
                     _ = state.sort_token
                 parts = name_to_parse.split("_")
                 if len(parts) >= 4 and parts[0] == "MAT":
-                    scene_tag = parts[1] if len(parts) > 1 else ""
-                    family = parts[2] if len(parts) > 2 else ""
-                    finish = "_".join(parts[3:-1]) if len(parts) > 3 else ""
-                    ver_block = parts[-1] if parts[-1].startswith("V") else "V00"
+                    material_type = parts[1] if len(parts) > 1 else ""
+                    version_block = parts[-1] if len(parts) > 2 else "V00"
+                    if len(parts) > 3:
+                        finish = "_".join(parts[2:-1])
+                    elif len(parts) > 2:
+                        finish = parts[2]
+                    else:
+                        finish = ""
                     try:
-                        ver_int = int(ver_block[1:]) if len(ver_block) > 1 else 0
+                        ver_int = int(version_block[1:]) if version_block.startswith("V") and len(version_block) > 1 else 0
                     except Exception:
                         ver_int = 0
-                    ver_key = ver_int
-                    return (scene_tag.upper(), family.upper(), finish.upper(), ver_key, i)
+                    return (material_type.upper(), finish.upper(), ver_int, i)
                 # Fallback ordering using row fields to keep groups together
-                # scene_tag not used anymore
-                family = getattr(row, 'family', '') or ""
+                material_type = getattr(row, 'material_type', '') or ""
                 finish = getattr(row, 'finish', '') or ""
-                version_field = getattr(row, 'version', '') or ""
+                version_field = getattr(row, 'version_token', '') or ""
                 try:
                     if isinstance(version_field, str) and version_field.startswith('V'):
                         ver_int = int(version_field[1:]) if version_field[1:].isdigit() else 0
@@ -104,8 +110,7 @@ class LIME_TB_UL_ai_mat_rows(UIList):
                         ver_int = 0
                 except Exception:
                     ver_int = 0
-                ver_key = ver_int
-                return (str(scene_tag).upper(), str(family).upper(), str(finish).upper(), ver_key, i)
+                return (material_type.upper(), finish.upper(), ver_int, i)
             except Exception as e:
                 return ("ZZZ", "ZZZ", "ZZZ", 9999, i)
 
@@ -145,15 +150,18 @@ class LIME_TB_PT_ai_material_renamer(Panel):
         col = layout.column(align=True)
         r = col.row(align=True)
         r.operator("lime_tb.ai_scan_materials", text="Search Materials")
-        # Disable Apply button when no actionable items
-        actionable = 0
+        actionable_selected = 0
         if state and state.rows:
             for it in state.rows:
                 s = (getattr(it, 'status', '') or '').upper()
-                if s.startswith('NEEDS_RENAME') or s.startswith('NAME_COLLISION'):
-                    actionable += 1
+                if (
+                    (s.startswith('NEEDS_RENAME') or s.startswith('NAME_COLLISION'))
+                    and not getattr(it, 'read_only', False)
+                    and getattr(it, 'selected_for_apply', False)
+                ):
+                    actionable_selected += 1
         op_row = r.row()
-        op_row.enabled = actionable > 0
+        op_row.enabled = actionable_selected > 0
         op_row.operator("lime_tb.ai_apply_materials", text="Apply Renames")
         r.operator("lime_tb.ai_clear_materials", text="Clear")
 
@@ -161,6 +169,10 @@ class LIME_TB_PT_ai_material_renamer(Panel):
         if state:
             vf = layout.row(align=True)
             vf.prop(state, "view_filter", expand=True)
+            sel_row = layout.row(align=True)
+            sel_row.enabled = bool(state.rows)
+            sel_row.operator("lime_tb.ai_select_all", text="Select All")
+            sel_row.operator("lime_tb.ai_select_none", text="Select None")
 
         # Label de conteo si hay datos
         if state and (state.incorrect_count > 0 or state.total_count > 0):

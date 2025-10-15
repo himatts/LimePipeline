@@ -1,20 +1,33 @@
 """
 Material taxonomy utilities for Lime Pipeline AI Material Renamer.
 
-Provides external taxonomy loading and inference functions for material classification.
+Provides external taxonomy loading and inference helpers for material classification.
 """
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-# Fallback taxonomy if external file is not found
 FALLBACK_TAXONOMY = {
-    "families": ["Plastic", "Metal", "Glass", "Rubber", "Paint", "Wood", "Fabric", "Ceramic", "Emissive", "Stone", "Concrete", "Paper", "Leather", "Liquid"],
-    "map_tokens_to_family": {
+    "material_types": [
+        "Plastic",
+        "Metal",
+        "Glass",
+        "Rubber",
+        "Paint",
+        "Wood",
+        "Fabric",
+        "Ceramic",
+        "Emissive",
+        "Stone",
+        "Concrete",
+        "Paper",
+        "Leather",
+        "Liquid",
+    ],
+    "map_tokens_to_material_type": {
         "ABS": "Plastic",
         "PC": "Plastic",
         "PP": "Plastic",
@@ -64,7 +77,7 @@ FALLBACK_TAXONOMY = {
         "Ocean": "Liquid",
         "Puddle": "Liquid",
         "Underwater": "Liquid",
-        "Waterfall": "Liquid"
+        "Waterfall": "Liquid",
     },
     "finish_synonyms": {
         "Brushed": ["Brushed", "Brushing"],
@@ -78,168 +91,144 @@ FALLBACK_TAXONOMY = {
         "TilesOffset": ["Offset"],
         "TilesGrid": ["Grid"],
         "Old": ["Old", "Worn", "Aged"],
-        "Generic": ["Generic", "Base", "Default"]
-    }
+        "Generic": ["Generic", "Base", "Default"],
+    },
 }
 
 
-def load_taxonomy() -> Dict[str, object]:
-    """Load taxonomy from external JSON file or return fallback."""
-    taxonomy_path = Path(__file__).parent.parent.parent / "openspec" / "changes" / "2025-10-04-add-ai-material-renamer" / "taxonomy" / "material_taxonomy.json"
+def _taxonomy_path() -> Path:
+    return (
+        Path(__file__).parent.parent.parent
+        / "openspec"
+        / "changes"
+        / "2025-10-04-add-ai-material-renamer"
+        / "taxonomy"
+        / "material_taxonomy.json"
+    )
 
-    if taxonomy_path.exists():
+
+def load_taxonomy() -> Dict[str, object]:
+    path = _taxonomy_path()
+    if path.exists():
         try:
-            with open(taxonomy_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            with open(path, "r", encoding="utf-8") as handle:
+                return json.load(handle)
         except Exception:
             pass
-
     return FALLBACK_TAXONOMY
 
 
-def get_token_family_mapping() -> Dict[str, str]:
-    """Get token to family mapping from taxonomy."""
+def get_token_material_type_mapping() -> Dict[str, str]:
     taxonomy = load_taxonomy()
-    return taxonomy.get("map_tokens_to_family", {})
+    return taxonomy.get("map_tokens_to_material_type", {})
 
 
 def get_finish_synonyms() -> Dict[str, List[str]]:
-    """Get finish synonyms from taxonomy."""
     taxonomy = load_taxonomy()
     return taxonomy.get("finish_synonyms", {})
 
 
-def get_allowed_families() -> List[str]:
-    """Get list of allowed families from taxonomy."""
+def get_allowed_material_types() -> List[str]:
     taxonomy = load_taxonomy()
-    return taxonomy.get("families", [])
+    materials = taxonomy.get("material_types", [])
+    return materials or FALLBACK_TAXONOMY["material_types"]
 
 
 def extract_tokens(text: str) -> Set[str]:
-    """Extract tokens from text (material names, texture names, hints)."""
     if not text:
         return set()
-
-    # Split by common separators and extract alphanumeric tokens
-    tokens = set()
-    for part in text.replace("_", " ").replace("-", " ").split():
-        # Extract alphanumeric sequences
-        for token in part.split():
-            cleaned = "".join(c for c in token if c.isalnum())
-            if cleaned and len(cleaned) > 2:  # Filter very short tokens
-                tokens.add(cleaned.lower())
-
+    tokens: Set[str] = set()
+    sanitized = text.replace("_", " ").replace("-", " ")
+    for chunk in sanitized.split():
+        cleaned = "".join(c for c in chunk if c.isalnum())
+        if cleaned and len(cleaned) > 2:
+            tokens.add(cleaned.lower())
     return tokens
 
 
-def infer_family_and_candidates(
+def infer_material_type_and_finishes(
     material_name: str,
     texture_basenames: List[str],
     object_hints: List[str],
     collection_hints: List[str],
-    principled: Dict[str, float]
+    principled: Dict[str, float],
 ) -> Tuple[str, List[str]]:
-    """
-    Infer family hint and finish candidates from available data.
-
-    Returns:
-        Tuple of (family_hint, finish_candidates)
-    """
     taxonomy = load_taxonomy()
-    token_to_family = taxonomy.get("map_tokens_to_family", {})
+    token_map = {k.lower(): v for k, v in taxonomy.get("map_tokens_to_material_type", {}).items()}
     finish_synonyms = taxonomy.get("finish_synonyms", {})
 
-    # Collect all tokens from available sources
-    all_tokens = set()
-
-    # Extract from material name
+    all_tokens: Set[str] = set()
     all_tokens.update(extract_tokens(material_name))
+    for value in texture_basenames:
+        all_tokens.update(extract_tokens(value))
+    for value in object_hints:
+        all_tokens.update(extract_tokens(value))
+    for value in collection_hints:
+        all_tokens.update(extract_tokens(value))
 
-    # Extract from texture basenames
-    for texture in texture_basenames:
-        all_tokens.update(extract_tokens(texture))
-
-    # Extract from object hints
-    for hint in object_hints:
-        all_tokens.update(extract_tokens(hint))
-
-    # Extract from collection hints
-    for hint in collection_hints:
-        all_tokens.update(extract_tokens(hint))
-
-    # Apply heuristics for family inference
-    family_scores = {}
-
-    # Principled-based heuristics
-    metallic = principled.get("metallic", 0.0)
-    roughness = principled.get("roughness", 0.5)
-    transmission = principled.get("transmission", 0.0)
-    emission = principled.get("emission_strength", 0.0)
+    scores: Dict[str, int] = {}
+    metallic = principled.get("metallic", 0.0) if principled else 0.0
+    roughness = principled.get("roughness", 0.5) if principled else 0.5
+    transmission = principled.get("transmission", 0.0) if principled else 0.0
+    emission = principled.get("emission_strength", 0.0) if principled else 0.0
 
     if metallic >= 0.5:
-        family_scores["Metal"] = family_scores.get("Metal", 0) + 3
+        scores["Metal"] = scores.get("Metal", 0) + 3
     if transmission >= 0.3:
-        family_scores["Glass"] = family_scores.get("Glass", 0) + 3
+        scores["Glass"] = scores.get("Glass", 0) + 3
     if emission > 0:
-        family_scores["Emissive"] = family_scores.get("Emissive", 0) + 3
+        scores["Emissive"] = scores.get("Emissive", 0) + 3
     if roughness >= 0.6 and metallic < 0.5:
-        family_scores["Rubber"] = family_scores.get("Rubber", 0) + 2
-        family_scores["Plastic"] = family_scores.get("Plastic", 0) - 1
+        scores["Rubber"] = scores.get("Rubber", 0) + 2
+        scores["Plastic"] = scores.get("Plastic", 0) - 1
 
-    # Token-based scoring
     for token in all_tokens:
-        if token in token_to_family:
-            family = token_to_family[token]
-            family_scores[family] = family_scores.get(family, 0) + 2
+        mapped = token_map.get(token.lower())
+        if mapped:
+            scores[mapped] = scores.get(mapped, 0) + 2
 
-    # Default fallback
-    if not family_scores:
-        family_scores["Plastic"] = 1
+    if not scores:
+        scores["Plastic"] = 1
 
-    # Select best family
-    family_hint = max(family_scores.items(), key=lambda x: x[1])[0]
+    material_type = max(scores.items(), key=lambda item: item[1])[0]
 
-    # Collect finish candidates
-    finish_candidates = set()
-
-    # Add all synonyms for tokens found in text
-    for token in all_tokens:
-        for finish, synonyms in finish_synonyms.items():
-            if token in [s.lower() for s in synonyms]:
+    finish_candidates: Set[str] = set()
+    lower_tokens = {token.lower() for token in all_tokens}
+    for finish, synonyms in finish_synonyms.items():
+        for synonym in synonyms:
+            if synonym.lower() in lower_tokens:
                 finish_candidates.add(finish)
+                break
 
-    # If no specific finishes found, add common defaults
     if not finish_candidates:
         finish_candidates.update(["Generic", "Brushed", "Polished", "Rough"])
 
-    return family_hint, sorted(list(finish_candidates))
+    return material_type, sorted(finish_candidates)
 
 
-def get_taxonomy_context(material_name: str, texture_basenames: List[str], object_hints: List[str], collection_hints: List[str], principled: Dict[str, float]) -> Dict[str, object]:
-    """
-    Get taxonomy context for AI prompt.
-
-    Returns:
-        Dictionary with allowed_families, family_hint, and finish_candidates
-    """
-    taxonomy = load_taxonomy()
-    family_hint, finish_candidates = infer_family_and_candidates(
+def get_taxonomy_context(
+    material_name: str,
+    texture_basenames: List[str],
+    object_hints: List[str],
+    collection_hints: List[str],
+    principled: Dict[str, float],
+) -> Dict[str, object]:
+    material_type_hint, finish_candidates = infer_material_type_and_finishes(
         material_name, texture_basenames, object_hints, collection_hints, principled
     )
-
     return {
-        "allowed_families": taxonomy.get("families", []),
-        "family_hint": family_hint,
-        "finish_candidates": finish_candidates
+        "allowed_material_types": get_allowed_material_types(),
+        "material_type_hint": material_type_hint,
+        "finish_candidates": finish_candidates,
     }
 
 
 __all__ = [
-    "load_taxonomy",
-    "get_token_family_mapping",
-    "get_finish_synonyms",
-    "get_allowed_families",
     "extract_tokens",
-    "infer_family_and_candidates",
+    "get_allowed_material_types",
+    "get_finish_synonyms",
     "get_taxonomy_context",
+    "get_token_material_type_mapping",
+    "infer_material_type_and_finishes",
+    "load_taxonomy",
 ]
