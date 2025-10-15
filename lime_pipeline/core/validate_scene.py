@@ -107,6 +107,26 @@ def active_shot_context(ctx) -> Optional[bpy.types.Collection]:
                 if _collection_contains(shot, c):
                     return shot
 
+    # Priority 3: scene's active camera (for cases like duplicated cameras in Image Editor context)
+    try:
+        active_cam = getattr(scene, "camera", None)
+        if active_cam is not None and getattr(active_cam, "type", None) == 'CAMERA':
+            # Find all valid shots that contain collections where the camera resides
+            candidate_shots = []
+            for c in active_cam.users_collection:
+                for shot, _ in shots:
+                    if _collection_contains(shot, c):
+                        candidate_shots.append(shot)
+
+            # If we found candidate shots, return the one with highest index (most recent)
+            if candidate_shots:
+                # Sort by shot index (highest first) and return the first
+                candidate_shots_with_idx = [(shot, parse_shot_index(shot.name) or 0) for shot in candidate_shots]
+                candidate_shots_with_idx.sort(key=lambda x: x[1], reverse=True)
+                return candidate_shots_with_idx[0][0]
+    except Exception:
+        pass
+
     return None
 
 
