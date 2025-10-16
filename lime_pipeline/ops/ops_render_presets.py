@@ -3,13 +3,50 @@ from typing import Any, Dict, Optional
 
 import bpy
 from bpy.types import Operator
-from bpy.props import IntProperty, StringProperty
+from bpy.props import IntProperty, StringProperty, BoolProperty
 
 from ..props import LimeRenderPresetSlot
 
 ADDON_ID = __package__.split('.')[0]
 DATA_VERSION = 1
 PRESET_SLOT_COUNT = 4
+
+
+def _tag_ui_redraw(context, area_types=('PROPERTIES', 'VIEW_3D')) -> None:
+    """Request redraw for relevant areas so external panels refresh state."""
+    try:
+        wm = getattr(context, 'window_manager', None) or bpy.context.window_manager
+    except Exception:
+        wm = None
+
+    if wm is None:
+        return
+
+    for window in wm.windows:
+        screen = getattr(window, 'screen', None)
+        if screen is None:
+            continue
+        for area in screen.areas:
+            if area.type in area_types:
+                area.tag_redraw()
+
+
+def _refresh_cycles_state(scene=None, view_layer=None):
+    """Ensure Cycles sessions notice property changes."""
+    scene = scene or getattr(bpy.context, 'scene', None)
+    view_layer = view_layer or getattr(bpy.context, 'view_layer', None)
+
+    try:
+        if scene and hasattr(scene, "update_tag"):
+            scene.update_tag()
+    except Exception:
+        pass
+
+    try:
+        if view_layer and hasattr(view_layer, "update_render_passes"):
+            view_layer.update_render_passes(scene=scene)
+    except Exception:
+        pass
 
 
 def _default_slot_name(index: int) -> str:
@@ -210,6 +247,34 @@ def _apply_props(target, data: Dict[str, Any]) -> bool:
     return changed
 
 
+def sync_cycles_denoising_properties(context) -> bool:
+    """
+    Sincroniza las propiedades de denoising entre scene.cycles y view_layer.cycles.
+    Ambas propiedades deben tener el mismo valor para mantener la consistencia.
+    """
+    if context is None:
+        return False
+
+    scene = context.scene
+    view_layer = getattr(context, 'view_layer', None)
+
+    if view_layer is None:
+        return False
+
+    cy_scene = getattr(scene, 'cycles', None)
+    cy_layer = getattr(view_layer, 'cycles', None)
+
+    if cy_scene is None or cy_layer is None:
+        return False
+
+    # Si ambas propiedades son diferentes, sincronízalas usando el valor de scene como referencia
+    if cy_scene.use_denoising != cy_layer.use_denoising:
+        cy_layer.use_denoising = cy_scene.use_denoising
+        return True
+
+    return False
+
+
 def apply_render_config(context, payload: Dict[str, Any]) -> bool:
     if not payload:
         return False
@@ -256,6 +321,9 @@ def apply_render_config(context, payload: Dict[str, Any]) -> bool:
             changed |= _apply_props(cy_layer, layer_data)
         elif cy_scene is not None:
             changed |= _apply_props(cy_scene, layer_data)
+
+    # Sincronizar propiedades de denoising después de aplicar cambios
+    changed |= sync_cycles_denoising_properties(context)
 
     return changed
 
@@ -499,6 +567,85 @@ class LIME_OT_render_preset_update_defaults(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_toggle_denoising_property(Operator):
+    bl_idname = 'lime.toggle_denoising_property'
+    bl_label = 'Toggle Denoising Property'
+    bl_description = 'Cambiar y sincronizar propiedades de denoising entre scene y view layer'
+
+    current_value: BoolProperty(name='Current Value', default=False)
+
+    def execute(self, context):
+        if context is None:
+            return {'CANCELLED'}
+
+        # Acceder directamente a la escena activa por nombre para máxima precisión
+        scene = bpy.data.scenes.get("Scene")  # Usar el nombre específico que menciona el usuario
+
+        if scene is None:
+            # Fallback al contexto si no encontramos la escena por nombre
+            scene = context.scene
+
+        view_layer = getattr(context, 'view_layer', None)
+
+        if view_layer is None:
+            return {'CANCELLED'}
+
+        cy_scene = getattr(scene, 'cycles', None)
+        cy_layer = getattr(view_layer, 'cycles', None)
+
+        if cy_scene is None or cy_layer is None:
+            return {'CANCELLED'}
+
+        # Toggle del valor actual
+        new_value = not self.current_value
+
+        # Establecer el valor en scene.cycles (referencia)
+        cy_scene.use_denoising = new_value
+
+        # Sincronizar con view_layer.cycles
+        cy_layer.use_denoising = new_value
+
+        _refresh_cycles_state(scene=scene, view_layer=view_layer)
+        _tag_ui_redraw(context)
+
+        return {'FINISHED'}
+
+
+class LIME_OT_toggle_preview_denoising_property(Operator):
+    bl_idname = 'lime.toggle_preview_denoising_property'
+    bl_label = 'Toggle Preview Denoising Property'
+    bl_description = 'Cambiar propiedad de denoising para preview en Cycles (independiente del render denoising)'
+
+    current_value: BoolProperty(name='Current Value', default=False)
+
+    def execute(self, context):
+        if context is None:
+            return {'CANCELLED'}
+
+        # Acceder directamente a la escena activa por nombre para máxima precisión
+        scene = bpy.data.scenes.get("Scene")  # Usar el nombre específico que menciona el usuario
+
+        if scene is None:
+            # Fallback al contexto si no encontramos la escena por nombre
+            scene = context.scene
+
+        cy_scene = getattr(scene, 'cycles', None)
+
+        if cy_scene is None:
+            return {'CANCELLED'}
+
+        # Toggle del valor actual
+        new_value = not self.current_value
+
+        # Solo afectar el denoising de preview, mantener independencia con render denoising
+        cy_scene.use_preview_denoising = new_value
+
+        _refresh_cycles_state(scene=scene)
+        _tag_ui_redraw(context)
+
+        return {'FINISHED'}
+
+
 class LIME_OT_render_apply_resolution_shortcut(Operator):
     bl_idname = 'lime.render_apply_resolution_shortcut'
     bl_label = 'Apply Resolution Shortcut'
@@ -538,6 +685,7 @@ __all__ = [
     'PRESET_SLOT_COUNT',
     'collect_render_config',
     'apply_render_config',
+    'sync_cycles_denoising_properties',
     'ensure_preset_slots',
     'LIME_OT_render_preset_save',
     'LIME_OT_render_preset_apply',
@@ -545,8 +693,7 @@ __all__ = [
     'LIME_OT_render_preset_reset_all',
     'LIME_OT_render_preset_restore_defaults',
     'LIME_OT_render_preset_update_defaults',
+    'LIME_OT_toggle_denoising_property',
+    'LIME_OT_toggle_preview_denoising_property',
     'LIME_OT_render_apply_resolution_shortcut',
 ]
-
-
-

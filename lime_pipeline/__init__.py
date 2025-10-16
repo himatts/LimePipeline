@@ -19,7 +19,6 @@ from .ui import LIME_PT_shots
 from .ui import (
     LIME_PT_render_configs,
     LIME_PT_render_preset_actions,
-    LIME_PT_render_settings,
     LIME_PT_render_outputs,
     LIME_PT_render_cameras,
 )
@@ -75,6 +74,8 @@ from .ops.ops_render_presets import (
     LIME_OT_render_preset_reset_all,
     LIME_OT_render_preset_restore_defaults,
     LIME_OT_render_preset_update_defaults,
+    LIME_OT_toggle_denoising_property,
+    LIME_OT_toggle_preview_denoising_property,
     LIME_OT_render_apply_resolution_shortcut,
     ensure_preset_slots,
 )
@@ -120,6 +121,7 @@ from .ops.ops_rev import (
 )
 from .ops.ops_save_templates import (
     LIME_OT_save_as_with_template,
+    LIME_OT_save_as_with_template_raw,
 )
 from .ops.ops_cameras import (
     LIME_OT_set_active_camera,
@@ -162,6 +164,8 @@ NON_PANEL_CLASSES = (
     LIME_OT_render_preset_reset_all,
     LIME_OT_render_preset_restore_defaults,
     LIME_OT_render_preset_update_defaults,
+    LIME_OT_toggle_denoising_property,
+    LIME_OT_toggle_preview_denoising_property,
     LIME_OT_render_apply_resolution_shortcut,
     LIME_OT_clean_step,
     LIME_OT_dimension_envelope,
@@ -203,6 +207,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_retry_camera_margin_backgrounds,
     LIME_OT_reset_margin_alpha,
     LIME_OT_save_as_with_template,
+    LIME_OT_save_as_with_template_raw,
     LIME_OT_make_library_override,
     LIME_OT_auto_camera_background,
     LIME_OT_auto_camera_background_refresh,
@@ -226,7 +231,6 @@ PIPELINE_PANEL_CLASSES = (
     LIME_PT_project_org,
     LIME_PT_render_configs,
     LIME_PT_render_preset_actions,
-    LIME_PT_render_settings,
     LIME_PT_render_outputs,
     LIME_PT_shots,
     LIME_PT_stage_setup,

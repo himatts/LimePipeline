@@ -27,6 +27,12 @@ class LIME_PT_shots(Panel):
     def draw(self, ctx):
         layout = self.layout
         scene = ctx.scene
+        st = ctx.window_manager.lime_pipeline
+
+        # Solo Shot Active toggle
+        row = layout.row()
+        row.prop(st, "solo_shot_activo", text="Solo Shot Activo",
+                icon='RESTRICT_VIEW_ON' if getattr(st, 'solo_shot_activo', False) else 'RESTRICT_VIEW_OFF')
 
         # Main shot list with controls
         row = layout.row(align=True)
@@ -208,6 +214,94 @@ class LIME_OT_duplicate_shot_and_sync(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_isolate_active_shot(Operator):
+    bl_idname = "lime.isolate_active_shot"
+    bl_label = "Isolate Active Shot"
+    bl_description = "Hide all SHOT collections except the active one in View Layer"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    shot_name: bpy.props.StringProperty(name="Shot Name", default="")
+
+    @classmethod
+    def poll(cls, ctx):
+        return True
+
+    def execute(self, context):
+        scene = context.scene
+        st = context.window_manager.lime_pipeline
+
+        # Check if solo mode is enabled
+        if not getattr(st, 'solo_shot_activo', False):
+            return {'FINISHED'}
+
+        # Find active shot - use provided name if available, otherwise find from context
+        active_shot = None
+        if self.shot_name:
+            active_shot = bpy.data.collections.get(self.shot_name)
+        else:
+            active_shot = validate_scene.active_shot_context(context)
+
+        if active_shot is None:
+            self.report({'WARNING'}, "No active SHOT to isolate")
+            return {'CANCELLED'}
+
+        # Get all shot roots
+        shots = validate_scene.list_shot_roots(scene)
+        other_shots = [s for s, _ in shots if s != active_shot]
+
+        # Hide other shots in View Layer
+        try:
+            def _find_layer_collection(layer, coll):
+                if layer and layer.collection == coll:
+                    return layer
+                for ch in getattr(layer, 'children', []):
+                    found = _find_layer_collection(ch, coll)
+                    if found:
+                        return found
+                return None
+
+            def _iter_layer_subtree(root_layer):
+                if root_layer is None:
+                    return
+                stack = [root_layer]
+                while stack:
+                    lc = stack.pop()
+                    yield lc
+                    try:
+                        stack.extend(list(lc.children))
+                    except Exception:
+                        pass
+
+            vl = context.view_layer
+            base = vl.layer_collection if vl else None
+
+            # Hide other shots
+            for shot_coll in other_shots:
+                lc = _find_layer_collection(base, shot_coll)
+                if lc is not None:
+                    # Hide the entire subtree
+                    for sub_lc in _iter_layer_subtree(lc):
+                        try:
+                            sub_lc.exclude = True
+                        except Exception:
+                            pass
+
+            # Ensure active shot is visible
+            active_lc = _find_layer_collection(base, active_shot)
+            if active_lc is not None:
+                for sub_lc in _iter_layer_subtree(active_lc):
+                    try:
+                        sub_lc.exclude = False
+                    except Exception:
+                        pass
+
+            self.report({'INFO'}, f"Isolated SHOT: {active_shot.name}")
+
+        except Exception as ex:
+            self.report({'ERROR'}, f"Failed to isolate shot: {str(ex)}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
 
 
 def register_shot_list_props():
@@ -217,6 +311,7 @@ def register_shot_list_props():
     bpy.utils.register_class(LIME_OT_new_shot_and_sync)
     bpy.utils.register_class(LIME_OT_delete_shot_and_sync)
     bpy.utils.register_class(LIME_OT_duplicate_shot_and_sync)
+    bpy.utils.register_class(LIME_OT_isolate_active_shot)
 
     bpy.types.Scene.lime_shots = CollectionProperty(type=LimeShotItem)
 
@@ -229,6 +324,13 @@ def register_shot_list_props():
             name = items[idx].name
             try:
                 bpy.ops.lime.activate_shot(shot_name=name)
+            except Exception:
+                pass
+            # Apply shot isolation if solo mode is active
+            try:
+                st = context.window_manager.lime_pipeline
+                if getattr(st, 'solo_shot_activo', False):
+                    bpy.ops.lime.isolate_active_shot(shot_name=name)
             except Exception:
                 pass
         except Exception:
@@ -365,6 +467,7 @@ def unregister_shot_list_props():
         LIME_OT_delete_shot_and_sync,
         LIME_OT_new_shot_and_sync,
         LIME_OT_sync_shot_list,
+        LIME_OT_isolate_active_shot,
         LIME_UL_shots,
         LimeShotItem,
     ):

@@ -29,6 +29,14 @@ class LIME_PT_image_save_as(Panel):
         col.operator("lime.save_as_with_template", text="Proposal View", icon='OUTLINER_DATA_CAMERA').ptype = 'PV'
         col.operator("lime.save_as_with_template", text="Storyboard", icon='GREASEPENCIL').ptype = 'SB'
         col.operator("lime.save_as_with_template", text="Temporal", icon='TIME').ptype = 'TMP'
+        
+        # RAW variants (unchecked renders before post-production)
+        layout.separator()
+        col_raw = layout.column(align=True)
+        col_raw.operator("lime.save_as_with_template_raw", text="RAW Render", icon='RENDER_RESULT').ptype = 'REND'
+        col_raw.operator("lime.save_as_with_template_raw", text="RAW Proposal View", icon='OUTLINER_DATA_CAMERA').ptype = 'PV'
+        col_raw.operator("lime.save_as_with_template_raw", text="RAW Storyboard", icon='GREASEPENCIL').ptype = 'SB'
+        col_raw.operator("lime.save_as_with_template_raw", text="RAW Temporal", icon='TIME').ptype = 'TMP'
 
 
 __all__ = [

@@ -24,7 +24,9 @@ class LIME_PT_project_org(Panel):
         box.label(text="Project Settings")
 
         row = box.row(align=True)
-        row.prop(st, "project_root", text="Project Root")
+        # Show only project folder name; still stores full path underneath
+        row.prop(st, "project_root_display", text="Project Root")
+        pick = row.operator("lime.pick_root", text="", icon='FILE_FOLDER')
 
         # Vertical layout: Type, Rev (letters), Scene; labels left-aligned
         row = box.row(align=True)

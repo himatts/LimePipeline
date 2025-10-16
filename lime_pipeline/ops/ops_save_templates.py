@@ -31,6 +31,14 @@ def _ensure_editables_dir(state, ptype: str) -> Path:
     return editables_dir
 
 
+def _ensure_editables_raw_dir(state, ptype: str) -> Path:
+    """Ensure editables/RAW directory exists for RAW renders."""
+    editables_dir = _ensure_editables_dir(state, ptype)
+    raw_dir = editables_dir / "RAW"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    return raw_dir
+
+
 def _resolve_prj_rev_sc(state):
     project_name = None
     rev = None
@@ -215,6 +223,42 @@ class LIME_OT_save_as_with_template(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_save_as_with_template_raw(LIME_OT_save_as_with_template):
+    """Operador para guardar renders crudos (RAW) con prefijo y carpeta separada."""
+    bl_idname = "lime.save_as_with_template_raw"
+    bl_label = "Save As Raw (Template)"
+    bl_description = "Open file browser with suggested path and filename for RAW render"
+
+    def _build_suggested_path(self, context) -> str:
+        """Build path for RAW render: editables/RAW/ with RAW_ prefix."""
+        wm = context.window_manager
+        st = wm.lime_pipeline
+        ptype = (self.ptype or '').strip().upper()
+        try:
+            raw_dir = _ensure_editables_raw_dir(st, ptype)
+        except Exception:
+            # Fallback to home if not configured; dialog still opens
+            raw_dir = Path.home()
+        project_name, sc_number, rev = _resolve_prj_rev_sc(st)
+        scene = context.scene
+        shot = validate_scene.active_shot_context(context)
+        camera_obj = scene.camera
+        if ptype == 'REND':
+            shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
+            cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
+            filename = f"RAW_{project_name}_Render_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+        elif ptype == 'PV':
+            shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
+            cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
+            filename = f"RAW_{project_name}_PV_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+        elif ptype == 'SB':
+            filename = f"RAW_{project_name}_SB_SC{sc_number:03d}_Rev_{rev}.png"
+        else:
+            filename = f"RAW_{project_name}_TMP_SC{sc_number:03d}_Rev_{rev}.png"
+        return (raw_dir / filename).as_posix()
+
+
 __all__ = [
     "LIME_OT_save_as_with_template",
+    "LIME_OT_save_as_with_template_raw",
 ]

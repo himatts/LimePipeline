@@ -25,9 +25,9 @@ class LIME_PT_render_configs(Panel):
     bl_region_type = 'UI'
     bl_category = CAT
     bl_label = "Render Configs"
-    bl_options = {"DEFAULT_CLOSED"}
     bl_idname = "LIME_PT_render_configs"
     bl_order = 3
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, ctx):
         layout = self.layout
@@ -86,6 +86,82 @@ class LIME_PT_render_configs(Panel):
 
         global_col.separator()
 
+        layout.separator()
+
+        cy = getattr(scene, 'cycles', None)
+
+        render_box = layout.box()
+        render_box.label(text="Render Settings")
+        engine_row = render_box.row(align=True)
+        engine_row.prop(render, "engine", text="")
+
+        if cy is None:
+            cy_col = render_box.column()
+            cy_col.enabled = False
+            cy_col.label(text="Cycles not available", icon='INFO')
+        else:
+            cy_col = render_box.column(align=True)
+            viewport_row = cy_col.row(align=True)
+            try:
+                viewport_row.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
+            except Exception:
+                pass
+            try:
+                viewport_row.prop(cy, "preview_samples", text="Samples")
+            except Exception:
+                pass
+            try:
+                op = viewport_row.operator(
+                    "lime.toggle_preview_denoising_property",
+                    text="",
+                    icon='CHECKBOX_HLT' if cy.use_preview_denoising else 'CHECKBOX_DEHLT',
+                )
+                op.current_value = cy.use_preview_denoising
+            except Exception:
+                pass
+
+            cy_col.separator()
+            render_row = cy_col.row(align=True)
+            try:
+                render_row.prop(cy, "adaptive_threshold", text="Noise Threshold")
+            except Exception:
+                pass
+            try:
+                render_row.prop(cy, "samples", text="Samples")
+            except Exception:
+                pass
+            try:
+                op = render_row.operator(
+                    "lime.toggle_denoising_property",
+                    text="",
+                    icon='CHECKBOX_HLT' if cy.use_denoising else 'CHECKBOX_DEHLT',
+                )
+                op.current_value = cy.use_denoising
+            except Exception:
+                pass
+
+        checkbox_row = render_box.row(align=True)
+        checkbox_row.prop(render, "use_persistent_data", text="Persistent Data")
+        checkbox_row.prop(render, "film_transparent", text="Transparent Film")
+
+        output_box = layout.box()
+        output_box.label(text="Output Properties")
+        out_row = output_box.row(align=True)
+        out_row.prop(render, "resolution_x", text="X")
+        out_row.prop(render, "resolution_y", text="Y")
+
+        out_row = output_box.row(align=True)
+        out_row.prop(render, "resolution_percentage", text="Scale")
+        out_row.prop(render, "fps", text="FPS")
+        out_row.menu("RENDER_MT_framerate_presets", text="", icon='DOWNARROW_HLT')
+
+        color_box = layout.box()
+        color_box.label(text="Color Management")
+        vs = scene.view_settings
+        color_row = color_box.row(align=True)
+        color_row.prop(vs, "view_transform", text="")
+        color_row.prop(vs, "look", text="")
+
 
 class LIME_PT_render_preset_actions(Panel):
     bl_space_type = 'VIEW_3D'
@@ -103,103 +179,6 @@ class LIME_PT_render_preset_actions(Panel):
         col.operator("lime.render_preset_restore_defaults", text="Restore Defaults", icon='LOOP_BACK')
         col.operator("lime.render_preset_update_defaults", text="Update Defaults", icon='FILE_REFRESH')
 
-
-class LIME_PT_render_settings(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = CAT
-    bl_label = "Settings"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LIME_PT_render_configs"
-    bl_order = 0
-
-    def draw(self, ctx):
-        layout = self.layout
-        scene = ctx.scene
-        render = scene.render
-        cy = getattr(scene, 'cycles', None)
-
-        box = layout.box()
-        box.label(text="Render Settings")
-        row = box.row(align=True)
-        row.prop(render, "engine", text="")
-
-        if cy is None:
-            col = box.column()
-            col.enabled = False
-            col.label(text="Cycles not available", icon='INFO')
-        else:
-            col = box.column(align=True)
-            viewport_row = col.row(align=True)
-            try:
-                viewport_row.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
-            except Exception:
-                pass
-            try:
-                viewport_row.prop(cy, "preview_samples", text="Samples")
-            except Exception:
-                pass
-            added = False
-            try:
-                viewport_row.prop(cy, "use_preview_denoising", text="")
-                added = True
-            except Exception:
-                pass
-            if not added:
-                try:
-                    viewport_row.prop(ctx.view_layer.cycles, "use_denoising", text="")
-                    added = True
-                except Exception:
-                    pass
-            if not added:
-                try:
-                    viewport_row.prop(cy, "use_denoising", text="")
-                except Exception:
-                    pass
-
-            col.separator()
-            render_row = col.row(align=True)
-            try:
-                render_row.prop(cy, "adaptive_threshold", text="Noise Threshold")
-            except Exception:
-                pass
-            try:
-                render_row.prop(cy, "samples", text="Samples")
-            except Exception:
-                pass
-            added = False
-            try:
-                render_row.prop(ctx.view_layer.cycles, "use_denoising", text="")
-                added = True
-            except Exception:
-                pass
-            if not added:
-                try:
-                    render_row.prop(cy, "use_denoising", text="")
-                except Exception:
-                    pass
-
-        checkbox_row = box.row(align=True)
-        checkbox_row.prop(render, "use_persistent_data", text="Persistent Data")
-        checkbox_row.prop(render, "film_transparent", text="Transparent Film")
-
-        output_box = layout.box()
-        output_box.label(text="Output Properties")
-        row = output_box.row(align=True)
-        row.prop(render, "resolution_x", text="X")
-        row.prop(render, "resolution_y", text="Y")
-
-        row = output_box.row(align=True)
-        row.prop(render, "resolution_percentage", text="Scale")
-        row.prop(render, "fps", text="FPS")
-        row.menu("RENDER_MT_framerate_presets", text="", icon='DOWNARROW_HLT')
-
-        color_box = layout.box()
-        color_box.label(text="Color Management")
-        vs = scene.view_settings
-        row = color_box.row(align=True)
-        row.prop(vs, "view_transform", text="")
-        row.prop(vs, "look", text="")
 
 class LIME_PT_render_outputs(Panel):
     bl_space_type = 'VIEW_3D'
@@ -342,19 +321,9 @@ def unregister_render_shortcut_props():
 
 __all__ = [
     "LIME_PT_render_configs",
-    "LIME_PT_render_settings",
     "LIME_PT_render_outputs",
     "LIME_PT_render_preset_actions",
     "register_render_shortcut_props",
     "unregister_render_shortcut_props",
 ]
-
-
-
-
-
-
-
-
-
 

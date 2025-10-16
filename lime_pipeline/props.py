@@ -60,6 +60,40 @@ class LimeRenderPresetSlot(PropertyGroup):
 
 class LimePipelineState(PropertyGroup):
     project_root: StringProperty(name="Project Root", subtype='DIR_PATH', description="Select the project root folder named 'XX-##### Project Name'")
+    def _get_project_root_display(self):
+        try:
+            from .core.naming import RE_PROJECT_DIR
+            from pathlib import Path as _P
+            val = getattr(self, 'project_root', '') or ''
+            if not val:
+                return ''
+            name = _P(val).name
+            return name if RE_PROJECT_DIR.match(name) else name
+        except Exception:
+            return getattr(self, 'project_root', '') or ''
+    def _set_project_root_display(self, value):
+        try:
+            # When user types/pastes only the project name, reconstruct full path
+            from pathlib import Path as _P
+            from .prefs import LimePipelinePrefs  # type: ignore
+        except Exception:
+            self.project_root = value
+            return
+        # Try to rebuild from default root if looks like a project name
+        try:
+            import bpy
+            prefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences
+            base = getattr(prefs, 'default_projects_root', '') or ''
+            if base:
+                # If value looks like a name (no path separators), join to base
+                if ('/' not in value) and ('\\' not in value):
+                    full = str(_P(base) / value)
+                    self.project_root = full
+                    return
+        except Exception:
+            pass
+        self.project_root = value
+    project_root_display: StringProperty(name="Project Root", get=_get_project_root_display, set=_set_project_root_display, description="Project name (root shown as folder name only)")
     project_type: EnumProperty(name="Project Type", items=PROJECT_TYPES, default='REND', description="Type of project work: affects naming and target folders")
     # Sync helpers between letter and index
     def _on_rev_index_update(self, context):
@@ -133,6 +167,76 @@ class LimePipelineState(PropertyGroup):
         update=_on_auto_select_hierarchy_update,
     )
 
+    def _on_solo_shot_activo_update(self, context):
+        try:
+            if getattr(self, 'solo_shot_activo', False):
+                # When enabling solo mode, isolate the current active shot
+                # Find the currently selected shot in the UI list
+                scene = context.scene
+                try:
+                    idx = getattr(scene, 'lime_shots_index', -1)
+                    items = getattr(scene, 'lime_shots', None)
+                    if items is not None and 0 <= idx < len(items):
+                        shot_name = items[idx].name
+                        bpy.ops.lime.isolate_active_shot(shot_name=shot_name)
+                    else:
+                        # Fallback to context-based detection
+                        bpy.ops.lime.isolate_active_shot()
+                except Exception:
+                    # Fallback to context-based detection
+                    bpy.ops.lime.isolate_active_shot()
+            else:
+                # When disabling solo mode, show all shots again
+                scene = context.scene
+                try:
+                    def _find_layer_collection(layer, coll):
+                        if layer and layer.collection == coll:
+                            return layer
+                        for ch in getattr(layer, 'children', []):
+                            found = _find_layer_collection(ch, coll)
+                            if found:
+                                return found
+                        return None
+
+                    def _iter_layer_subtree(root_layer):
+                        if root_layer is None:
+                            return
+                        stack = [root_layer]
+                        while stack:
+                            lc = stack.pop()
+                            yield lc
+                            try:
+                                stack.extend(list(lc.children))
+                            except Exception:
+                                pass
+
+                    from .core import validate_scene
+                    shots = validate_scene.list_shot_roots(scene)
+                    vl = context.view_layer
+                    base = vl.layer_collection if vl else None
+
+                    # Show all shots
+                    for shot_coll, _ in shots:
+                        lc = _find_layer_collection(base, shot_coll)
+                        if lc is not None:
+                            for sub_lc in _iter_layer_subtree(lc):
+                                try:
+                                    sub_lc.exclude = False
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Shot isolation mode for panel
+    solo_shot_activo: BoolProperty(
+        name="Solo Shot Activo",
+        description="When enabled, only the active SHOT collection remains visible in the View Layer",
+        default=False,
+        update=_on_solo_shot_activo_update,
+    )
+
     # (Removed) UI collapsible flags for Render Configs; now using subpanels
 
     # UI collapsible sections for Shots panel
@@ -185,16 +289,34 @@ class LimePipelineState(PropertyGroup):
         options={'HIDDEN'},
     )
 
+def _safe_register(cls):
+    """Register class handling retained state during live reloads."""
+    try:
+        bpy.utils.register_class(cls)
+    except ValueError:
+        bpy.utils.unregister_class(cls)
+        bpy.utils.register_class(cls)
+
+
 def register():
-    bpy.utils.register_class(LimeRenderPresetSlot)
-    bpy.utils.register_class(LimePipelineState)
+    _safe_register(LimeRenderPresetSlot)
+    _safe_register(LimePipelineState)
+    if hasattr(bpy.types.WindowManager, "lime_pipeline"):
+        del bpy.types.WindowManager.lime_pipeline
     bpy.types.WindowManager.lime_pipeline = PointerProperty(type=LimePipelineState)
 
 
 def unregister():
-    del bpy.types.WindowManager.lime_pipeline
-    bpy.utils.unregister_class(LimePipelineState)
-    bpy.utils.unregister_class(LimeRenderPresetSlot)
+    if hasattr(bpy.types.WindowManager, "lime_pipeline"):
+        del bpy.types.WindowManager.lime_pipeline
+    try:
+        bpy.utils.unregister_class(LimePipelineState)
+    except RuntimeError:
+        pass
+    try:
+        bpy.utils.unregister_class(LimeRenderPresetSlot)
+    except RuntimeError:
+        pass
 
 __all__ = [
     "LimeRenderPresetSlot",

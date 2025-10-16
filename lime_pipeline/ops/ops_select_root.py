@@ -19,7 +19,13 @@ class LIME_OT_pick_root(Operator):
 
     def execute(self, context):
         st = context.window_manager.lime_pipeline
-        st.project_root = self.directory
+        # Auto-detect the actual project root (walk up to matching folder)
+        try:
+            from ..core.naming import find_project_root
+            detected = find_project_root(self.directory)
+            st.project_root = str(detected) if detected is not None else self.directory
+        except Exception:
+            st.project_root = self.directory
         return {'FINISHED'}
 
 

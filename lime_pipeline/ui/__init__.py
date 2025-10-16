@@ -4,7 +4,6 @@ from .ui_shots import register_shot_list_props, unregister_shot_list_props
 from .ui_render_configs import (
     LIME_PT_render_configs,
     LIME_PT_render_preset_actions,
-    LIME_PT_render_settings,
     LIME_PT_render_outputs,
     register_render_shortcut_props,
     unregister_render_shortcut_props,
@@ -49,7 +48,6 @@ __all__ = [
     "unregister_shot_list_props",
     "LIME_PT_render_configs",
     "LIME_PT_render_preset_actions",
-    "LIME_PT_render_settings",
     "LIME_PT_render_cameras",
     "LIME_PT_render_outputs",
     "register_render_shortcut_props",

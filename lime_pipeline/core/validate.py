@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .naming import RE_PROJECT_DIR, make_filename, resolve_project_name, TOKENS_BY_PTYPE
+from .naming import RE_PROJECT_DIR, make_filename, resolve_project_name, TOKENS_BY_PTYPE, find_project_root
 from .paths import paths_for_type, get_ramv_dir
 
 
@@ -27,15 +27,40 @@ def validate_all(state: Any, prefs: Any):
     target_path: Path | None = None
     backups: Path | None = None
 
-    # Root directory
-    root = Path(state.project_root) if getattr(state, "project_root", None) else None
+    # Root directory (accept subfolders and auto-detect project root)
+    root_input = getattr(state, "project_root", None)
+    root: Path | None = None
+    if root_input:
+        try:
+            # If user selected a deeper folder, walk up to find the actual project root
+            detected = find_project_root(root_input)
+            if detected is not None and detected.exists():
+                root = detected
+            else:
+                cand = Path(root_input)
+                root = cand if cand.exists() else None
+        except Exception:
+            root = None
+
     if not root or not root.exists():
         errors.append("Pick a valid project root folder")
         return False, errors, warns, filename, target_path, backups
 
-    # Root must match pattern
+    # Root must match pattern after detection
     if not RE_PROJECT_DIR.match(root.name):
         errors.append("Root folder must match 'XX-##### Project Name'")
+
+    # Enforce root resides under default projects root (studio invariant)
+    try:
+        default_root = Path(getattr(prefs, 'default_projects_root', '') or '')
+        if default_root and default_root.exists():
+            try:
+                # Python 3.11: use relative_to for robust check
+                _ = root.resolve().relative_to(default_root.resolve())
+            except Exception:
+                errors.append(f"Project must be inside: {default_root}")
+    except Exception:
+        pass
 
     # Revision letter
     rev = (getattr(state, "rev_letter", "") or "").strip().upper()

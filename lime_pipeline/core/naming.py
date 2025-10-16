@@ -161,6 +161,30 @@ def parse_blend_details(path_or_name: str) -> dict | None:
     return None
 
 
+def find_project_root(selected_path: str) -> Path | None:
+    """Walk up from selected_path to find a folder matching RE_PROJECT_DIR.
+
+    Returns the matching Path or None.
+    """
+    try:
+        path = Path(selected_path)
+        if not path.exists():
+            return None
+        # If a file was passed, move to its parent
+        if path.is_file():
+            path = path.parent
+        # Check current folder first
+        if RE_PROJECT_DIR.match(path.name):
+            return path
+        # Walk up
+        for parent in path.parents:
+            if RE_PROJECT_DIR.match(parent.name):
+                return parent
+        return None
+    except Exception:
+        return None
+
+
 def hydrate_state_from_filepath(state, force: bool = False) -> None:
     """Populate WindowManager LimePipelineState from current .blend filepath when possible.
 
