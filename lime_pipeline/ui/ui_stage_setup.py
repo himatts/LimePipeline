@@ -1,3 +1,13 @@
+"""
+UI to set up stage elements for an active SHOT and auto camera backgrounds.
+
+Purpose: Provide scene duplication for SHOTs, import layout helpers, and controls to
+initialize, refresh and toggle live auto camera background planes.
+Key classes: LIME_PT_stage_setup.
+Depends on: lime_pipeline.core.validate_scene and ops for stage/background automation.
+Notes: UI-only; disables actions when there is no active SHOT.
+"""
+
 import bpy
 from bpy.types import Panel
 

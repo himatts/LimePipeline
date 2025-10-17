@@ -1,3 +1,13 @@
+"""
+UI panels and lists for managing render cameras and their margin/background overlays.
+
+Purpose: Provide a viewport panel to list, add, duplicate, delete and sync camera rigs, and
+configure margins/background images opacity per alias.
+Key classes: LIME_PT_render_cameras, LIME_UL_render_cameras, LimeRenderCamItem.
+Depends on: lime_pipeline.core.validate_scene, lime_pipeline.scene.scene_utils.
+Notes: UI-only; behavior is delegated to operators (e.g. lime.add_camera_rig, lime.sync_camera_list).
+"""
+
 import bpy
 from bpy.types import Panel, UIList, PropertyGroup
 from bpy.props import (
@@ -18,6 +28,7 @@ _CAM_LIST_HANDLER = None
 
 
 class LIME_PT_render_cameras(Panel):
+    """Cameras manager panel in 3D Viewport > UI > Lime Pipeline."""
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT
@@ -117,10 +128,12 @@ class LIME_PT_render_cameras(Panel):
 
 
 class LimeRenderCamItem(PropertyGroup):
+    """Item representing a camera entry displayed in the camera list."""
     name: StringProperty(name="Camera")
 
 
 class LIME_UL_render_cameras(UIList):
+    """UIList that displays available camera rigs with quick controls."""
     bl_idname = "LIME_UL_render_cameras"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):

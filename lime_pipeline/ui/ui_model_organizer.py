@@ -1,3 +1,13 @@
+"""
+UI panel to organize imported 3D models and scene controllers.
+
+Purpose: Provide actions to import STEP, clean geometry, create controller empties,
+apply deltas, colorize parent groups, and manage library linking/override/relocate.
+Key classes: LIME_PT_model_organizer.
+Depends on: ops.ops_model_organizer and related operators.
+Notes: UI-only; shows status for location offsets and actions availability.
+"""
+
 import bpy
 from bpy.types import Panel
 

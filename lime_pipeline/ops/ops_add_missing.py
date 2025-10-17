@@ -1,3 +1,22 @@
+"""
+Add Missing Collections Operator
+
+This module provides functionality to add missing collections to maintain proper
+scene organization according to Lime Pipeline conventions. It ensures that the
+canonical SHOT tree structure exists for the current shot context.
+
+The operator validates that there's an active SHOT context before proceeding,
+resolves the project name, and ensures the shot tree exists by adding only
+the missing collections rather than recreating the entire structure.
+
+Key Features:
+- Validates active SHOT context before execution
+- Resolves project name from pipeline settings
+- Adds only missing collections to avoid duplication
+- Integrates with Lime Pipeline naming conventions
+- Provides proper error reporting for invalid contexts
+"""
+
 import bpy
 from bpy.types import Operator
 

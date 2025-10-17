@@ -1,3 +1,22 @@
+"""
+Production Step Cleanup Operators
+
+This module provides functionality for cleaning up scene elements based on production
+pipeline steps. It handles the removal of intermediate objects, cleanup of temporary
+data, and preparation of scenes for different stages of the production process.
+
+The cleanup operators support various geometry types and can recursively process
+object hierarchies to ensure comprehensive cleanup while preserving essential elements.
+
+Key Features:
+- Geometry-based object cleanup with support for multiple object types
+- Recursive processing of object hierarchies and children
+- Pattern-based object identification for selective cleanup
+- Integration with production step tracking and validation
+- Preservation of essential objects during cleanup operations
+- Comprehensive error handling for complex scene hierarchies
+"""
+
 import re
 
 import bpy

@@ -1,3 +1,14 @@
+"""
+UI to manage SHOT collections: list, create, duplicate, delete and sync.
+
+Purpose: Provide a panel and list to manage SHOT roots, support isolation of active SHOT
+in the view layer, and keep the UI in sync using a depsgraph handler.
+Key classes: LIME_PT_shots, LIME_UL_shots; Operators: lime.sync_shot_list, lime.new_shot_and_sync,
+lime.delete_shot_and_sync, lime.duplicate_shot_and_sync, lime.isolate_active_shot.
+Depends on: lime_pipeline.core.validate_scene for detection and parsing.
+Notes: UI-only; operators handle scene modifications.
+"""
+
 import bpy
 from bpy.types import Panel, UIList, PropertyGroup, Operator
 from bpy.props import (

@@ -1,3 +1,27 @@
+"""
+Camera Management Operators
+
+This module provides comprehensive camera management functionality for Lime Pipeline,
+including camera rig creation, camera positioning, background management, and
+camera list synchronization.
+
+The operators handle various camera-related tasks:
+- Camera rig creation and management with proper naming conventions
+- Camera positioning and pose operations
+- Automatic camera background generation and margin management
+- Camera list synchronization and refresh operations
+- Render invocation and camera deletion with cleanup
+
+Key Features:
+- Automated camera rig creation with armature-based control
+- Background plane generation that follows camera movement
+- Margin-based background scaling for render framing
+- Integration with SHOT-based naming conventions
+- Camera list management and synchronization
+- Render integration with proper camera validation
+- Comprehensive error handling and user feedback
+"""
+
 import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty, IntProperty, EnumProperty, FloatProperty

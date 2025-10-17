@@ -1,3 +1,27 @@
+"""
+Scene and SHOT Validation Utilities
+
+This module provides comprehensive utilities for validating Blender scene structure
+and managing SHOT collections within the Lime Pipeline workflow. It handles SHOT
+detection, indexing, hierarchy validation, and scene organization according to
+Lime Pipeline conventions.
+
+The SHOT system provides scene organization with numbered collections (SHOT 001,
+SHOT 002, etc.) that contain all assets for individual shots or sequences. The
+validation system ensures proper SHOT structure, active shot detection, and
+hierarchical relationships between collections.
+
+Key Features:
+- SHOT collection detection and parsing with numeric indexing
+- Active SHOT context resolution from selection and camera data
+- Collection hierarchy validation and traversal utilities
+- SHOT duplication and creation support with proper naming
+- Scene isolation for focused SHOT processing
+- Integration with Blender's collection and layer systems
+- Comprehensive error handling for malformed scene structures
+- Support for complex nested collection hierarchies
+"""
+
 from __future__ import annotations
 
 import re

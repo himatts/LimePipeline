@@ -1,3 +1,13 @@
+"""
+Image Editor panel to save outputs with normalized names and RAW variants.
+
+Purpose: Provide quick buttons to save Render Result and images using project templates,
+including RAW variants intended for post-production workflows.
+Key classes: LIME_PT_image_save_as.
+Depends on: operators lime.save_as_with_template and lime.save_as_with_template_raw.
+Notes: UI-only; operators handle naming and path logic.
+"""
+
 import bpy
 from bpy.types import Panel
 
@@ -6,6 +16,7 @@ CAT = "Lime Pipeline"
 
 
 class LIME_PT_image_save_as(Panel):
+    """Panel with save shortcuts for normalized outputs and RAW variants."""
     bl_space_type = 'IMAGE_EDITOR'
     bl_region_type = 'UI'
     bl_category = CAT

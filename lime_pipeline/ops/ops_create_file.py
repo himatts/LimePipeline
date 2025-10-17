@@ -1,3 +1,23 @@
+"""
+File Creation Operators
+
+This module provides functionality for the initial creation and saving of Blender files
+within the Lime Pipeline workflow. It handles the first save operation with complete
+validation of project settings and file paths.
+
+The operator performs comprehensive validation before saving, ensuring that all
+Lime Pipeline settings are properly configured, the target path is valid, and
+the project structure meets the required conventions.
+
+Key Features:
+- Complete project validation before file creation
+- Automatic directory creation for target paths
+- Integration with Lime Pipeline naming and path conventions
+- Comprehensive error reporting for validation failures
+- Automatic backup handling during initial save
+- User feedback for successful file creation
+"""
+
 import bpy
 from bpy.types import Operator
 

@@ -1,3 +1,22 @@
+"""
+Library Override Operators
+
+This module provides functionality for creating library overrides on linked objects
+in Blender scenes. It automates the process of converting linked objects to library
+overrides while preserving their linked status and enabling local modifications.
+
+The override system handles recursive object hierarchies, ensuring that all child
+objects of linked parents are properly processed for consistent override behavior.
+
+Key Features:
+- Automated library override creation for linked objects
+- Recursive processing of object hierarchies and children
+- Content and selection-based override modes
+- Batch processing of multiple selected objects
+- Validation of object linked status before override creation
+- Integration with Blender's library override system
+"""
+
 from __future__ import annotations
 
 import bpy

@@ -1,3 +1,31 @@
+"""
+Project Path and Directory Structure Utilities
+
+This module defines the canonical directory structure for Lime Pipeline projects
+following the RAMV (Rendering-Animation-Media-Video) organizational standard.
+It provides utilities for constructing project paths based on project type, revision,
+and scene requirements.
+
+The RAMV structure organizes projects hierarchically:
+- Project Root (XX-##### format)
+  - 2. Graphic & Media/
+    - 3. Rendering-Animation-Video/
+      - 3D Base Model/Rev X/
+      - Proposal Views/Rev X/scenes/
+      - Renders/Rev X/scenes/
+      - Storyboard/Rev X/scenes/
+      - Animation/Rev X/scenes/
+      - tmp/Rev X/
+
+Key Features:
+- Canonical RAMV directory path construction
+- Project type-based directory mapping (BASE, PV, REND, SB, ANIM, TMP)
+- Automatic scenes directory creation for applicable project types
+- Backups directory management per revision
+- Integration with Lime Pipeline naming conventions
+- Path validation and error handling for missing directories
+"""
+
 from pathlib import Path
 
 # Canonical RAMV directory segments under a project root

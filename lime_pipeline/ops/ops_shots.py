@@ -1,3 +1,23 @@
+"""
+SHOT Management Operators
+
+This module provides comprehensive functionality for creating, managing, and organizing
+SHOT scenes within the Lime Pipeline workflow. SHOTs represent individual scene files
+that are organized sequentially for production pipelines.
+
+The operators handle SHOT lifecycle including creation, duplication, validation, and
+maintenance of proper SHOT naming conventions and collection structures.
+
+Key Features:
+- Automated SHOT creation with proper numbering and naming
+- SHOT duplication with intelligent renaming and structure preservation
+- Integration with Lime Pipeline project naming conventions
+- Validation of SHOT contexts and prerequisites
+- Collection tree management for SHOT organization
+- Sequential SHOT numbering and tracking
+- Error handling and user feedback for SHOT operations
+"""
+
 import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty

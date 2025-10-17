@@ -1,3 +1,23 @@
+"""
+Material Alpha Mix Operators
+
+This module provides functionality for mixing materials with transparency based on
+object alpha values. It automatically modifies material node trees to incorporate
+transparent shaders mixed with existing surface shaders using object alpha information.
+
+The operators handle complex material node tree manipulation, creating proper shader
+mixes and connections to maintain material appearance while adding alpha transparency
+support for object-level visibility control.
+
+Key Features:
+- Automatic material node tree modification for alpha mixing
+- Integration with object alpha values for transparency control
+- Preservation of existing material properties during mixing
+- Support for complex shader node hierarchies
+- Validation of material node trees before modification
+- Error handling for incompatible material setups
+"""
+
 from __future__ import annotations
 
 import bpy

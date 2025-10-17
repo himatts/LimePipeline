@@ -1,3 +1,21 @@
+"""
+Revision Navigation Operators
+
+This module provides functionality for navigating between project revisions using
+the Lime Pipeline revision letter system. It allows users to cycle through revision
+letters (A-Z) for organizing different versions or iterations of project assets.
+
+The revision system integrates with Lime Pipeline settings to maintain revision
+state and provide intuitive navigation between different project versions.
+
+Key Features:
+- Alphabetical revision navigation (A-Z)
+- Integration with Lime Pipeline settings and state management
+- Cyclic navigation with wraparound from Z to A and A to Z
+- Validation of revision letter format and constraints
+- Error handling for missing or invalid revision settings
+"""
+
 import bpy
 
 

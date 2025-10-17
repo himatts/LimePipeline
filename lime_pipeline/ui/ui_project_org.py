@@ -1,3 +1,13 @@
+"""
+UI to configure project naming (type, revision, scene) and saving helpers.
+
+Purpose: Centralize project root selection, enforce naming invariants, preview filename,
+and expose actions to create blend files, backups and folders.
+Key classes: LIME_PT_project_org.
+Depends on: lime_pipeline.core.validate and ops (save/create/folders).
+Notes: UI-only; mirrors architecture invariants for quick validation.
+"""
+
 import bpy
 from bpy.types import Panel
 

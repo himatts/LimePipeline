@@ -1,3 +1,13 @@
+"""
+UI utilities for scene dimension checking and measurement unit presets.
+
+Purpose: Display a dimension checker operator and quick buttons to apply standard
+measurement units (MM/CM/M/IN/FT) to the current scene.
+Key classes: LIME_PT_dimension_utilities, LIME_OT_set_unit_preset.
+Depends on: Blender unit settings; optional addon preferences.
+Notes: UI-only; unit changes are applied through a lightweight operator.
+"""
+
 import bpy
 from bpy.types import Panel, Operator
 from bpy.props import EnumProperty
@@ -108,6 +118,7 @@ class LIME_OT_set_unit_preset(Operator):
 
 
 class LIME_PT_dimension_utilities(Panel):
+    """Panel with dimension checker and measurement unit controls."""
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT

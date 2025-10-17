@@ -1,3 +1,13 @@
+"""
+UI for render presets, resolution shortcuts, and output utilities.
+
+Purpose: Apply/save/clear global render presets, toggle denoising, set resolution via
+shortcuts (with UHD toggle), and open output folders.
+Key classes: LIME_PT_render_configs, LIME_PT_render_preset_actions, LIME_PT_render_outputs.
+Depends on: ops.ops_render_presets and core naming/paths helpers.
+Notes: UI-only; reads addon preferences and scene settings.
+"""
+
 import bpy
 from bpy.types import Panel
 from bpy.props import BoolProperty

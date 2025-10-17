@@ -1,3 +1,24 @@
+"""
+Dimension Checker Operators
+
+This module provides dimension checking and measurement functionality for objects in
+Blender scenes. It creates visual dimension overlays and helps verify object sizes
+and spatial relationships within the Lime Pipeline workflow.
+
+The dimension checker creates measurement helpers and visual indicators for object
+dimensions, allowing artists to verify scale and positioning accuracy. It supports
+various measurement modes and integrates with Blender's 3D viewport overlay system.
+
+Key Features:
+- Visual dimension overlay system with customizable display options
+- Object size measurement and verification tools
+- Integration with Blender's 3D viewport for real-time dimension checking
+- Support for different measurement orientations and modes
+- Customizable visual styling for dimension indicators
+- Collection-based organization of dimension helpers
+- Real-time updates during object manipulation
+"""
+
 import math
 from typing import NamedTuple
 

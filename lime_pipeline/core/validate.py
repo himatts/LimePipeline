@@ -1,3 +1,26 @@
+"""
+UI State Validation and Path Resolution
+
+This module provides comprehensive validation for Lime Pipeline UI state and automatic
+path resolution for project file placement. It validates project settings, computes
+target paths, and ensures compliance with Lime Pipeline naming and organizational
+conventions.
+
+The validation system checks project root validity, revision letters, scene numbers,
+directory structure compliance, and file path constraints before allowing file
+creation or project operations to proceed.
+
+Key Features:
+- Complete UI state validation with detailed error reporting
+- Automatic project path resolution following RAMV structure
+- Scene number validation with step constraints and existence checking
+- Project root validation with pattern matching and studio invariants
+- Path length validation with configurable warning and error thresholds
+- Duplicate file detection and prevention
+- Integration with Lime Pipeline preferences and settings
+- Comprehensive error categorization (errors vs warnings)
+"""
+
 from __future__ import annotations
 
 import os

@@ -1,11 +1,29 @@
 """
-Auto Camera Background Operator
-Creates and manages background planes that automatically follow the active camera
-based on timeline markers, filling the camera frame completely.
+Auto Camera Background Operators
 
-DEBUG STATUS: COMPLETAMENTE DESACTIVADO
-- No se generan mensajes de debug en consola durante uso normal
-- Todas las funciones de debug han sido eliminadas o desactivadas
+This module provides comprehensive functionality for creating and managing automatic
+camera background planes that follow the active camera based on timeline markers.
+The system creates background planes that automatically fill the camera frame and
+update their position, rotation, and scale in real-time.
+
+The auto camera background system supports:
+- Automatic background plane creation and placement in SHOT collections
+- Real-time tracking of camera movements based on timeline markers
+- Configurable distance and padding parameters for frame filling
+- Support for both perspective and orthographic cameras
+- Live update handlers for smooth animation playback
+- Baking of background animations to keyframes for static shots
+- Comprehensive cleanup and state management utilities
+
+Key Features:
+- Marker-based camera tracking with automatic plane positioning
+- Configurable distance and padding for frame coverage control
+- Support for multiple background planes per scene
+- SHOT-based organization and collection management
+- Live update system with performance optimizations
+- Bake-to-keyframes functionality for static animation
+- Diagnostic and cleanup utilities for troubleshooting
+- Comprehensive error handling and user feedback
 """
 from __future__ import annotations
 import bpy

@@ -1,3 +1,23 @@
+"""
+Tooltip and Information Display Operators
+
+This module provides functionality for displaying detailed information and tooltips
+within the Lime Pipeline interface. It handles the presentation of contextual help,
+detailed descriptions, and informational content to users.
+
+The tooltip system supports dynamic content display, clipboard integration for
+easy information sharing, and customizable presentation modes for different types
+of informational content.
+
+Key Features:
+- Dynamic tooltip display with customizable content
+- Clipboard integration for easy information copying
+- Context-sensitive information presentation
+- Support for multi-line text and formatted content
+- Integration with Blender's operator description system
+- Configurable display modes and interaction options
+"""
+
 import bpy
 from bpy.types import Operator
 from bpy.props import StringProperty, BoolProperty

@@ -1,3 +1,22 @@
+"""
+Render Presets Management Operators
+
+This module provides functionality for managing and applying render presets within
+the Lime Pipeline workflow. It handles the creation, storage, and application of
+render settings configurations for consistent output across projects.
+
+The preset system supports multiple preset slots, versioning, and integration with
+Lime Pipeline's property system for seamless preset management and application.
+
+Key Features:
+- Multiple preset slots for different render configurations
+- Preset versioning and data validation
+- Integration with Lime Pipeline property system
+- UI state management and refresh handling
+- Batch preset application and management
+- Error handling for invalid preset data
+"""
+
 import json
 from typing import Any, Dict, Optional
 

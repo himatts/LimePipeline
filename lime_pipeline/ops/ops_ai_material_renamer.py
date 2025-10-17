@@ -1,3 +1,26 @@
+"""
+AI Material Renamer Operators
+
+This module provides operators for AI-powered material renaming and management in Blender.
+It integrates with external AI services to analyze material properties and suggest
+appropriate names based on material taxonomy and naming conventions.
+
+The operators handle various aspects of the AI material renaming workflow:
+- Testing AI service connections
+- Scanning materials for analysis
+- Generating renaming proposals
+- Applying approved name changes
+- Managing material selection states
+
+Key Features:
+- Integrates with external AI services for material analysis
+- Supports batch material processing with progress tracking
+- Maintains material naming consistency with Lime Pipeline conventions
+- Provides selection management for large material sets
+- Includes connection testing and error handling for AI services
+- Supports taxonomy-based material type detection and validation
+"""
+
 from __future__ import annotations
 
 import json

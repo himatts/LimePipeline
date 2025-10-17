@@ -1,3 +1,25 @@
+"""
+Project and Scene Naming Utilities
+
+This module provides comprehensive utilities for Lime Pipeline project and scene naming
+conventions, filename parsing, and project root detection. It handles the canonical
+naming scheme used throughout the pipeline for consistent file organization.
+
+The naming system supports project identification (XX-##### format), scene numbering
+(SC###), revision tracking (Rev A-Z), and automatic project type detection from
+filenames. It includes utilities for normalizing project names, parsing file metadata,
+and finding project roots within directory structures.
+
+Key Features:
+- Project name normalization with diacritic removal and special character handling
+- Canonical filename format: {ProjectName}_{Type}_SC{###}_Rev_{Letter}
+- Bidirectional mapping between project types and filename tokens
+- Automatic project root detection by walking up directory trees
+- Scene metadata parsing from .blend filenames
+- Windows reserved character filtering and path safety
+- Integration with RAMV directory structure conventions
+"""
+
 from __future__ import annotations
 
 import re

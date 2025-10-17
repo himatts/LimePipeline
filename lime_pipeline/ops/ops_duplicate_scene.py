@@ -1,3 +1,23 @@
+"""
+Scene Duplication Operators
+
+This module provides functionality for duplicating Blender scenes while maintaining
+Lime Pipeline conventions and relationships. It handles complex scene duplication
+with proper renaming, collection management, and preservation of SHOT structures.
+
+The duplication process involves analyzing scene naming patterns, managing collection
+hierarchies, and ensuring that duplicated scenes maintain proper relationships with
+their source scenes while following Lime Pipeline organizational principles.
+
+Key Features:
+- Intelligent scene duplication with naming pattern recognition
+- Collection hierarchy preservation and management
+- SHOT structure maintenance across duplicated scenes
+- Integration with camera rigs and alpha event systems
+- Comprehensive validation and error handling for complex duplications
+- Support for sequential scene numbering and organization
+"""
+
 from __future__ import annotations
 
 from typing import Dict, Iterator, Sequence

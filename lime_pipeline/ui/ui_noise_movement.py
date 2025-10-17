@@ -1,3 +1,14 @@
+"""
+UI for noise movement profiles applied to object transforms.
+
+Purpose: Define reusable noise profiles (Location/Rotation/Scale) and apply/sync them to
+selected or affected objects via operators from ops.ops_noise.
+Key classes: LIME_TB_PT_noisy_movement, LIME_TB_UL_noise_names, LIME_TB_UL_noise_objects,
+             LimeTBNoiseProfile, LimeTBNoiseAffectedItem.
+Depends on: lime_pipeline.ops.ops_noise (apply/sync helpers).
+Notes: UI-only; this module manages properties and delegates heavy logic to ops.
+"""
+
 import bpy
 from bpy.types import Panel, UIList, PropertyGroup
 from bpy.props import (
@@ -72,10 +83,12 @@ def _on_noise_profile_param_update(self, context):
 
 
 class LimeTBNoiseAffectedItem(PropertyGroup):
+    """Row item listing an object affected by a given noise profile."""
     name: StringProperty(name="Object")
 
 
 class LimeTBNoiseProfile(PropertyGroup):
+    """Noise profile parameters for Location/Rotation/Scale channels."""
     # Name is the anchor across scene
     name: StringProperty(name="Name", description="Noise profile name (used to tag F-Modifiers)", update=_on_noise_profile_name_update)
     prev_name: StringProperty(options={'HIDDEN', 'SKIP_SAVE'})
@@ -131,6 +144,7 @@ class LimeTBNoiseProfile(PropertyGroup):
 
 
 class LIME_TB_UL_noise_names(UIList):
+    """UIList of noise profiles with inline rename and status icons."""
     bl_idname = "LIME_TB_UL_noise_names"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):
@@ -144,6 +158,7 @@ class LIME_TB_UL_noise_names(UIList):
 
 
 class LIME_TB_UL_noise_objects(UIList):
+    """UIList of objects affected by the active noise profile."""
     bl_idname = "LIME_TB_UL_noise_objects"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):
@@ -215,6 +230,7 @@ def unregister_noise_props():
 
 
 class LIME_TB_PT_noisy_movement(Panel):
+    """Panel to manage noise profiles and apply them to objects."""
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT

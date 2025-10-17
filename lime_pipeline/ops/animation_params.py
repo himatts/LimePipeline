@@ -1,4 +1,22 @@
-﻿import bpy
+"""
+Animation Parameters Operators
+
+This module provides operators for applying animation parameters and keyframe styling
+to objects in Blender scenes. It handles the application of interpolation and easing
+settings from Lime Pipeline animation parameters to selected keyframes.
+
+The main operator applies the current Lime Animation Parameters (interpolation & easing)
+to selected keyframes in the active/selected objects, supporting various interpolation
+types (BEZIER, LINEAR, CONSTANT) and easing functions (SINE, QUAD, CUBIC, etc.).
+
+Key Features:
+- Applies interpolation and easing settings to keyframes
+- Supports multiple easing functions for smooth animation curves
+- Processes all selected objects and their animation data
+- Validates animation parameters before application
+"""
+
+import bpy
 from bpy.types import Operator
 
 

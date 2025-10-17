@@ -1,3 +1,22 @@
+"""
+Folder Management Operators
+
+This module provides functionality for creating and managing critical project folders
+within the Lime Pipeline directory structure. It ensures that all necessary directories
+exist for proper project organization and file management.
+
+The operators handle folder creation for various project components including backups,
+renders, assets, and other critical directories required by the Lime Pipeline workflow.
+
+Key Features:
+- Automatic creation of project-critical directory structures
+- Integration with Lime Pipeline project root settings
+- Validation of existing folder structures before creation
+- Error handling for permission and path issues
+- Support for both relative and absolute path configurations
+- Automatic path resolution from current file context
+"""
+
 import os
 import sys
 import subprocess

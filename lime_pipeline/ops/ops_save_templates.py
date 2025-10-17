@@ -1,3 +1,22 @@
+"""
+Template Saving Operators
+
+This module provides functionality for saving scene templates and configurations
+within the Lime Pipeline workflow. It handles the creation and management of
+reusable scene templates for consistent project setup and asset organization.
+
+The template system supports saving current scene state, collection structures,
+and project configurations for reuse across different projects and shots.
+
+Key Features:
+- Scene template creation and management
+- Integration with Lime Pipeline project structure
+- Template versioning and organization
+- Validation of template data before saving
+- Support for different template types and categories
+- Error handling for template creation failures
+"""
+
 from __future__ import annotations
 
 import bpy

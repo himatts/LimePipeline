@@ -1,3 +1,13 @@
+"""
+UI to manage alpha fade events using Driver or Keyframe modes.
+
+Purpose: Create and edit alpha events with start/end frames and direction (in/out),
+rebuild drivers when needed, and provide assignment utilities.
+Key classes: LIME_TB_PT_alpha_manager, LIME_TB_UL_alpha_events.
+Depends on: lime_pipeline.ops.ops_alpha_manager (operators and props).
+Notes: UI-only; warns if Auto Run Scripts is disabled.
+"""
+
 import bpy
 from bpy.types import Panel, UIList
 

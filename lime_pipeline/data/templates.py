@@ -1,6 +1,23 @@
-"""Declarative templates and constants for scene structure.
+"""
+Scene Structure Templates and Constants
 
-This module defines the canonical SHOT subtree and duplication policies.
+This module defines the canonical SHOT subtree structure, naming conventions,
+and duplication policies used throughout the Lime Pipeline workflow. It provides
+the foundational data structures that ensure consistent scene organization
+and object duplication behavior.
+
+The templates define the hierarchical structure of SHOT collections, including
+camera setups, lighting, main assets, props, and background elements. The
+duplication policies control how objects and data blocks are handled during
+scene duplication operations.
+
+Key Features:
+- Canonical SHOT collection hierarchy with standardized naming
+- Collection naming constants for cameras, lights, main assets, and backgrounds
+- Duplication policy definitions (DUPLICATE, INSTANCE, SKIP)
+- SHOT tree structure templates for consistent scene creation
+- Integration with Lime Pipeline naming conventions
+- Centralized constants to avoid duplication across modules
 """
 
 # Naming constants

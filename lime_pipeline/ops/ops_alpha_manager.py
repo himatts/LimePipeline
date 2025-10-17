@@ -1,4 +1,25 @@
-﻿from __future__ import annotations
+"""
+Alpha Events Manager Operators
+
+This module provides operators for managing alpha (transparency) events and fade
+animations for objects in Blender scenes. It handles the creation, management,
+and application of alpha events that control object visibility over time.
+
+The system supports multiple alpha modes (fade in/out, dissolve), event management
+(add, duplicate, delete, rename), and driver-based animation curve generation.
+It integrates with Blender's animation system to create smooth transparency transitions.
+
+Key Features:
+- Event-based alpha management with named fade events
+- Support for multiple alpha modes (FADE, DISSOLVE)
+- Driver-based animation curve generation for smooth transitions
+- Object selection and membership management for alpha events
+- Frame-accurate alpha keyframe baking and cleanup
+- Integration with Blender's animation and driver systems
+- Playback-optimized with message filtering during animation playback
+"""
+
+from __future__ import annotations
 
 import re
 from typing import Iterable, Sequence

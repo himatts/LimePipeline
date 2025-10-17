@@ -1,4 +1,28 @@
-"""Operators for the 3D Model Organizer panel."""
+"""
+3D Model Organizer Operators
+
+This module provides comprehensive functionality for organizing and managing 3D models
+within Blender scenes through the Lime Pipeline Model Organizer panel. It includes
+tools for creating controller empties, managing object hierarchies, applying visual
+organization, and automating selection workflows.
+
+The model organizer system supports:
+- Automatic creation of controller empties for object grouping
+- Hierarchy-based visual colorization for quick identification
+- Transform application and delta management for scene cleanup
+- Automatic selection propagation through object hierarchies
+- Location offset detection and transform application utilities
+
+Key Features:
+- Controller empty creation with bounds-based sizing and positioning
+- Visual hierarchy colorization using HSV color space distribution
+- Automatic child selection when parent objects are selected
+- Transform-to-deltas application for objects with non-zero locations
+- Geometry-based object filtering and hierarchy traversal
+- Comprehensive bounds calculation including modifier evaluation
+- Error handling and validation for complex object hierarchies
+- Integration with Blender's selection and transform systems
+"""
 
 import bpy
 import colorsys

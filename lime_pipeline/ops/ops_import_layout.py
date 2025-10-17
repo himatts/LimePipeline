@@ -1,3 +1,22 @@
+"""
+Layout Import Operators
+
+This module provides functionality for importing layout assets and workspaces from
+Lime Pipeline libraries. It handles the import of pre-configured layouts and workspace
+setups that accelerate project setup and maintain consistency.
+
+The import system supports configurable library paths, workspace creation, and
+integration with Lime Pipeline project structures for rapid scene setup.
+
+Key Features:
+- Import of pre-configured layout workspaces from libraries
+- Configurable library paths with user preference overrides
+- Automatic workspace creation and configuration
+- Integration with Lime Pipeline project structure conventions
+- Error handling for missing libraries and import failures
+- Support for multiple layout configurations
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

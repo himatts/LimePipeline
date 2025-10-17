@@ -1,3 +1,13 @@
+"""
+UI to set interpolation/easing defaults for new keyframes and post-process frames.
+
+Purpose: Let users choose interpolation and easing; install a depsgraph handler to
+apply styles to keyframes at the current frame when enabled.
+Key classes: LIME_TB_PT_animation_params.
+Depends on: Blender keyframe preferences; operators lime.tb_apply_keyframe_style.
+Notes: UI-only; handler is resilient and can be toggled.
+"""
+
 import bpy
 from bpy.types import Panel, UIList, PropertyGroup
 from bpy.props import (

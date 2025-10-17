@@ -1,3 +1,22 @@
+"""
+Noise Animation Operators
+
+This module provides functionality for generating procedural noise-based animations
+and movements for objects in Blender scenes. It creates random or noise-driven
+animations for object properties like location, rotation, and scale.
+
+The noise system supports various animation curves, randomization patterns, and
+integration with Blender's animation system for creating organic, procedural motion.
+
+Key Features:
+- Procedural noise-based animation generation
+- Support for multiple object properties (location, rotation, scale)
+- Configurable noise patterns and randomization
+- Integration with Blender's animation and f-curve system
+- Batch processing of multiple objects
+- Validation of animation data before modification
+"""
+
 import bpy
 import random
 from bpy.types import Operator

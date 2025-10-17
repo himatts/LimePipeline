@@ -1,8 +1,19 @@
+"""
+UI to review and apply AI-proposed material renames according to naming rules.
+
+Purpose: Scan materials, show status (VALID/NEEDS_RENAME/etc.), allow filtering and applying
+proposed names safely.
+Key classes: LIME_TB_PT_ai_material_renamer, LIME_TB_UL_ai_mat_rows.
+Depends on: lime_pipeline.props_ai_materials state and ops with prefix lime_tb.ai_*.
+Notes: UI-only; heavy logic lives in operators and props definitions.
+"""
+
 import bpy
 from bpy.types import Panel, UIList
 
 
 class LIME_TB_UL_ai_mat_rows(UIList):
+    """List rows summarizing each material status and proposed name."""
     bl_idname = "LIME_TB_UL_ai_mat_rows"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
@@ -128,6 +139,7 @@ class LIME_TB_UL_ai_mat_rows(UIList):
 
 
 class LIME_TB_PT_ai_material_renamer(Panel):
+    """Panel to visualize AI rename suggestions and apply them in batch."""
     bl_label = "AI Material Renamer"
     bl_idname = "LIME_TB_PT_ai_material_renamer"
     bl_space_type = 'VIEW_3D'

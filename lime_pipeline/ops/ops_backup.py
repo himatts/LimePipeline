@@ -1,3 +1,22 @@
+"""
+Backup Creation Operators
+
+This module provides functionality for creating numbered backup copies of Blender files.
+It implements an automatic backup system that creates sequentially numbered backup files
+in a designated backups folder, preventing accidental overwrites.
+
+The backup system uses a naming convention (Backup_XX_filename) where XX is a
+two-digit incremental number. It automatically determines the next available number
+and creates the backup in the configured backups directory.
+
+Key Features:
+- Automatic sequential backup numbering (Backup_01_, Backup_02_, etc.)
+- Configurable backup directory through addon preferences
+- Validation of backup directory existence and write permissions
+- Integration with Lime Pipeline settings for project-specific backups
+- Error handling for file system operations and permission issues
+"""
+
 import re
 import shutil
 from pathlib import Path
