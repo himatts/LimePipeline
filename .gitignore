@@ -25,3 +25,11 @@ Thumbs.db
 # Repomix output files
 .repomix/
 repomix-output.xml
+
+# Documentation
+pyproject.toml
+mkdocs.yml
+fix_bom.py
+tools/
+site/
+docs/

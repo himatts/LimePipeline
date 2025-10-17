@@ -1,3 +1,22 @@
+"""
+Lime Pipeline - Blender Addon for Project Organization and Standardization
+
+This addon provides tools for standardizing Blender project structure, naming conventions,
+and workflow automation for content creation pipelines. It handles SHOT collections,
+render outputs, material normalization, camera rigs with margins, and backup management.
+
+Main features:
+- Project naming and file organization
+- SHOT collection management with automatic scene setup
+- Camera rigs with configurable margin backgrounds
+- AI-assisted material renaming and normalization
+- Render preset management and proposal outputs
+- Automated folder structure creation
+- Backup system with versioning
+
+UI Location: View3D > Sidebar (N) > Lime Pipeline
+"""
+
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
@@ -148,7 +167,9 @@ from .ops.ops_auto_camera_bg import (
 )
 
 
+# Class collections for organized registration
 NON_PANEL_CLASSES = (
+    # Preferences and core utilities
     LimePipelinePrefs,
     LIME_TB_UL_alpha_events,
     LIME_OT_pick_root,
@@ -256,10 +277,27 @@ TOOLBOX_PANEL_CLASSES = (
 )
 
 def _panel_is_child(cls) -> bool:
+    """Check if a panel class is a child panel by examining bl_parent_id attribute.
+
+    Args:
+        cls: Panel class to check
+
+    Returns:
+        bool: True if panel has a parent (is a child panel)
+    """
     return bool(getattr(cls, 'bl_parent_id', '') or '')
 
 
 def _panel_order(cls, default: int = 0) -> int:
+    """Get the panel ordering value from bl_order attribute.
+
+    Args:
+        cls: Panel class to get order from
+        default: Default order value if bl_order is not set or invalid
+
+    Returns:
+        int: Panel order value, or default if invalid
+    """
     try:
         value = getattr(cls, 'bl_order', default)
     except Exception:
@@ -271,12 +309,35 @@ def _panel_order(cls, default: int = 0) -> int:
 
 
 def _panel_sort_tuple(cls):
+    """Create a sorting tuple for panel classes.
+
+    Used for consistent panel ordering during registration.
+    Order: (bl_order, bl_label, class_name)
+
+    Args:
+        cls: Panel class to create sort tuple for
+
+    Returns:
+        tuple: (order_int, label_str, class_name_str) for sorting
+    """
     return (_panel_order(cls), getattr(cls, 'bl_label', '') or '', cls.__name__)
 
 
+# Global list to track registered classes for proper cleanup
 REGISTERED_CLASSES = []
 
 def register():
+    """Register all Lime Pipeline classes, properties, and handlers.
+
+    This function performs the complete addon registration:
+    1. Registers all property groups (WindowManager, Scene, etc.)
+    2. Sets up panel categories ("Lime Pipeline", "Lime Toolbox")
+    3. Registers classes in hierarchical order (parents before children)
+    4. Adds load_post handler for automatic state hydration
+    5. Initializes render presets and default values
+
+    Called automatically by Blender when the addon is enabled.
+    """
     global REGISTERED_CLASSES
     # Helpful log to ensure the source path being loaded (detect duplicates/stale installs)
     try:
@@ -369,6 +430,15 @@ def register():
         pass
 
 def unregister():
+    """Unregister all Lime Pipeline classes, properties, and handlers.
+
+    Performs cleanup in reverse order:
+    1. Removes load_post handler
+    2. Unregisters all classes in reverse registration order
+    3. Cleans up all property groups
+
+    Called automatically by Blender when the addon is disabled.
+    """
     global REGISTERED_CLASSES
     disable_dimension_overlay_guard()
     for cls in reversed(REGISTERED_CLASSES):
@@ -399,6 +469,19 @@ def unregister():
 
 @persistent
 def _on_load_post(dummy):
+    """Persistent handler called after loading a .blend file.
+
+    Automatically hydrates the addon state from the current file path:
+    1. Parses filename to extract project settings (type, revision, scene)
+    2. Updates WindowManager properties to match the loaded file
+    3. Initializes render preset slots if needed
+    4. Sets up default UHD resolution values
+
+    This ensures the UI reflects the current project state without manual setup.
+
+    Args:
+        dummy: Required by Blender handler signature but unused
+    """
     try:
         st = bpy.context.window_manager.lime_pipeline
     except Exception:
