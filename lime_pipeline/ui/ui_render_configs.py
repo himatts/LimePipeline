@@ -98,6 +98,12 @@ class LIME_PT_render_configs(Panel):
 
         layout.separator()
 
+        anim_box = layout.box()
+        anim_box.label(text="Output Files (Animation)")
+        anim_row = anim_box.row(align=True)
+        anim_row.operator("lime.set_anim_output_test", text="Set Anim Output: Test", icon='FILE_CACHE')
+        anim_row.operator("lime.set_anim_output_final", text="Set Anim Output: Final", icon='RENDER_ANIMATION')
+
         cy = getattr(scene, 'cycles', None)
 
         render_box = layout.box()
@@ -336,4 +342,3 @@ __all__ = [
     "register_render_shortcut_props",
     "unregister_render_shortcut_props",
 ]
-

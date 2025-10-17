@@ -28,7 +28,12 @@ bl_info = {
 }
 
 import bpy
-from bpy.app.handlers import persistent
+try:
+    from bpy.app.handlers import persistent
+except ImportError:
+    # Fallback for newer Blender versions
+    def persistent(func):
+        return func
 
 # Registration is centralized here to keep imports stable for future growth
 from .prefs import LimePipelinePrefs
@@ -83,6 +88,10 @@ from .ui import register_shot_list_props, unregister_shot_list_props
 from .ops.ops_select_root import LIME_OT_pick_root
 from .ops.ops_folders import LIME_OT_ensure_folders, LIME_OT_open_folder
 from .ops.ops_folders import LIME_OT_open_output_folder
+from .ops.ops_anim_output import (
+    LIME_OT_set_anim_output_test,
+    LIME_OT_set_anim_output_final,
+)
 from .ops.ops_create_file import LIME_OT_create_file
 from .ops.ops_backup import LIME_OT_create_backup
 from .ops.ops_tooltips import LIME_OT_show_text
@@ -176,6 +185,8 @@ NON_PANEL_CLASSES = (
     LIME_OT_ensure_folders,
     LIME_OT_open_folder,
     LIME_OT_open_output_folder,
+    LIME_OT_set_anim_output_test,
+    LIME_OT_set_anim_output_final,
     LIME_OT_create_file,
     LIME_OT_create_backup,
     LIME_OT_show_text,
