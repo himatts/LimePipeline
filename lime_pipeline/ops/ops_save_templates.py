@@ -248,11 +248,6 @@ class LIME_OT_save_as_with_template_raw(LIME_OT_save_as_with_template):
     bl_label = "Save As Raw (Template)"
     bl_description = "Open file browser with suggested path and filename for RAW render"
 
-    ptype: StringProperty(name="Project Type", default="REND")
-    filepath: StringProperty(name="File Path", subtype='FILE_PATH')
-    # Image name captured at invoke-time from the Image Editor
-    image_name: StringProperty(name="Image Name", default="")
-
     def _build_suggested_path(self, context) -> str:
         """Build path for RAW render: editables/RAW/ with RAW_ prefix."""
         wm = context.window_manager
