@@ -90,7 +90,11 @@ def build_version(index: int) -> str:
 # -----------------------------------------------------------------------------
 
 def parse_name(name: str) -> Optional[Dict[str, str]]:
-    """Parse material names adhering to MAT_{MaterialType}_{MaterialFinish}_{Version}."""
+    """Parse material names adhering to MAT_{Tag?}_{MaterialType}_{MaterialFinish}_{Version}.
+
+    The scene tag component is optional. When present, it is stored in the returned dict
+    under ``scene_tag``.
+    """
     if not name or INVALID_CHARS_PATTERN.search(name):
         return None
 
@@ -98,19 +102,35 @@ def parse_name(name: str) -> Optional[Dict[str, str]]:
     if len(parts) < 4 or parts[0] != PREFIX:
         return None
 
-    material_type_raw = parts[1]
+    scene_tag = ""
     version_block = parts[-1]
-    if len(parts) == 3:
-        finish_raw = parts[2]
-    else:
-        finish_raw = SEPARATOR.join(parts[2:-1])
+
+    type_index = 1
+    material_type_raw = parts[type_index]
+
+    material_type = normalize_material_type(material_type_raw)
+
+    if material_type not in ALLOWED_MATERIAL_TYPES:
+        # Names may include an optional scene tag between prefix and type.
+        # Detect this by checking the next token as potential material type.
+        if len(parts) >= 5:
+            candidate_raw = parts[type_index + 1]
+            candidate_type = normalize_material_type(candidate_raw)
+            if candidate_type in ALLOWED_MATERIAL_TYPES:
+                scene_tag = material_type_raw
+                type_index += 1
+                material_type_raw = parts[type_index]
+                material_type = candidate_type
+        if material_type not in ALLOWED_MATERIAL_TYPES:
+            return None
+
+    finish_parts = parts[type_index + 1:-1]
+    if not finish_parts:
+        return None
+    finish_raw = SEPARATOR.join(finish_parts)
 
     version_idx = parse_version(version_block)
     if version_idx is None:
-        return None
-
-    material_type = normalize_material_type(material_type_raw)
-    if material_type not in ALLOWED_MATERIAL_TYPES:
         return None
 
     finish = normalize_finish(finish_raw)
@@ -118,6 +138,7 @@ def parse_name(name: str) -> Optional[Dict[str, str]]:
         return None
 
     return {
+        "scene_tag": scene_tag,
         "material_type": material_type,
         "finish": finish,
         "version": build_version(version_idx),

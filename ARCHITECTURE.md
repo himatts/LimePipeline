@@ -8,9 +8,10 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ## Modules and boundaries
 
 ### core (pure-ish Python)
-- Files: `core/material_naming.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/__init__.py`
+- Files: `core/material_naming.py`, `core/material_quality.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/__init__.py`
 - Responsibilities:
   - Material naming helpers: parse/build MAT_{TagEscena}_{Familia}_{Acabado}_{V##}, normalize components, enforce version blocks
+  - Material quality heuristics: score existing names, classify excellence vs review needs, surface taxonomy-aligned hints
   - Project naming: normalize project names, build canonical filenames, detect/parse .blend names
   - Paths: map project type + rev + scene to folder targets
   - Validation: sanity checks for save operations (errors/warnings, path length)
@@ -72,14 +73,14 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 
 
 ### AI Material Renamer (AI-assisted)
-1. User clicks **Search Materials**. `ops_ai_material_renamer.ai_scan_materials` detects incorrect materials locally using `detect_issues`, marks `needs_rename`, and counts incorrectos/totales.
-2. **Selective AI query**: only materials with `needs_rename=True` are sent to OpenRouter with enriched metadata (`texture_basenames`, `object_hints`, `collection_hints`).
-3. Proposals are stored in `Scene.lime_ai_mat.rows` with `needs_rename`, family/finish/version, and similar_group_id.
-4. UI displays 2-column list: Actual | Propuesto (editable for incorrectos or if unlocked).
-5. User can edit `proposed_name` directly; **Apply Rename** parses/edits, normalizes, bumps V## deterministically, and renames in place.
-6. **Toggle Show/Hide Correct**: filters to show only incorrectos (default) or all.
-7. **Refresh Order**: reorders by `(SceneTag, Family, Finish, V##)` for consistency.
-8. **Clear** removes proposals without renaming.
+1. User clicks **Search Materials**. `ops_ai_material_renamer.ai_scan_materials` now evaluates every material with `detect_issues` + `material_quality.evaluate_material_name`, marking rename needs or manual review and counting totals.
+2. **Selective AI query**: only materials flagged for rename (or forced re-analysis) are sent to OpenRouter with enriched metadata and quality hints (`texture_basenames`, `object_hints`, `collection_hints`, confidence baseline).
+3. Proposals are stored in `Scene.lime_ai_mat.rows` with quality metadata (`quality_label`, `quality_score`, `review_requested`), family/finish/version, and similarity fingerprints.
+4. UI displays status, quality, confidence and proposals; a per-row **Review** toggle keeps excellent names visible without forcing a rename.
+5. Users edit `proposed_name` for actionable or review rows; **Apply Rename** normalizes, bumps V## deterministically, and respects manual selections while preserving untouched excellent names.
+6. Selection helpers consider rename needs and review toggles; applying without a custom proposal leaves the original name intact.
+7. The summary counts in both panel and dialog highlight rename vs review workload and overall quality distribution.
+8. **Clear** removes proposals and resets review toggles without renaming anything.
 
 ### First save (Create .blend)
 1. User selects Project Root, Project Type, Rev letter, Scene (if required)

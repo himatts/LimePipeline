@@ -274,8 +274,70 @@ def get_taxonomy_context(
     }
 
 
+def find_closest_type_match(proposed_type: str, allowed_types: List[str] = None) -> Tuple[str, float]:
+    """
+    Find closest allowed material type by simple similarity.
+    Returns (matched_type, similarity_score 0–1).
+    
+    Note: For more advanced matching, use material_reconciliation.find_closest_type_match.
+    """
+    from .material_reconciliation import similarity_score
+    
+    if allowed_types is None:
+        allowed_types = get_allowed_material_types()
+    
+    if not proposed_type or not allowed_types:
+        return ("Plastic", 0.0)
+    
+    best_match = allowed_types[0]
+    best_score = 0.0
+    
+    for allowed in allowed_types:
+        score = similarity_score(proposed_type, allowed)
+        if score > best_score:
+            best_score = score
+            best_match = allowed
+    
+    return best_match, best_score
+
+
+def find_closest_finish_match(proposed_finish: str, finish_synonyms: Dict[str, List[str]] = None) -> Tuple[str, float]:
+    """
+    Find closest canonical finish by synonym matching or similarity.
+    Returns (matched_finish, similarity_score 0–1).
+    
+    Note: For more advanced matching, use material_reconciliation.find_closest_finish_match.
+    """
+    from .material_reconciliation import similarity_score
+    
+    if not proposed_finish:
+        return ("Generic", 0.0)
+    
+    if finish_synonyms is None:
+        finish_synonyms = get_finish_synonyms()
+    
+    # First pass: exact match in synonyms
+    for canonical, synonyms in finish_synonyms.items():
+        if proposed_finish.lower() in [s.lower() for s in synonyms]:
+            return (canonical, 1.0)
+    
+    # Second pass: similarity matching
+    best_match = "Generic"
+    best_score = 0.0
+    
+    for canonical in finish_synonyms.keys():
+        score = similarity_score(proposed_finish, canonical)
+        if score > best_score:
+            best_score = score
+            best_match = canonical
+    
+    return best_match, best_score
+
+
 __all__ = [
     "extract_tokens",
+    "find_closest_finish_match",
+    "find_closest_type_match",
     "get_allowed_material_types",
     "get_finish_synonyms",
     "get_taxonomy_context",

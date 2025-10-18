@@ -27,6 +27,7 @@ from bpy.props import (
     BoolProperty,
     CollectionProperty,
     EnumProperty,
+    FloatProperty,
     IntProperty,
     PointerProperty,
     StringProperty,
@@ -60,6 +61,7 @@ def _selected_for_apply_update(self, context):
 class LimeAIMatRow(PropertyGroup):
     material_name: StringProperty(name="Material ID")
     proposed_name: StringProperty(name="Proposed")
+    original_proposal: StringProperty(name="Original Proposal", default="", description="Original AI proposal before any normalization")
     material_type: StringProperty(name="Material Type", default="Plastic")
     finish: StringProperty(name="Finish", default="Generic")
     version_token: StringProperty(name="Version", default="V01")
@@ -68,6 +70,59 @@ class LimeAIMatRow(PropertyGroup):
     read_only: BoolProperty(name="Read Only", default=False)
     needs_rename: BoolProperty(name="Needs Rename", default=True)
     selected_for_apply: BoolProperty(name="Selected", default=True, update=_selected_for_apply_update)
+    confidence: bpy.props.FloatProperty(
+        name="Confidence",
+        description="Confidence score from AI (0-1)",
+        default=0.5,
+        min=0.0,
+        max=1.0,
+    )
+    is_indexed: BoolProperty(
+        name="Is Indexed",
+        description="True if proposal matches taxonomy standard",
+        default=False,
+    )
+    taxonomy_match: StringProperty(
+        name="Taxonomy Match",
+        description="Detected taxonomy type/finish or empty if not indexed",
+        default="",
+    )
+    is_normalized: BoolProperty(
+        name="Is Normalized",
+        description="True if proposal was normalized to taxonomy (not original AI proposal)",
+        default=False,
+    )
+    reconciliation_action: bpy.props.EnumProperty(
+        name="Reconciliation Action",
+        items=[
+            ("ACCEPT", "Accept", "Accept proposal as-is"),
+            ("NORMALIZE", "Normalize", "Normalize to closest taxonomy match"),
+            ("MANUAL", "Manual", "Requires manual review"),
+        ],
+        default="ACCEPT",
+    )
+    quality_score: FloatProperty(
+        name="Quality Score",
+        description="Heuristic score of current material name (0-1)",
+        default=0.0,
+        min=0.0,
+        max=1.0,
+    )
+    quality_label: StringProperty(
+        name="Quality Label",
+        description="Quality tier of the current material name (excellent/good/fair/poor/invalid)",
+        default="invalid",
+    )
+    quality_issues: StringProperty(
+        name="Quality Issues",
+        description="Concise summary of detected issues or improvement hints",
+        default="",
+    )
+    review_requested: BoolProperty(
+        name="Review Requested",
+        description="User requested AI re-analysis for this material even if name is already good",
+        default=False,
+    )
 
 
 class LimeAIMatState(PropertyGroup):
@@ -84,6 +139,22 @@ class LimeAIMatState(PropertyGroup):
         ],
         default="NEEDS",
     )
+    scene_context: StringProperty(
+        name="Scene Context",
+        description="Optional context about the scene (e.g. 'kitchen interior, marble, brushed metal')",
+        default="",
+        maxlen=500,
+    )
+    allow_non_indexed: BoolProperty(
+        name="Allow Non-Indexed Proposals",
+        description="If True, accept AI proposals outside taxonomy as experimental; if False, normalize to closest match",
+        default=False,
+    )
+    force_reanalysis: BoolProperty(
+        name="Force Re-analysis",
+        description="If True, include correctly named materials for re-analysis by AI; if False, only analyze incorrectly named materials",
+        default=False,
+    )
 
 
 def register():
@@ -96,5 +167,4 @@ def unregister():
     del bpy.types.Scene.lime_ai_mat
     bpy.utils.unregister_class(LimeAIMatState)
     bpy.utils.unregister_class(LimeAIMatRow)
-
 

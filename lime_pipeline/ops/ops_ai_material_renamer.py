@@ -49,6 +49,8 @@ from ..core.material_naming import (
     strip_numeric_suffix,
 )
 from ..core.material_taxonomy import get_taxonomy_context, get_allowed_material_types
+from ..core.material_reconciliation import reconcile_proposal, apply_batch_normalization
+from ..core.material_quality import evaluate_material_name
 
 
 def _get_active_scene(context) -> Scene:
@@ -147,6 +149,42 @@ def _fingerprint_material(mat: Material) -> str:
     return key
 
 
+def _build_review_proposal_entry(
+    mat: Material,
+    parsed: Optional[Dict[str, object]],
+    universe: List[str],
+    *,
+    quality_label: str,
+    quality_score: float,
+    quality_issues: str,
+    taxonomy_match: str,
+) -> Dict[str, object]:
+    material_name = mat.name
+    material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
+    finish = normalize_finish(parsed["finish"] if parsed else "Generic")
+    current_idx = (parsed.get("version_index") if parsed else None) or 1
+    proposed = bump_version_until_unique(universe, material_type, finish, start_idx=current_idx + 1)
+    parts = proposed.split("_")
+    version_block = parts[-1] if len(parts) > 2 else "V01"
+    return {
+        "material_name": material_name,
+        "proposed_name": proposed,
+        "material_type": material_type,
+        "finish": finish,
+        "version_token": version_block,
+        "read_only": False,
+        "notes": "Review proposal - bumped version",
+        "similar_group_id": _fingerprint_material(mat),
+        "needs_rename": False,
+        "review_requested": True,
+        "selected_for_apply": False,
+        "quality_label": quality_label,
+        "quality_score": quality_score,
+        "quality_issues": quality_issues,
+        "taxonomy_match": taxonomy_match,
+    }
+
+
 _SELECTION_REFRESH_GUARD = 0
 _SELECTION_REFRESH_SUSPENDED = False
 
@@ -183,7 +221,10 @@ def refresh_selection_preview(scene: Optional[Scene] = None) -> None:
 
     try:
         _SELECTION_REFRESH_GUARD += 1
-        _postprocess_statuses(scene)
+        # Get force_reanalysis state from scene
+        state = getattr(scene, 'lime_ai_mat', None)
+        force_reanalysis = getattr(state, 'force_reanalysis', False) if state else False
+        _postprocess_statuses(scene, force_reanalysis)
     finally:
         _SELECTION_REFRESH_GUARD -= 1
 
@@ -206,22 +247,43 @@ def _write_rows(scene: Scene, items: List[Dict[str, object]], incorrect_count: i
             row = state.rows.add()
             row.material_name = str(item.get("material_name") or "")
             row.proposed_name = str(item.get("proposed_name") or "")
+            row.original_proposal = str(item.get("proposed_name") or "")  # Save original AI proposal
             row.material_type = str(item.get("material_type") or "Plastic")
             row.finish = str(item.get("finish") or "Generic")
             row.version_token = str(item.get("version_token") or "V01")
             row.similar_group_id = str(item.get("similar_group_id") or "")
-            row.status = str(item.get("notes") or "")
+            row.status = str(item.get("status") or item.get("notes") or "")
             row.read_only = bool(item.get("read_only") or False)
+            row.confidence = float(item.get("confidence", 0.7) or 0.0)
+            row.is_indexed = bool(item.get("is_indexed", False))
+            row.quality_score = float(item.get("quality_score", 0.0) or 0.0)
+            row.quality_label = str(item.get("quality_label") or "invalid")
+            row.quality_issues = str(item.get("quality_issues") or "")
+            row.review_requested = bool(item.get("review_requested", False))
+            row.taxonomy_match = str(item.get("taxonomy_match") or "")
+            row.is_normalized = bool(item.get("is_normalized", False))
+            row.reconciliation_action = str(item.get("reconciliation_action", "ACCEPT"))
             # If not explicitly provided, infer from current material name validity
             _needs = item.get("needs_rename")
             row.needs_rename = bool(_needs) if _needs is not None else bool(detect_issues(row.material_name))
+
+            # Check if we're in force reanalysis mode
+            state = scene.lime_ai_mat
+            force_reanalysis = getattr(state, "force_reanalysis", False)
+
             default_selected = item.get("selected_for_apply")
             if default_selected is None:
-                default_selected = (not row.read_only) and row.needs_rename
+                # In force reanalysis mode, select materials that need rename OR correctly named materials for re-analysis
+                if force_reanalysis:
+                    # In force reanalysis, select all non-read-only materials by default
+                    # User can then deselect if they don't want to change a particular material
+                    default_selected = not row.read_only
+                else:
+                    default_selected = (not row.read_only) and (row.needs_rename or row.review_requested)
             row.selected_for_apply = bool(default_selected and not row.read_only)
 
             if i < 3:  # Debug first 3 items
-                print(f"[AI Write Rows] Added item {i}: {row.material_name} -> {row.proposed_name} (needs_rename: {row.needs_rename})")
+                print(f"[AI Write Rows] Added item {i}: {row.material_name} -> {row.proposed_name} (confidence: {row.confidence}, needs_rename: {row.needs_rename})")
 
     print(f"[AI Write Rows] Final state: {len(state.rows)} rows")
     refresh_selection_preview(scene)
@@ -381,7 +443,7 @@ def _resequence_selected_rows(rows: Iterable[LimeAIMatRow], existing_names: List
             existing_name_set.add(name)
             current_version += 1
 
-def _postprocess_statuses(scene: Scene) -> None:
+def _postprocess_statuses(scene: Scene, force_reanalysis: bool = False) -> None:
     """Compute status badges, sequence gaps and resequenced proposals."""
     try:
         state = scene.lime_ai_mat
@@ -404,7 +466,6 @@ def _postprocess_statuses(scene: Scene) -> None:
         if parsed is None:
             status = "NEEDS_RENAME" if row.needs_rename or row.proposed_name else "UNPARSEABLE"
         else:
-            status = "VALID" if not row.needs_rename else "NEEDS_RENAME"
             key = (parsed["material_type"], parsed["finish"])
             version_idx = parsed.get("version_index")
             if isinstance(version_idx, int):
@@ -413,6 +474,17 @@ def _postprocess_statuses(scene: Scene) -> None:
             row.material_type = parsed["material_type"]
             row.finish = parsed["finish"]
             row.version_token = parsed["version"]
+
+            if row.needs_rename:
+                status = "NEEDS_RENAME"
+            elif row.review_requested:
+                status = "REVIEW"
+            else:
+                quality_label = (row.quality_label or "").strip().upper()
+                if quality_label:
+                    status = f"VALID:{quality_label}"
+                else:
+                    status = "VALID"
 
         parsed_info.append((row, parsed, status))
 
@@ -440,14 +512,27 @@ def _postprocess_statuses(scene: Scene) -> None:
         else:
             row.status = status
 
+        # Check if we're in force reanalysis mode
+        state = scene.lime_ai_mat
+        force_reanalysis = getattr(state, 'force_reanalysis', False)
+
         if row.proposed_name and row.proposed_name == row.material_name:
-            row.proposed_name = ""
+            # In force reanalysis mode, keep proposals even if they match current name
+            if not force_reanalysis:
+                row.proposed_name = ""
 
         if row.status in ("VALID", "SEQUENCE_GAP"):
-            row.proposed_name = ""
+            # In force reanalysis mode, keep proposals even for valid materials
+            if not force_reanalysis:
+                row.proposed_name = ""
 
-        if row.read_only or row.status not in ("NEEDS_RENAME", "NAME_COLLISION"):
-            row.selected_for_apply = False
+        if row.read_only or (
+            row.status not in ("NEEDS_RENAME", "NAME_COLLISION") and not row.review_requested
+        ):
+            # In force reanalysis mode, keep materials selected even if they were valid
+            # This allows users to apply changes to well-named materials if they want
+            if not force_reanalysis:
+                row.selected_for_apply = False
 
     _resequence_selected_rows(rows, existing_names)
 
@@ -563,6 +648,52 @@ def _http_post_json(url: str, payload: Dict[str, object], headers: Dict[str, str
         return None
 
 
+def _truncate_context(context: str, max_chars: int = 500) -> str:
+    """Truncate scene context to max length, preserving key material keywords."""
+    if not context or len(context) <= max_chars:
+        return context
+    truncated = context[:max_chars]
+    last_space = truncated.rfind(" ")
+    if last_space > max_chars * 0.8:
+        return truncated[:last_space]
+    return truncated
+
+
+def _build_user_message_with_context(
+    base_payload: Dict[str, object],
+    scene_context: str,
+) -> Dict[str, object]:
+    """
+    Inject scene context into the user message with high priority.
+    
+    The scene_context is prominently placed to influence material classification.
+    """
+    if not scene_context:
+        return base_payload
+    
+    context_text = _truncate_context(scene_context, max_chars=500)
+    payload = dict(base_payload)
+    
+    # Add context as a prominent field, not just a hint
+    payload["scene_context"] = context_text
+    payload["_scene_context"] = context_text  # Keep both for compatibility
+    
+    # Add context-aware instructions
+    payload["context_instructions"] = {
+        "priority": "HIGH",
+        "description": "Use this scene context to make intelligent material type inferences",
+        "mapping_rules": {
+            "textiles": ["toalla", "tela", "textil", "ropa", "towel", "fabric", "cloth"],
+            "organic": ["piel", "diente", "ojo", "cabello", "skin", "tooth", "eye", "hair"],
+            "plastic": ["plástico", "silicona", "goma", "plastic", "silicone", "rubber"],
+            "metal": ["metal", "acero", "aluminio", "steel", "aluminum", "brushed"],
+            "natural": ["madera", "piedra", "mármol", "wood", "stone", "marble"]
+        }
+    }
+    
+    return payload
+
+
 def _system_prompt() -> str:
     # Use taxonomy-driven allowed types to avoid divergence from core
     allowed_types = get_allowed_material_types()
@@ -578,18 +709,49 @@ def _system_prompt() -> str:
         "- Version token is V01..V99 at the end. Ensure uniqueness by bumping V## only (never add '_1' or '.001').\n"
         "- MaterialFinish must be CamelCase alphanumeric; if none fits, use Generic.\n"
         "- If read_only=true -> do not propose a rename (leave proposed_name empty).\n\n"
+        "Scoring & Indexation (NEW):\n"
+        "- confidence: A number 0.0–1.0 indicating your certainty in the proposal.\n"
+        "  * > 0.8: High confidence (proposes even if slight deviation from known taxonomy)\n"
+        "  * 0.5–0.8: Medium confidence (recommends review)\n"
+        "  * < 0.5: Low confidence (prefer falling back to taxonomy base)\n"
+        "- is_indexed: boolean. True if MaterialType and MaterialFinish match the allowed taxonomy exactly.\n"
+        "  If your proposal uses experimental types (e.g., 'Tissue' for eyeball, 'Organic' for hair),\n"
+        "  mark is_indexed=false ONLY if these are not in the allowed list, with reconciliation_note explaining.\n"
+        "- reconciliation_note: Short explanation (1–2 sentences) of why you chose this type/finish,\n"
+        "  especially if is_indexed=false (e.g., 'Eyeball is specialized tissue; recommend Tissue type').\n\n"
         "Deliberative rubric (internal):\n"
         "1) Understand: Does the current name precisely describe the real-world material? Identify domain: architectural (Concrete/Brick/Tile/Marble/Granite/Slate/Herringbone/Hex), product/industrial (ABS/PC/Steel/Aluminum/Anodized/Brushed/Galvanized), natural (Wood/Leather/Paper/Cardboard/Stone), textiles (Velvet/Denim/Knitting/Embroidery), coatings/paint (Paint/Varnish/Polished/Rough/Matte/Gloss), liquids (Water/Oil), optics (Glass/Frosted/Tint), decals/signage (Decal/Sticker/Label), FX/emissive (Emissive/Neon), and organic/anatomical (Skin/Iris/Sclera/Cornea/Pupil/Hair/Beard/Eyelash/Eyebrow/Nail/Tooth/Gum/Tongue).\n"
-        "2) Decide: If the name is expressive and compliant, do not rename. Otherwise, transform to the schema preserving as much descriptive semantics as possible in Finish (e.g., for 'HairMatAniso' → 'MAT_Organic_Hair_V01' with 'Aniso' as sub-element if needed; for 'Eyeball' → 'MAT_Tissue_Eyeball_V01'). Select the closest MaterialType from the allowed list, but prioritize preserving key terms in Finish for clarity and replicability (e.g., Hair, Eyeball, Skin, Tooth).\n"
-        "3) Validate: Ensure the final name strictly matches the schema and does not conflict with existing names; only bump V## for uniqueness.\n\n"
+        "2) **CONTEXT ANALYSIS**: If scene_context is provided, analyze it FIRST to understand the overall material domain. Look for keywords that indicate the primary material types in the scene (e.g., 'toalla' suggests textiles, 'piel' suggests organic materials). Use this context to guide material type selection, especially for ambiguous names like 'Crease' or 'Stitch'.\n"
+        "3) Decide: If the name is expressive and compliant, do not rename. Otherwise, transform to the schema preserving as much descriptive semantics as possible in Finish (e.g., for 'HairMatAniso' → 'MAT_Organic_Hair_V01' with 'Aniso' as sub-element if needed; for 'Eyeball' → 'MAT_Tissue_Eyeball_V01'). Select the closest MaterialType from the allowed list, but prioritize preserving key terms in Finish for clarity and replicability (e.g., Hair, Eyeball, Skin, Tooth).\n"
+        "4) Validate: Ensure the final name strictly matches the schema and does not conflict with existing names; only bump V## for uniqueness.\n\n"
         "Signals (use in order):\n"
-        "- Use 'material_type_hint' and 'finish_candidates'. Respect policy flags (versioning_only, preserve_semantics).\n"
-        "- Principled heuristics: metallic>=0.5→Metal; transmission>=0.3→Glass/Liquid (favor Glass for solids, Liquid for fluids); emission_strength>0→Emissive; roughness>=0.6 & metallic<0.5→Rubber; else Plastic.\n"
-        "- Tokens by domain (non-exhaustive): Architecture (Concrete, Brick, Tile, Herringbone, Hex, Marble, Granite, Slate), Product (ABS, PC, Steel, Aluminum, Anodized, Brushed, Galvanized), Natural (Wood, Leather, Paper, Cardboard, Stone), Textiles (Denim, Velvet, Knitting, Embroidery), Coatings (Paint, Varnish, Polished, Rough, Matte, Gloss), Liquids (Water, Oil), Optics (Glass, Frosted, Tint), Decals (Decal, Sticker, Label), FX (Emissive, Neon), Organics (Skin, Iris, Tooth, Hair, etc.).\n"
-        "- Prefer specific tokens over generic ones (e.g., Herringbone over Tiles; ToothEnamel over Tooth).\n\n"
+        "- **PRIORITY 1**: Scene context analysis - if scene_context contains material domain keywords, use them to guide type selection\n"
+        "- **PRIORITY 2**: Use 'material_type_hint' and 'finish_candidates' from context. Respect policy flags (versioning_only, preserve_semantics, force_reanalysis).\n"
+        "- **PRIORITY 3**: Principled heuristics: metallic>=0.5→Metal; transmission>=0.3→Glass/Liquid (favor Glass for solids, Liquid for fluids); emission_strength>0→Emissive; roughness>=0.6 & metallic<0.5→Rubber; else Plastic.\n"
+        "- **PRIORITY 4**: Tokens by domain (non-exhaustive): Architecture (Concrete/Brick/Tile/Marble/Granite/Slate/Herringbone/Hex), Product (ABS/PC/Steel/Aluminum/Anodized/Brushed/Galvanized), Natural (Wood/Leather/Paper/Cardboard/Stone), Textiles (Denim/Velvet/Knitting/Embroidery), Coatings (Paint/Varnish/Polished/Rough/Matte/Gloss), Liquids (Water/Oil), Optics (Glass/Frosted/Tint), Decals (Decal/Sticker/Label), FX (Emissive/Neon), Organics (Skin/Iris/Tooth/Hair/etc.).\n"
+        "- Prefer specific tokens over generic ones (e.g., Herringbone over Tiles; ToothEnamel over Tooth).\n"
+        "- **FORCE REANALYSIS**: If force_reanalysis=True, reconsider ALL materials including those already correctly named. For materials with current_name_quality=high, carefully evaluate if the current name is already excellent and should be preserved. Only suggest changes if there's a significantly better alternative based on material properties, scene context, or naming consistency.\n\n"
+        "Scene Context (if provided):\n"
+        "- Additional context may be provided about the scene environment (e.g., 'kitchen interior with quartz and brushed metal').\n"
+        "- **CRITICAL**: Use this context to make intelligent material type inferences, especially for ambiguous material names.\n"
+        "- **Context Mapping Rules**:\n"
+        "  * 'toalla', 'tela', 'textil', 'ropa' → Fabric type with appropriate finish\n"
+        "  * 'piel', 'diente', 'ojo', 'cabello' → Organic/Tissue type with anatomical finish\n"
+        "  * 'plástico', 'silicona', 'goma' → Plastic/Rubber type with appropriate finish\n"
+        "  * 'metal', 'acero', 'aluminio' → Metal type with finish (Brushed, Polished, etc.)\n"
+        "  * 'madera', 'piedra', 'mármol' → Wood/Stone type with appropriate finish\n"
+        "- **Priority**: Context clues should override generic heuristics when material names are ambiguous.\n"
+        "- **Examples**: 'Crease' in context of 'toalla' → MAT_Fabric_Crease_V01, not MAT_Emissive_Crease_V01\n"
+        "- E.g., if context says 'quartz kitchen', lean toward Stone types and finishes like Polished/Rough.\n\n"
         "Output: STRICT JSON per provided schema (no extra fields).\n"
         "Notes examples: 'Preserved semantics: Hair', 'From tokens: Eyeball', 'Heuristic: Glass', 'Bumped V03'.\n"
-        "Examples for organic: 'HairMatAniso' → 'MAT_Organic_Hair_V01' (preserve 'Hair' in Finish); 'Eyeball' → 'MAT_Tissue_Eyeball_V01' (use 'Eyeball' as Finish)."
+        "Confidence examples: 'High (0.9): standard Plastic', 'Med (0.65): Eyeball debatable', 'Low (0.4): ambiguous material'.\n"
+        "Examples for organic: 'HairMatAniso' → 'MAT_Organic_Hair_V01' (preserve 'Hair' in Finish, confidence 0.8); 'Eyeball' → 'MAT_Tissue_Eyeball_V01' (use 'Eyeball' as Finish, confidence 0.85).\n\n"
+        "**CONTEXT-DRIVEN EXAMPLES**:\n"
+        "- Scene context: 'toalla de baño' + material 'Crease' → 'MAT_Fabric_Crease_V01' (confidence 0.9)\n"
+        "- Scene context: 'piel humana' + material 'Stitch' → 'MAT_Organic_Stitch_V01' (confidence 0.8)\n"
+        "- Scene context: 'objeto de plástico' + material 'Crease' → 'MAT_Plastic_Crease_V01' (confidence 0.7)\n"
+        "- Scene context: 'materiales de humano' + material 'Crease' → 'MAT_Organic_Crease_V01' (confidence 0.8)"
     )
 
 
@@ -616,6 +778,9 @@ def _schema_single() -> Dict[str, object]:
                             "version_token": {"type": "string"},
                             "read_only": {"type": "boolean"},
                             "notes": {"type": "string"},
+                            "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                            "is_indexed": {"type": "boolean"},
+                            "reconciliation_note": {"type": "string"},
                         },
                     }
                 },
@@ -650,6 +815,9 @@ def _schema_bulk() -> Dict[str, object]:
                                 "read_only": {"type": "boolean"},
                                 "similar_group_id": {"type": "string"},
                                 "notes": {"type": "string"},
+                                "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+                                "is_indexed": {"type": "boolean"},
+                                "reconciliation_note": {"type": "string"},
                             },
                         },
                     },
@@ -792,39 +960,67 @@ class LIME_TB_OT_ai_rename_single(Operator):
             summary.get("collection_hints", []),
             summary.get("principled", {})
         )
+        quality_result = evaluate_material_name(
+            mat.name,
+            texture_basenames=summary.get("texture_basenames", []),
+            object_hints=summary.get("object_hints", []),
+            collection_hints=summary.get("collection_hints", []),
+            principled=summary.get("principled", {}),
+            taxonomy_context=taxonomy_context,
+        )
+        quality_label = quality_result.label
+        quality_score = quality_result.score
+        quality_issues = "; ".join(quality_result.issues)
+
+        # Read scene context and policies for injection
+        scene_context = getattr(scene.lime_ai_mat, "scene_context", "") or ""
+        allow_non_indexed = getattr(scene.lime_ai_mat, "allow_non_indexed", False)
+
+        user_message_dict = {
+            "active_scene": scene.name,
+            "policy": {
+                "versioning_only": versioning_only,
+                "preserve_semantics": True,
+                "organic_material_types": ["Organic", "Tissue", "Tooth"],
+                "allow_non_indexed": allow_non_indexed,
+            },
+            "existing_names": _collect_existing_names(),
+            "current_quality": {
+                "label": quality_label,
+                "score": quality_score,
+                "issues": quality_result.issues,
+                "taxonomy_match": quality_result.taxonomy_match,
+            },
+            "taxonomy_context": taxonomy_context,
+            "material": {
+                "material_name": mat.name,
+                "linked": bool(mat.library),
+                "overridden": bool(mat.override_library),
+                "used_in_scenes": [scene.name],
+                "current_tag_guess": None,
+                "has_numeric_suffix": bool(strip_numeric_suffix(mat.name) != mat.name),
+                "nodes_summary": {k: v for k, v in summary.items() if k in ("ids", "counts")},
+                "principled": summary.get("principled"),
+                "pbr_detected": {},
+                "texture_basenames": summary.get("texture_basenames", []),
+                "object_hints": summary.get("object_hints", []),
+                "collection_hints": summary.get("collection_hints", []),
+                "similar_group_id": _fingerprint_material(mat),
+                "material_type_hint": taxonomy_context.get("material_type_hint"),
+                "finish_candidates": taxonomy_context.get("finish_candidates"),
+                "allowed_material_types": taxonomy_context.get("allowed_material_types"),
+            },
+        }
+        
+        # Inject scene context if provided
+        if scene_context:
+            user_message_dict["_scene_context"] = _truncate_context(scene_context, max_chars=500)
 
         payload = {
             "model": prefs.openrouter_model or "google/gemini-2.5-flash-lite-preview-09-2025",
             "messages": [
                 {"role": "system", "content": _system_prompt()},
-                {"role": "user", "content": json.dumps({
-                    "active_scene": scene.name,
-                    "policy": {
-                        "versioning_only": versioning_only,
-                        "preserve_semantics": True,
-                        "organic_material_types": ["Organic", "Tissue", "Tooth"],
-                    },
-                    "existing_names": _collect_existing_names(),
-                    "taxonomy_context": taxonomy_context,
-                    "material": {
-                        "material_name": mat.name,
-                        "linked": bool(mat.library),
-                        "overridden": bool(mat.override_library),
-                        "used_in_scenes": [scene.name],
-                        "current_tag_guess": None,
-                        "has_numeric_suffix": bool(strip_numeric_suffix(mat.name) != mat.name),
-                        "nodes_summary": {k: v for k, v in summary.items() if k in ("ids", "counts")},
-                        "principled": summary.get("principled"),
-                        "pbr_detected": {},
-                        "texture_basenames": summary.get("texture_basenames", []),
-                        "object_hints": summary.get("object_hints", []),
-                        "collection_hints": summary.get("collection_hints", []),
-                        "similar_group_id": _fingerprint_material(mat),
-                        "material_type_hint": taxonomy_context.get("material_type_hint"),
-                        "finish_candidates": taxonomy_context.get("finish_candidates"),
-                        "allowed_material_types": taxonomy_context.get("allowed_material_types"),
-                    },
-                })},
+                {"role": "user", "content": json.dumps(user_message_dict)},
             ],
             "temperature": 0,
             "response_format": _schema_single(),
@@ -864,20 +1060,57 @@ class LIME_TB_OT_ai_rename_single(Operator):
             parsed = parse_name(base_name)
             material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
             finish = normalize_finish(parsed["finish"] if parsed else "Generic")
-            # If name is already valid, do not propose a rename
+
+            # Check if we're in force reanalysis mode
+            force_reanalysis = getattr(scene.lime_ai_mat, 'force_reanalysis', False)
+
+            # If name is already valid, handle based on force_reanalysis mode
             if parsed is not None:
-                item = {
-                    "material_name": mat.name,
-                    "proposed_name": "",
-                    "material_type": material_type,
-                    "finish": finish,
-                    "version_token": parsed.get("version") or "V01",
-                    "read_only": False,
-                    "notes": "Already compliant",
-                    "similar_group_id": _fingerprint_material(mat),
-                    "needs_rename": False,
-                    "selected_for_apply": False,
-                }
+                if force_reanalysis:
+                    # In force reanalysis mode, keep current name as proposal for review
+                    # Only suggest improvements if the current name could be enhanced
+                    current_name = mat.name
+                    base_name = strip_numeric_suffix(current_name)
+
+                    # For materials that are already well-named, keep current name
+                    # The IA should have evaluated this, but as fallback, preserve good names
+                    item = {
+                        "material_name": current_name,
+                        "proposed_name": current_name,  # Keep current excellent name
+                        "material_type": material_type,
+                        "finish": finish,
+                        "version_token": parsed.get("version") or "V01",
+                        "read_only": False,
+                        "notes": "Well-named material - preserved",
+                        "similar_group_id": _fingerprint_material(mat),
+                        "needs_rename": False,
+                        "confidence": 0.95,  # Very high confidence for already good names
+                        "is_indexed": True,
+                        "quality_label": quality_label,
+                        "quality_score": quality_score,
+                        "quality_issues": quality_issues,
+                        "taxonomy_match": quality_result.taxonomy_match,
+                        "review_requested": quality_label == "fair",
+                    }
+                else:
+                    # Normal mode: do not propose a rename
+                    item = {
+                        "material_name": mat.name,
+                        "proposed_name": "",
+                        "material_type": material_type,
+                        "finish": finish,
+                        "version_token": parsed.get("version") or "V01",
+                        "read_only": False,
+                        "notes": "Already compliant",
+                        "similar_group_id": _fingerprint_material(mat),
+                        "needs_rename": False,
+                        "selected_for_apply": False,
+                        "quality_label": quality_label,
+                        "quality_score": quality_score,
+                        "quality_issues": quality_issues,
+                        "taxonomy_match": quality_result.taxonomy_match,
+                        "review_requested": quality_label == "fair",
+                    }
             else:
                 universe = _collect_existing_names()
                 proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
@@ -894,7 +1127,45 @@ class LIME_TB_OT_ai_rename_single(Operator):
                     "similar_group_id": _fingerprint_material(mat),
                     "needs_rename": True,
                     "selected_for_apply": True,
+                    "quality_label": quality_label,
+                    "quality_score": quality_score,
+                    "quality_issues": quality_issues,
+                    "taxonomy_match": quality_result.taxonomy_match,
                 }
+
+        # Apply reconciliation logic to the item
+        if item:
+            if "confidence" not in item:
+                item["confidence"] = 0.7  # default from AI
+            
+            reconciliation_result = reconcile_proposal(
+                proposed_name=item.get("proposed_name", ""),
+                proposed_type=item.get("material_type", "Plastic"),
+                proposed_finish=item.get("finish", "Generic"),
+                confidence_from_ai=float(item.get("confidence", 0.7)),
+                allow_non_indexed=allow_non_indexed,
+                taxonomy_context={
+                    "allowed_material_types": taxonomy_context.get("allowed_material_types", []),
+                },
+            )
+            
+            # Update item with reconciliation results
+            item["is_indexed"] = reconciliation_result["is_indexed"]
+            item["taxonomy_match"] = f"{reconciliation_result['taxonomy_type']}/{reconciliation_result['taxonomy_finish']}"
+            item["reconciliation_note"] = reconciliation_result["reason"]
+            
+            if reconciliation_result["action"] == "normalize" and reconciliation_result["suggested_normalized"]:
+                item["proposed_name"] = reconciliation_result["suggested_normalized"]
+            if "quality_label" not in item or not item.get("quality_label"):
+                item["quality_label"] = quality_label
+            if "quality_score" not in item:
+                item["quality_score"] = quality_score
+            if "quality_issues" not in item:
+                item["quality_issues"] = quality_issues
+            if "taxonomy_match" not in item or not item.get("taxonomy_match"):
+                item["taxonomy_match"] = quality_result.taxonomy_match
+            if "review_requested" not in item:
+                item["review_requested"] = quality_label == "fair"
 
         _write_rows(scene, [item])
         note = item.get("notes") or ("AI" if used_ai else "Local")
@@ -924,12 +1195,6 @@ class LIME_TB_OT_ai_scan_materials(Operator):
         for mat in mats:
             ro = _is_read_only(mat)
             issues = detect_issues(mat.name)
-            needs_rename = bool(issues)
-            if needs_rename:
-                incorrect_count += 1
-                print(f"[AI Scan] Material '{mat.name}' needs rename: {issues}")
-            else:
-                print(f"[AI Scan] Material '{mat.name}' is OK (issues: {issues})")
             summary = _summarize_nodes(mat)
             taxonomy_context = get_taxonomy_context(
                 mat.name,
@@ -938,6 +1203,29 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 summary.get("collection_hints", []),
                 summary.get("principled", {})
             )
+            quality_result = evaluate_material_name(
+                mat.name,
+                texture_basenames=summary.get("texture_basenames", []),
+                object_hints=summary.get("object_hints", []),
+                collection_hints=summary.get("collection_hints", []),
+                principled=summary.get("principled", {}),
+                taxonomy_context=taxonomy_context,
+            )
+            quality_label = quality_result.label
+            quality_score = quality_result.score
+            quality_issues = "; ".join(quality_result.issues)
+
+            needs_rename = bool(issues) or quality_label in ("poor", "invalid")
+            needs_review = not needs_rename and quality_label == "fair"
+
+            if needs_rename:
+                incorrect_count += 1
+                print(f"[AI Scan] Material '{mat.name}' marked for rename (issues: {issues}, quality={quality_label})")
+            elif needs_review:
+                print(f"[AI Scan] Material '{mat.name}' flagged for review (quality={quality_label})")
+            else:
+                print(f"[AI Scan] Material '{mat.name}' preserved (quality={quality_label})")
+
             if not allowed_material_types:
                 allowed_material_types = list(taxonomy_context.get("allowed_material_types") or [])
             payload_materials.append({
@@ -959,29 +1247,63 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 "allowed_material_types": taxonomy_context.get("allowed_material_types"),
                 "taxonomy_context": taxonomy_context,
                 "needs_rename": needs_rename,
+                "needs_review": needs_review,
+                "quality_label": quality_label,
+                "quality_score": quality_score,
+                "quality_issues": quality_issues,
+                "taxonomy_match": quality_result.taxonomy_match,
+                "read_only": ro,
             })
         print(f"[AI Scan] Incorrect count: {incorrect_count}, Total: {total_count}")
 
-        # Payload selectivo: solo materiales needs_rename=True
-        payload_materials_filtered = [mat for mat in payload_materials if mat["needs_rename"]]
+        # Read scene context and policies for injection
+        scene_context = getattr(scene.lime_ai_mat, "scene_context", "") or ""
+        allow_non_indexed = getattr(scene.lime_ai_mat, "allow_non_indexed", False)
+        force_reanalysis = getattr(scene.lime_ai_mat, "force_reanalysis", False)
+
+        # If force_reanalysis is True, include correctly named materials for re-analysis
+        if force_reanalysis:
+            # Include all materials for re-analysis
+            payload_materials_filtered = payload_materials.copy()
+            print(f"[AI Scan] Force reanalysis enabled: including {len(payload_materials)} total materials")
+            # In force reanalysis mode, count all materials as "need attention"
+            incorrect_count_for_report = total_count
+
+            # Add force_reanalysis flag to each material for better AI guidance
+            for mat_data in payload_materials_filtered:
+                mat_data["force_reanalysis"] = True
+                mat_data["current_name_quality"] = "high" if not mat_data["needs_rename"] else "low"
+        else:
+            # Payload selectivo: solo materiales needs_rename=True
+            payload_materials_filtered = [mat for mat in payload_materials if mat["needs_rename"]]
+            print(f"[AI Scan] Normal mode: filtering to {len(payload_materials_filtered)} materials needing rename")
+            incorrect_count_for_report = incorrect_count
+
+        user_message_dict = {
+            "active_scene": scene.name,
+            "policy": {
+                "align_material_type_hint": True,
+                "respect_read_only": True,
+                "versioning_only": False,
+                "preserve_semantics": True,
+                "organic_material_types": ["Organic", "Tissue", "Tooth"],
+                "allow_non_indexed": allow_non_indexed,
+                "force_reanalysis": force_reanalysis,
+            },
+            "existing_names": existing_names,
+            "allowed_material_types": allowed_material_types,
+            "materials": payload_materials_filtered,
+        }
+        
+        # Inject scene context if provided
+        if scene_context:
+            user_message_dict["_scene_context"] = _truncate_context(scene_context, max_chars=500)
 
         payload = {
             "model": prefs.openrouter_model or "google/gemini-2.5-flash-lite-preview-09-2025",
             "messages": [
                 {"role": "system", "content": _system_prompt()},
-                {"role": "user", "content": json.dumps({
-                    "active_scene": scene.name,
-                    "policy": {
-                        "align_material_type_hint": True,
-                        "respect_read_only": True,
-                        "versioning_only": False,
-                        "preserve_semantics": True,
-                        "organic_material_types": ["Organic", "Tissue", "Tooth"],
-                    },
-                    "existing_names": existing_names,
-                    "allowed_material_types": allowed_material_types,
-                    "materials": payload_materials_filtered,
-                })},
+                {"role": "user", "content": json.dumps(user_message_dict)},
             ],
             "temperature": 0,
             "response_format": _schema_bulk(),
@@ -1007,9 +1329,40 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                             if i < len(payload_materials_filtered):
                                 mat_data = payload_materials_filtered[i]
                                 item["needs_rename"] = mat_data["needs_rename"]
+                                item["needs_review"] = mat_data.get("needs_review", False)
+                                item["review_requested"] = mat_data.get("needs_review", False)
+                                item["quality_label"] = mat_data.get("quality_label")
+                                item["quality_score"] = mat_data.get("quality_score")
+                                item["quality_issues"] = mat_data.get("quality_issues")
+                                if "taxonomy_match" not in item or not item.get("taxonomy_match"):
+                                    item["taxonomy_match"] = mat_data.get("taxonomy_match")
                                 if _is_read_only(bpy.data.materials.get(mat_data["material_name"])):
                                     item["read_only"] = True
                                     item["notes"] = (item.get("notes") or "") + " | Linked/Override"
+                        
+                        # Apply reconciliation logic to each item
+                        for item in items:
+                            if "confidence" not in item:
+                                item["confidence"] = 0.7  # default from AI
+                            
+                            reconciliation_result = reconcile_proposal(
+                                proposed_name=item.get("proposed_name", ""),
+                                proposed_type=item.get("material_type", "Plastic"),
+                                proposed_finish=item.get("finish", "Generic"),
+                                confidence_from_ai=float(item.get("confidence", 0.7)),
+                                allow_non_indexed=allow_non_indexed,
+                                taxonomy_context={
+                                    "allowed_material_types": allowed_material_types,
+                                },
+                            )
+                            
+                            # Update item with reconciliation results
+                            item["is_indexed"] = reconciliation_result["is_indexed"]
+                            item["taxonomy_match"] = f"{reconciliation_result['taxonomy_type']}/{reconciliation_result['taxonomy_finish']}"
+                            item["reconciliation_note"] = reconciliation_result["reason"]
+                            
+                            if reconciliation_result["action"] == "normalize" and reconciliation_result["suggested_normalized"]:
+                                item["proposed_name"] = reconciliation_result["suggested_normalized"]
         except Exception:
             items = []
 
@@ -1039,10 +1392,21 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         "material_name": mat_name,
                         "read_only": True,
                         "notes": "Linked/Override",
-                        "needs_rename": mat_data["needs_rename"]
+                        "needs_rename": mat_data["needs_rename"],
+                        "quality_label": mat_data.get("quality_label"),
+                        "quality_score": mat_data.get("quality_score"),
+                        "quality_issues": mat_data.get("quality_issues"),
+                        "taxonomy_match": mat_data.get("taxonomy_match"),
+                        "review_requested": mat_data.get("needs_review", False),
                     })
                     continue
                 parsed = parse_name(strip_numeric_suffix(mat_name))
+                review_requested = mat_data.get("needs_review", False)
+                quality_label = mat_data.get("quality_label") or ""
+                quality_score = float(mat_data.get("quality_score") or 0.0)
+                quality_issues = mat_data.get("quality_issues") or ""
+                taxonomy_match = mat_data.get("taxonomy_match") or ""
+
                 if mat_data["needs_rename"]:
                     material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
                     finish = normalize_finish(parsed["finish"] if parsed else "Generic")
@@ -1059,21 +1423,89 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         "notes": "Local baseline proposal",
                         "similar_group_id": _fingerprint_material(mat),
                         "needs_rename": True,
+                        "quality_label": quality_label,
+                        "quality_score": quality_score,
+                        "quality_issues": quality_issues,
+                        "taxonomy_match": taxonomy_match,
+                        "review_requested": review_requested,
                     })
                     if proposed not in universe:
                         universe.append(proposed)
+                elif review_requested:
+                    review_item = _build_review_proposal_entry(
+                        mat,
+                        parsed,
+                        universe,
+                        quality_label=quality_label,
+                        quality_score=quality_score,
+                        quality_issues=quality_issues,
+                        taxonomy_match=taxonomy_match,
+                    )
+                    items.append(review_item)
+                    if review_item["proposed_name"] not in universe:
+                        universe.append(review_item["proposed_name"])
                 else:
                     # Correct item: do not propose rename and reflect parsed version
-                    items.append({
-                        "material_name": mat_name,
-                        "proposed_name": "",
-                        "material_type": normalize_material_type(parsed["material_type"]) if parsed else "Plastic",
-                        "finish": normalize_finish(parsed["finish"]) if parsed else "Generic",
-                        "version_token": parsed.get("version") if parsed else "V01",
-                        "read_only": False,
-                        "notes": "Already compliant",
-                        "needs_rename": False,
-                    })
+                    # But if force_reanalysis is enabled, suggest improvements based on context
+                    if force_reanalysis:
+                        # Generate contextual proposal for correctly named materials
+                        current_parsed = parse_name(strip_numeric_suffix(mat_name))
+                        if current_parsed:
+                            # Use current values but potentially suggest better finish based on context
+                            material_type = current_parsed["material_type"]
+                            finish = current_parsed["finish"]
+
+                            # For now, keep current name as proposal (could be enhanced with context analysis)
+                            items.append({
+                                "material_name": mat_name,
+                                "proposed_name": mat_name,  # Keep current name as proposal
+                                "material_type": material_type,
+                                "finish": finish,
+                                "version_token": current_parsed.get("version") or "V01",
+                                "read_only": False,
+                                "notes": "Correctly named - re-analysis available",
+                                "needs_rename": False,
+                                "confidence": 0.8,  # High confidence for existing correct names
+                                "is_indexed": True,
+                                "quality_label": quality_label,
+                                "quality_score": quality_score,
+                                "quality_issues": quality_issues,
+                                "taxonomy_match": taxonomy_match,
+                                "review_requested": review_requested,
+                            })
+                        else:
+                            # Fallback for unparseable but somehow considered correct
+                            items.append({
+                                "material_name": mat_name,
+                                "proposed_name": "",
+                                "material_type": "Plastic",
+                                "finish": "Generic",
+                                "version_token": "V01",
+                                "read_only": False,
+                                "notes": "Already compliant",
+                                "needs_rename": False,
+                                "quality_label": quality_label,
+                                "quality_score": quality_score,
+                                "quality_issues": quality_issues,
+                                "taxonomy_match": taxonomy_match,
+                                "review_requested": review_requested,
+                            })
+                    else:
+                        items.append({
+                            "material_name": mat_name,
+                            "proposed_name": "",
+                            "material_type": normalize_material_type(parsed["material_type"]) if parsed else "Plastic",
+                            "finish": normalize_finish(parsed["finish"]) if parsed else "Generic",
+                            "version_token": parsed.get("version") if parsed else "V01",
+                            "read_only": False,
+                            "notes": "Already compliant",
+                            "needs_rename": False,
+                            "quality_label": quality_label,
+                            "quality_score": quality_score,
+                            "quality_issues": quality_issues,
+                            "taxonomy_match": taxonomy_match,
+                            "review_requested": review_requested,
+                        })
 
         # Asegurar que todos los materiales estén en items (correctos sin propuesta)
         if len(items) < len(payload_materials):
@@ -1087,7 +1519,12 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                             "material_name": mat_name,
                             "read_only": True,
                             "notes": "Linked/Override",
-                            "needs_rename": mat_data["needs_rename"]
+                            "needs_rename": mat_data["needs_rename"],
+                            "quality_label": mat_data.get("quality_label"),
+                            "quality_score": mat_data.get("quality_score"),
+                            "quality_issues": mat_data.get("quality_issues"),
+                            "taxonomy_match": mat_data.get("taxonomy_match"),
+                            "review_requested": mat_data.get("needs_review", False),
                         })
                     else:
                         if mat_data["needs_rename"]:
@@ -1108,18 +1545,82 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                                 "notes": "Local baseline proposal",
                                 "similar_group_id": _fingerprint_material(mat),
                                 "needs_rename": True,
+                                "quality_label": mat_data.get("quality_label"),
+                                "quality_score": mat_data.get("quality_score"),
+                                "quality_issues": mat_data.get("quality_issues"),
+                                "taxonomy_match": mat_data.get("taxonomy_match"),
+                                "review_requested": mat_data.get("needs_review", False),
                             })
                             if proposed not in universe:
                                 universe.append(proposed)
+                        elif mat_data.get("needs_review", False):
+                            review_item = _build_review_proposal_entry(
+                                mat,
+                                parse_name(strip_numeric_suffix(mat_name)),
+                                universe,
+                                quality_label=mat_data.get("quality_label") or "",
+                                quality_score=float(mat_data.get("quality_score") or 0.0),
+                                quality_issues=mat_data.get("quality_issues") or "",
+                                taxonomy_match=mat_data.get("taxonomy_match") or "",
+                            )
+                            items.append(review_item)
+                            if review_item["proposed_name"] not in universe:
+                                universe.append(review_item["proposed_name"])
                         else:
-                            items.append({
-                                "material_name": mat_name,
-                                "read_only": False,
-                                "notes": "Already compliant",
-                                "needs_rename": False,
-                            })
+                            # Correct item in force reanalysis mode
+                            if force_reanalysis:
+                                # Generate contextual proposal for correctly named materials
+                                current_parsed = parse_name(strip_numeric_suffix(mat_name))
+                                if current_parsed:
+                                    material_type = current_parsed["material_type"]
+                                    finish = current_parsed["finish"]
+                                    items.append({
+                                        "material_name": mat_name,
+                                        "proposed_name": mat_name,  # Keep current name as proposal
+                                        "material_type": material_type,
+                                        "finish": finish,
+                                        "version_token": current_parsed.get("version") or "V01",
+                                        "read_only": False,
+                                        "notes": "Correctly named - re-analysis available",
+                                        "needs_rename": False,
+                                        "confidence": 0.8,
+                                        "is_indexed": True,
+                                        "quality_label": mat_data.get("quality_label"),
+                                        "quality_score": mat_data.get("quality_score"),
+                                        "quality_issues": mat_data.get("quality_issues"),
+                                        "taxonomy_match": mat_data.get("taxonomy_match"),
+                                        "review_requested": mat_data.get("needs_review", False),
+                                    })
+                                else:
+                                    items.append({
+                                        "material_name": mat_name,
+                                        "proposed_name": "",
+                                        "material_type": "Plastic",
+                                        "finish": "Generic",
+                                        "version_token": "V01",
+                                        "read_only": False,
+                                        "notes": "Already compliant",
+                                        "needs_rename": False,
+                                        "quality_label": mat_data.get("quality_label"),
+                                        "quality_score": mat_data.get("quality_score"),
+                                        "quality_issues": mat_data.get("quality_issues"),
+                                        "taxonomy_match": mat_data.get("taxonomy_match"),
+                                        "review_requested": mat_data.get("needs_review", False),
+                                    })
+                            else:
+                                items.append({
+                                    "material_name": mat_name,
+                                    "read_only": False,
+                                    "notes": "Already compliant",
+                                    "needs_rename": False,
+                                    "quality_label": mat_data.get("quality_label"),
+                                    "quality_score": mat_data.get("quality_score"),
+                                    "quality_issues": mat_data.get("quality_issues"),
+                                    "taxonomy_match": mat_data.get("taxonomy_match"),
+                                    "review_requested": mat_data.get("needs_review", False),
+                                })
 
-        _write_rows(scene, items, incorrect_count=incorrect_count, total_count=total_count)
+        _write_rows(scene, items, incorrect_count=incorrect_count_for_report, total_count=total_count)
 
         print(f"[AI Scan Complete] Final items count: {len(items)}")
         print(f"[AI Scan Complete] incorrect_count: {incorrect_count}, total_count: {total_count}")
@@ -1129,7 +1630,10 @@ class LIME_TB_OT_ai_scan_materials(Operator):
         state = scene.lime_ai_mat
         print(f"[AI Scan Complete] State after write: {len(state.rows)} rows")
 
-        self.report({'INFO'}, f"AI scan ready: {len(items)} items ({'AI' if used_ai else 'Local'}), {incorrect_count} incorrectos de {total_count}")
+        if force_reanalysis:
+            self.report({'INFO'}, f"AI re-analysis ready: {len(items)} items ({'AI' if used_ai else 'Local'}), {incorrect_count_for_report} materiales para reconsiderar de {total_count}")
+        else:
+            self.report({'INFO'}, f"AI scan ready: {len(items)} items ({'AI' if used_ai else 'Local'}), {incorrect_count} incorrectos de {total_count}")
         return {'FINISHED'}
 
 
@@ -1150,35 +1654,95 @@ class LIME_TB_OT_ai_apply_materials(Operator):
         # Refresh statuses before apply to align preview with selection
         refresh_selection_preview(scene)
         rows = list(state.rows)
+        
+        # Apply batch normalization for experimental materials
+        allow_non_indexed = getattr(scene.lime_ai_mat, "allow_non_indexed", False)
+        if not allow_non_indexed:
+            # Normalize experimental materials to closest taxonomy match
+            normalization_results = apply_batch_normalization(
+                rows,
+                policy={"allow_experimental": False, "confidence_threshold": 0.5}
+            )
+            for row, new_name in normalization_results:
+                if new_name and new_name != row.material_name:
+                    row.proposed_name = new_name
+                    # Update taxonomy fields
+                    parts = new_name.split("_")
+                    if len(parts) >= 4 and parts[0] == "MAT":
+                        row.material_type = parts[1]
+                        row.finish = "_".join(parts[2:-1]) if len(parts) > 3 else parts[2]
+                        row.version_token = parts[-1]
+                        row.is_indexed = True
+                        row.taxonomy_match = f"{parts[1]}/{parts[2]}"
+                        row.reconciliation_note = "Normalized to closest taxonomy match"
+        
         renamed = 0
+
+        # Check if we're in force reanalysis mode
+        force_reanalysis = getattr(state, 'force_reanalysis', False)
 
         with _suspend_selection_refresh():
             for row in sorted(rows, key=lambda r: r.material_name.lower()):
                 status = (row.status or '').upper()
-                # Apply only actionable items
-                if not (status.startswith('NEEDS_RENAME') or status.startswith('NAME_COLLISION')):
-                    continue
-                if row.read_only:
-                    continue
-                if not row.selected_for_apply:
-                    continue
+
+                # Apply logic depends on mode
+                if force_reanalysis:
+                    # In force reanalysis mode, apply all selected non-read-only materials
+                    # This includes materials with status "VALID" if they have proposals and are selected
+                    if row.read_only or not row.selected_for_apply:
+                        continue
+                    # In force reanalysis, also check if there's actually a proposal to apply
+                    if not row.proposed_name or row.proposed_name == row.material_name:
+                        continue
+                else:
+                    # In normal mode, apply only actionable items
+                    if row.read_only or not row.selected_for_apply:
+                        continue
+                    actionable = status.startswith('NEEDS_RENAME') or status.startswith('NAME_COLLISION')
+                    review_applicable = (
+                        row.review_requested
+                        and row.proposed_name
+                        and row.proposed_name != row.material_name
+                    )
+                    if not (actionable or review_applicable):
+                        continue
                 mat: Optional[Material] = bpy.data.materials.get(row.material_name)
                 if not mat:
                     continue
 
-                material_type, finish, version_token, version_idx = _derive_row_target(row)
-                if not version_token or not (version_token.startswith('V') and version_token[1:].isdigit()):
-                    version_idx = max(1, int(version_idx or 1))
-                    version_token = f"V{version_idx:02d}"
+                # Use proposed_name if available, otherwise derive from current values
+                if row.proposed_name and row.proposed_name.strip():
+                    target_name = row.proposed_name
+                    # Parse the proposed name to get type and finish for metadata
+                    parsed_target = parse_name(target_name)
+                    if parsed_target:
+                        material_type = parsed_target["material_type"]
+                        finish = parsed_target["finish"]
+                        version_token = parsed_target["version"]
+                        version_idx = parsed_target.get("version_index") or parse_version(version_token) or 1
+                    else:
+                        # Fallback to deriving from current row values
+                        material_type, finish, version_token, version_idx = _derive_row_target(row)
+                        target_name = f"{PREFIX}_{material_type}_{finish}_{version_token}"
                 else:
-                    version_idx = parse_version(version_token) or max(1, int(version_idx or 1))
+                    # No proposal, derive target from current values
+                    material_type, finish, version_token, version_idx = _derive_row_target(row)
+                    target_name = f"{PREFIX}_{material_type}_{finish}_{version_token}"
 
-                target_name = f"{PREFIX}_{material_type}_{finish}_{version_token}"
+                # Handle name collisions
                 if target_name in universe and target_name != mat.name:
-                    bumped = bump_version_until_unique(universe, material_type, finish, start_idx=version_idx)
-                    target_name = bumped
-                    version_token = target_name.split('_')[-1]
-                    version_idx = parse_version(version_token) or version_idx
+                    if row.proposed_name and row.proposed_name.strip():
+                        # For proposed names, try to bump version
+                        bumped = bump_version_until_unique(universe, material_type, finish, start_idx=version_idx)
+                        target_name = bumped
+                        version_token = target_name.split('_')[-1]
+                        version_idx = parse_version(version_token) or version_idx
+                    else:
+                        # For derived names, this shouldn't happen but handle it
+                        bumped = bump_version_until_unique(universe, material_type, finish, start_idx=version_idx)
+                        target_name = bumped
+                        version_token = target_name.split('_')[-1]
+                        version_idx = parse_version(version_token) or version_idx
 
                 if mat.name != target_name:
                     mat.name = target_name
@@ -1191,6 +1755,7 @@ class LIME_TB_OT_ai_apply_materials(Operator):
                 row.version_token = version_token
                 row.status = 'VALID'
                 row.selected_for_apply = False
+                row.review_requested = False
 
         refresh_selection_preview(scene)
         # Scene tag no longer used
@@ -1263,6 +1828,7 @@ class LIME_TB_OT_ai_select_all(Operator):
 
         refresh_selection_preview(scene)
         view = getattr(state, 'view_filter', 'NEEDS')
+        force_reanalysis = getattr(state, 'force_reanalysis', False)
         selected = 0
         with _suspend_selection_refresh():
             for row in state.rows:
@@ -1272,8 +1838,21 @@ class LIME_TB_OT_ai_select_all(Operator):
                     row.selected_for_apply = False
                     continue
                 status = (row.status or "").upper()
-                actionable = status.startswith("NEEDS_RENAME") or status.startswith("NAME_COLLISION")
-                row.selected_for_apply = actionable
+
+                if force_reanalysis:
+                    # In force reanalysis mode, select all visible non-read-only materials
+                    # But only if they have actual proposals to apply
+                    has_proposal = row.proposed_name and row.proposed_name != row.material_name
+                    row.selected_for_apply = has_proposal
+                else:
+                    # In normal mode, only select actionable materials
+                    actionable = (
+                        status.startswith("NEEDS_RENAME")
+                        or status.startswith("NAME_COLLISION")
+                        or row.review_requested
+                    )
+                    row.selected_for_apply = actionable
+
                 if row.selected_for_apply:
                     selected += 1
 
@@ -1310,6 +1889,260 @@ class LIME_TB_OT_ai_select_none(Operator):
         return {'FINISHED'}
 
 
+class LIME_TB_OT_ai_normalize_to_closest(Operator):
+    bl_idname = "lime_tb.ai_normalize_to_closest"
+    bl_label = "AI: Normalize to Closest"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    material_name: bpy.props.StringProperty(name="Material", default="")
+
+    def execute(self, context):
+        scene = _get_active_scene(context)
+        state = scene.lime_ai_mat
+        
+        # Find the row for this material
+        target_row = None
+        for row in state.rows:
+            if row.material_name == self.material_name:
+                target_row = row
+                break
+        
+        if not target_row:
+            self.report({'ERROR'}, f"Material {self.material_name} not found in proposals")
+            return {'CANCELLED'}
+        
+        # If not yet normalized, apply normalization
+        if not target_row.is_normalized:
+            # Save original proposal if not already saved
+            if not target_row.original_proposal:
+                target_row.original_proposal = target_row.proposed_name
+            
+            reconciliation_result = reconcile_proposal(
+                proposed_name=target_row.original_proposal or "",
+                proposed_type=target_row.material_type or "Plastic",
+                proposed_finish=target_row.finish or "Generic",
+                confidence_from_ai=float(getattr(target_row, "confidence", 0.7)),
+                allow_non_indexed=False,  # Force normalization
+                taxonomy_context={
+                    "allowed_material_types": get_allowed_material_types(),
+                },
+            )
+            
+            if reconciliation_result["suggested_normalized"]:
+                target_row.proposed_name = reconciliation_result["suggested_normalized"]
+                target_row.material_type = reconciliation_result["taxonomy_type"]
+                target_row.finish = reconciliation_result["taxonomy_finish"]
+                target_row.is_indexed = True
+                target_row.is_normalized = True
+                target_row.taxonomy_match = f"{reconciliation_result['taxonomy_type']}/{reconciliation_result['taxonomy_finish']}"
+                target_row.reconciliation_note = "Normalized to taxonomy match"
+                
+                self.report({'INFO'}, f"Normalized {self.material_name} to {reconciliation_result['suggested_normalized']}")
+            else:
+                self.report({'WARNING'}, f"Could not normalize {self.material_name}")
+        else:
+            self.report({'INFO'}, f"{self.material_name} is already normalized")
+        
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_ai_keep_proposal(Operator):
+    bl_idname = "lime_tb.ai_keep_proposal"
+    bl_label = "AI: Keep Proposal or Undo Normalize"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    material_name: bpy.props.StringProperty(name="Material", default="")
+
+    def execute(self, context):
+        scene = _get_active_scene(context)
+        state = scene.lime_ai_mat
+        
+        # Find the row for this material
+        target_row = None
+        for row in state.rows:
+            if row.material_name == self.material_name:
+                target_row = row
+                break
+        
+        if not target_row:
+            self.report({'ERROR'}, f"Material {self.material_name} not found in proposals")
+            return {'CANCELLED'}
+        
+        # Toggle: if normalized, revert to original; if not normalized, keep as-is
+        if target_row.is_normalized and target_row.original_proposal:
+            # Undo normalization - revert to original AI proposal
+            target_row.proposed_name = target_row.original_proposal
+            target_row.is_normalized = False
+            target_row.is_indexed = False
+            target_row.taxonomy_match = ""
+            target_row.reconciliation_note = "Kept original AI proposal (undid normalization)"
+            self.report({'INFO'}, f"Reverted {self.material_name} to AI proposal")
+        else:
+            # Already at original proposal - just confirm we're keeping it
+            target_row.reconciliation_note = "Kept as experimental proposal"
+            self.report({'INFO'}, f"Keeping {self.material_name} as proposed")
+        
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_ai_toggle_review(Operator):
+    bl_idname = "lime_tb.ai_toggle_review"
+    bl_label = "AI: Toggle Manual Review"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    material_name: bpy.props.StringProperty(name="Material", default="")
+
+    def execute(self, context):
+        scene = _get_active_scene(context)
+        state = scene.lime_ai_mat
+
+        target_row = None
+        for row in state.rows:
+            if row.material_name == self.material_name:
+                target_row = row
+                break
+
+        if target_row is None:
+            self.report({'WARNING'}, f"Material {self.material_name} not found")
+            return {'CANCELLED'}
+
+        target_row.review_requested = not target_row.review_requested
+        if target_row.review_requested:
+            if not target_row.read_only:
+                target_row.selected_for_apply = True
+        elif not target_row.needs_rename:
+            target_row.selected_for_apply = False
+
+        refresh_selection_preview(scene)
+        state_msg = "queued for review" if target_row.review_requested else "review cleared"
+        self.report({'INFO'}, f"{self.material_name}: {state_msg}")
+        return {'FINISHED'}
+
+
+class LIME_TB_OT_open_ai_material_manager(Operator):
+    """Abre el AI Material Manager en una ventana flotante."""
+    bl_idname = "lime_tb.open_ai_material_manager"
+    bl_label = "Open AI Material Manager"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Abre el gestor completo de materiales IA en una ventana flotante"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=1080)
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        state = getattr(scene, 'lime_ai_mat', None)
+
+        # Header con controles principales
+        header = layout.box()
+        header.label(text="AI Material Manager", icon='MATERIAL')
+
+        # Controles de contexto - más compactos
+        if state:
+            context_box = header.box()
+            context_box.label(text="Scene Context", icon='INFO')
+
+            # Contexto de escena - más compacto
+            context_col = context_box.column(align=True)
+            context_col.scale_y = 0.9
+            context_col.prop(state, "scene_context", text="",
+                           placeholder="Describe the scene context (e.g., kitchen, marble, brushed metal)")
+
+            # Toggle para permitir no indexados - más compacto
+            context_row = context_box.row(align=True)
+            context_row.scale_y = 0.9
+            context_row.prop(state, "allow_non_indexed", text="Allow experimental materials", toggle=True)
+
+            # Toggle para forzar re-análisis - más compacto
+            reanalysis_row = context_box.row(align=True)
+            reanalysis_row.scale_y = 0.9
+            reanalysis_row.prop(state, "force_reanalysis", text="Force re-analysis of correct materials", toggle=True)
+
+        # Botones principales - distribución profesional
+        controls = layout.box()
+        controls.label(text="Actions", icon='TOOL_SETTINGS')
+
+        btn_row = controls.row(align=True)
+
+        # Scan button - tamaño estándar
+        scan_col = btn_row.column(align=True)
+        scan_col.scale_x = 2.0
+        scan_col.operator("lime_tb.ai_scan_materials", text="Scan Materials", icon='VIEWZOOM')
+
+        # Contador de seleccionados
+        actionable_selected = 0
+        if state and state.rows:
+            force_reanalysis = getattr(state, 'force_reanalysis', False)
+            for it in state.rows:
+                s = (getattr(it, 'status', '') or '').upper()
+                read_only = getattr(it, 'read_only', False)
+                selected = getattr(it, 'selected_for_apply', False)
+
+                if not read_only and selected:
+                    if force_reanalysis:
+                        # In force reanalysis mode, count all selected materials
+                        # But only if they have actual proposals to apply
+                        if it.proposed_name and it.proposed_name != it.material_name:
+                            actionable_selected += 1
+                    elif (s.startswith('NEEDS_RENAME') or s.startswith('NAME_COLLISION')):
+                        # In normal mode, only count actionable materials
+                        actionable_selected += 1
+
+        # Apply button - tamaño estándar
+        apply_col = btn_row.column(align=True)
+        apply_col.scale_x = 1.8
+        apply_col.enabled = actionable_selected > 0
+        apply_col.operator("lime_tb.ai_apply_materials", text="Apply Renames", icon='CHECKMARK')
+
+        # Clear button - tamaño estándar
+        clear_col = btn_row.column(align=True)
+        clear_col.scale_x = 1.2
+        clear_col.operator("lime_tb.ai_clear_materials", text="Clear", icon='TRASH')
+
+        # Filtros y selección - distribución profesional
+        if state:
+            filter_box = layout.box()
+            filter_box.label(text="Filters & Selection", icon='FILTER')
+
+            # Filtros de vista - tamaño estándar
+            filter_row = filter_box.row(align=True)
+            filter_row.scale_y = 1.0
+            filter_row.prop(state, "view_filter", expand=True)
+
+            # Selección masiva - tamaño estándar
+            sel_row = filter_box.row(align=True)
+            sel_row.scale_y = 1.0
+            sel_row.enabled = bool(state.rows)
+
+            # Select All button - tamaño estándar
+            sel_all_col = sel_row.column(align=True)
+            sel_all_col.scale_x = 1.5
+            sel_all_col.operator("lime_tb.ai_select_all", text="Select All", icon='CHECKBOX_HLT')
+
+            # Select None button - tamaño estándar
+            sel_none_col = sel_row.column(align=True)
+            sel_none_col.scale_x = 1.5
+            sel_none_col.operator("lime_tb.ai_select_none", text="Select None", icon='CHECKBOX_DEHLT')
+
+        # Lista de materiales expandida
+        if state and state.rows:
+            list_box = layout.box()
+            list_box.label(text=f"Materials ({len(state.rows)})", icon='MATERIAL')
+
+            # Usar más filas para la lista
+            list_box.template_list("LIME_TB_UL_ai_mat_rows", "",
+                                 state, "rows", state, "active_index",
+                                 rows=12)  # Más filas que el panel compacto
+        else:
+            layout.label(text="No materials to display", icon='INFO')
+
+    def execute(self, context):
+        # Este método no se ejecuta directamente, solo cuando se usa invoke_props_dialog
+        self.report({'INFO'}, "AI Material Manager dialog opened")
+        return {'FINISHED'}
+
+
 __all__ = [
     "LIME_TB_OT_ai_test_connection",
     "LIME_TB_OT_ai_rename_single",
@@ -1319,6 +2152,8 @@ __all__ = [
     "LIME_TB_OT_ai_clear_materials",
     "LIME_TB_OT_ai_select_all",
     "LIME_TB_OT_ai_select_none",
+    "LIME_TB_OT_ai_normalize_to_closest",
+    "LIME_TB_OT_ai_keep_proposal",
+    "LIME_TB_OT_ai_toggle_review",
+    "LIME_TB_OT_open_ai_material_manager",
 ]
-
-

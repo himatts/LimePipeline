@@ -80,6 +80,10 @@ from .ops.ops_ai_material_renamer import (
     LIME_TB_OT_ai_clear_materials,
     LIME_TB_OT_ai_select_all,
     LIME_TB_OT_ai_select_none,
+    LIME_TB_OT_ai_normalize_to_closest,
+    LIME_TB_OT_ai_keep_proposal,
+    LIME_TB_OT_ai_toggle_review,
+    LIME_TB_OT_open_ai_material_manager,
 )
 from .props_ai_materials import register as register_ai_props, unregister as unregister_ai_props
 from .ui import register_camera_list_props, unregister_camera_list_props
@@ -250,6 +254,10 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_ai_clear_materials,
     LIME_TB_OT_ai_select_all,
     LIME_TB_OT_ai_select_none,
+    LIME_TB_OT_ai_normalize_to_closest,
+    LIME_TB_OT_ai_keep_proposal,
+    LIME_TB_OT_ai_toggle_review,
+    LIME_TB_OT_open_ai_material_manager,
     LIME_TB_UL_ai_mat_rows,
 )
 
