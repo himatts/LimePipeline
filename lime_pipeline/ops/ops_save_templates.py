@@ -28,7 +28,6 @@ from pathlib import Path
 from ..core.paths import paths_for_type
 from ..core.naming import (
     resolve_project_name,
-    detect_ptype_from_filename,
     parse_blend_details,
     hydrate_state_from_filepath,
 )
@@ -105,42 +104,15 @@ def _camera_index_for_shot(shot, camera_obj) -> int:
     return 1
 
 
-class LIME_OT_save_as_with_template(Operator):
-    bl_idname = "lime.save_as_with_template"
-    bl_label = "Save As (Template)"
-    bl_description = "Open file browser with suggested path and filename"
-
+class _SaveTemplateOperatorBase:
+    """Shared behaviors for template save operators."""
     ptype: StringProperty(name="Project Type", default="REND")
     filepath: StringProperty(name="File Path", subtype='FILE_PATH')
     # Image name captured at invoke-time from the Image Editor
     image_name: StringProperty(name="Image Name", default="")
 
     def _build_suggested_path(self, context) -> str:
-        wm = context.window_manager
-        st = wm.lime_pipeline
-        ptype = (self.ptype or '').strip().upper()
-        try:
-            editables_dir = _ensure_editables_dir(st, ptype)
-        except Exception:
-            # Fallback to home if not configured; dialog still opens
-            editables_dir = Path.home()
-        project_name, sc_number, rev = _resolve_prj_rev_sc(st)
-        scene = context.scene
-        shot = validate_scene.active_shot_context(context)
-        camera_obj = scene.camera
-        if ptype == 'REND':
-            shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
-            cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
-            filename = f"{project_name}_Render_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
-        elif ptype == 'PV':
-            shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
-            cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
-            filename = f"{project_name}_PV_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
-        elif ptype == 'SB':
-            filename = f"{project_name}_SB_SC{sc_number:03d}_Rev_{rev}.png"
-        else:
-            filename = f"{project_name}_TMP_SC{sc_number:03d}_Rev_{rev}.png"
-        return (editables_dir / filename).as_posix()
+        raise NotImplementedError
 
     def invoke(self, context, event):
         # Compute suggested path and open the file browser via fileselect_add
@@ -242,7 +214,40 @@ class LIME_OT_save_as_with_template(Operator):
         return {'FINISHED'}
 
 
-class LIME_OT_save_as_with_template_raw(LIME_OT_save_as_with_template):
+class LIME_OT_save_as_with_template(_SaveTemplateOperatorBase, Operator):
+    bl_idname = "lime.save_as_with_template"
+    bl_label = "Save As (Template)"
+    bl_description = "Open file browser with suggested path and filename"
+
+    def _build_suggested_path(self, context) -> str:
+        wm = context.window_manager
+        st = wm.lime_pipeline
+        ptype = (self.ptype or '').strip().upper()
+        try:
+            editables_dir = _ensure_editables_dir(st, ptype)
+        except Exception:
+            # Fallback to home if not configured; dialog still opens
+            editables_dir = Path.home()
+        project_name, sc_number, rev = _resolve_prj_rev_sc(st)
+        scene = context.scene
+        shot = validate_scene.active_shot_context(context)
+        camera_obj = scene.camera
+        if ptype == 'REND':
+            shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
+            cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
+            filename = f"{project_name}_Render_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+        elif ptype == 'PV':
+            shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
+            cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
+            filename = f"{project_name}_PV_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+        elif ptype == 'SB':
+            filename = f"{project_name}_SB_SC{sc_number:03d}_Rev_{rev}.png"
+        else:
+            filename = f"{project_name}_TMP_SC{sc_number:03d}_Rev_{rev}.png"
+        return (editables_dir / filename).as_posix()
+
+
+class LIME_OT_save_as_with_template_raw(_SaveTemplateOperatorBase, Operator):
     """Operador para guardar renders crudos (RAW) con prefijo y carpeta separada."""
     bl_idname = "lime.save_as_with_template_raw"
     bl_label = "Save As Raw (Template)"

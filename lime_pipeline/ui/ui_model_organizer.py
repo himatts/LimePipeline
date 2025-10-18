@@ -33,9 +33,12 @@ class LIME_PT_model_organizer(Panel):
         layout.operator("lime.clean_step", text="Clean .STEP", icon='FILE_REFRESH')
 
         offsets = objects_with_location_offset(ctx.scene)
-        status_row = layout.row()
+        status_box = layout.box()
+        status_row = status_box.row()
+        status_row.alignment = 'CENTER'
+        status_row.alert = bool(offsets)
         if offsets:
-            status_row.label(text=f"Offsets detected: {len(offsets)} object(s)", icon='ERROR')
+            status_row.label(text=f"{len(offsets)} object(s) with offsets", icon='ERROR')
         else:
             status_row.label(text="All object locations zeroed", icon='CHECKMARK')
         apply_row = layout.row()
@@ -47,20 +50,12 @@ class LIME_PT_model_organizer(Panel):
             toggle_row = layout.row(align=True)
             toggle_row.prop(state, "auto_select_hierarchy", text="Auto Select Children", toggle=True, icon='SELECT_SET')
 
+        layout.separator()
         layout.operator("lime.group_selection_empty", text="Create Controller", icon='OUTLINER_OB_EMPTY')
         layout.operator("lime.move_controller", text="Move Controller", icon='EMPTY_ARROWS')
+        layout.separator()
         layout.operator("lime.colorize_parent_groups", text="Color Parent Groups", icon='COLOR')
-        layout.separator()
         layout.operator("lime.apply_object_alpha_mix", text="Alpha Material Config", icon='SHADING_RENDERED')
-        layout.separator()
-        col = layout.column(align=True)
-        # Link ocupa todo el ancho
-        col.operator("wm.link", text="Link Project", icon='LINKED')
-        # Update, Override y Relocate juntos en la siguiente fila
-        ops_row = col.row(align=True)
-        ops_row.operator("wm.lib_reload", text="Update", icon='FILE_REFRESH')
-        ops_row.operator("lime.make_library_override", text="Override", icon='LIBRARY_DATA_OVERRIDE')
-        ops_row.operator("wm.lib_relocate", text="Relocate", icon='ZOOM_ALL')
 
 
 __all__ = [

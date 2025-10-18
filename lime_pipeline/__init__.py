@@ -164,9 +164,6 @@ from .ops.ops_cameras import (
     LIME_OT_retry_camera_margin_backgrounds,
     LIME_OT_reset_margin_alpha,
 )
-from .ops.ops_library_override import (
-    LIME_OT_make_library_override,
-)
 from .ops.ops_auto_camera_bg import (
     LIME_OT_auto_camera_background,
     LIME_OT_auto_camera_background_refresh,
@@ -240,7 +237,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_reset_margin_alpha,
     LIME_OT_save_as_with_template,
     LIME_OT_save_as_with_template_raw,
-    LIME_OT_make_library_override,
     LIME_OT_auto_camera_background,
     LIME_OT_auto_camera_background_refresh,
     LIME_OT_auto_camera_background_toggle_live,
