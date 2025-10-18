@@ -480,7 +480,7 @@ def _postprocess_statuses(scene: Scene, force_reanalysis: bool = False) -> None:
             elif row.review_requested:
                 status = "REVIEW"
             else:
-                quality_label = (row.quality_label or "").strip().upper()
+                quality_label = (row.quality_label or "").strip().lower()
                 if quality_label:
                     status = f"VALID:{quality_label}"
                 else:
@@ -516,15 +516,9 @@ def _postprocess_statuses(scene: Scene, force_reanalysis: bool = False) -> None:
         state = scene.lime_ai_mat
         force_reanalysis = getattr(state, 'force_reanalysis', False)
 
-        if row.proposed_name and row.proposed_name == row.material_name:
-            # In force reanalysis mode, keep proposals even if they match current name
-            if not force_reanalysis:
-                row.proposed_name = ""
-
-        if row.status in ("VALID", "SEQUENCE_GAP"):
-            # In force reanalysis mode, keep proposals even for valid materials
-            if not force_reanalysis:
-                row.proposed_name = ""
+        # Always keep proposed_name visible - users should see what was determined
+        # even if material is already correct (VALID status)
+        # The UI will show it as non-editable if the material doesn't need changes
 
         if row.read_only or (
             row.status not in ("NEEDS_RENAME", "NAME_COLLISION") and not row.review_requested
@@ -556,11 +550,11 @@ def _postprocess_statuses(scene: Scene, force_reanalysis: bool = False) -> None:
                     row.status = "NEEDS_RENAME"
                     assigned_targets.add(target)
         else:
-            if status not in ("SEQUENCE_GAP", "VALID"):
-                row.proposed_name = ""
-
-        if row.status in ("VALID", "SEQUENCE_GAP"):
-            row.selected_for_apply = False
+            # For correctly indexed materials, ensure the field shows the real name
+            if status.startswith("VALID"):
+                proposal_clean = (row.proposed_name or "").strip()
+                if not proposal_clean or proposal_clean.upper().startswith("MAT_PLASTIC_GENERIC"):
+                    row.proposed_name = row.material_name
 
 
 def _is_row_visible(row: LimeAIMatRow, view_filter: str) -> bool:
@@ -1683,29 +1677,14 @@ class LIME_TB_OT_ai_apply_materials(Operator):
 
         with _suspend_selection_refresh():
             for row in sorted(rows, key=lambda r: r.material_name.lower()):
-                status = (row.status or '').upper()
-
-                # Apply logic depends on mode
-                if force_reanalysis:
-                    # In force reanalysis mode, apply all selected non-read-only materials
-                    # This includes materials with status "VALID" if they have proposals and are selected
-                    if row.read_only or not row.selected_for_apply:
-                        continue
-                    # In force reanalysis, also check if there's actually a proposal to apply
-                    if not row.proposed_name or row.proposed_name == row.material_name:
-                        continue
-                else:
-                    # In normal mode, apply only actionable items
-                    if row.read_only or not row.selected_for_apply:
-                        continue
-                    actionable = status.startswith('NEEDS_RENAME') or status.startswith('NAME_COLLISION')
-                    review_applicable = (
-                        row.review_requested
-                        and row.proposed_name
-                        and row.proposed_name != row.material_name
-                    )
-                    if not (actionable or review_applicable):
-                        continue
+                # Simplified logic: If checkbox is checked and not read_only, apply it
+                if row.read_only or not row.selected_for_apply:
+                    continue
+                
+                # Must have a proposed_name and it must be different from current
+                if not row.proposed_name or row.proposed_name == row.material_name:
+                    continue
+                
                 mat: Optional[Material] = bpy.data.materials.get(row.material_name)
                 if not mat:
                     continue
@@ -1713,7 +1692,7 @@ class LIME_TB_OT_ai_apply_materials(Operator):
                 # Use proposed_name if available, otherwise derive from current values
                 if row.proposed_name and row.proposed_name.strip():
                     target_name = row.proposed_name
-                    # Parse the proposed name to get type and finish for metadata
+                    # Try to parse for metadata, but don't reject if it doesn't follow pattern
                     parsed_target = parse_name(target_name)
                     if parsed_target:
                         material_type = parsed_target["material_type"]
@@ -1721,9 +1700,12 @@ class LIME_TB_OT_ai_apply_materials(Operator):
                         version_token = parsed_target["version"]
                         version_idx = parsed_target.get("version_index") or parse_version(version_token) or 1
                     else:
-                        # Fallback to deriving from current row values
-                        material_type, finish, version_token, version_idx = _derive_row_target(row)
-                        target_name = f"{PREFIX}_{material_type}_{finish}_{version_token}"
+                        # User manually edited - respect it even if format is non-standard
+                        # Extract what we can for metadata, but use the name as-is
+                        material_type = row.material_type or "Plastic"
+                        finish = row.finish or "Generic"
+                        version_token = row.version_token or "V01"
+                        version_idx = parse_version(version_token) or 1
                 else:
                     # No proposal, derive target from current values
                     material_type, finish, version_token, version_idx = _derive_row_target(row)
@@ -1828,7 +1810,6 @@ class LIME_TB_OT_ai_select_all(Operator):
 
         refresh_selection_preview(scene)
         view = getattr(state, 'view_filter', 'NEEDS')
-        force_reanalysis = getattr(state, 'force_reanalysis', False)
         selected = 0
         with _suspend_selection_refresh():
             for row in state.rows:
@@ -1837,24 +1818,9 @@ class LIME_TB_OT_ai_select_all(Operator):
                 if row.read_only:
                     row.selected_for_apply = False
                     continue
-                status = (row.status or "").upper()
 
-                if force_reanalysis:
-                    # In force reanalysis mode, select all visible non-read-only materials
-                    # But only if they have actual proposals to apply
-                    has_proposal = row.proposed_name and row.proposed_name != row.material_name
-                    row.selected_for_apply = has_proposal
-                else:
-                    # In normal mode, only select actionable materials
-                    actionable = (
-                        status.startswith("NEEDS_RENAME")
-                        or status.startswith("NAME_COLLISION")
-                        or row.review_requested
-                    )
-                    row.selected_for_apply = actionable
-
-                if row.selected_for_apply:
-                    selected += 1
+                row.selected_for_apply = True
+                selected += 1
 
         refresh_selection_preview(scene)
         self.report({'INFO'}, f"Selected {selected} items")
@@ -2052,12 +2018,12 @@ class LIME_TB_OT_open_ai_material_manager(Operator):
             # Toggle para permitir no indexados - más compacto
             context_row = context_box.row(align=True)
             context_row.scale_y = 0.9
-            context_row.prop(state, "allow_non_indexed", text="Allow experimental materials", toggle=True)
+            context_row.prop(state, "allow_non_indexed", text="Allow flexible names", toggle=True)
 
             # Toggle para forzar re-análisis - más compacto
             reanalysis_row = context_box.row(align=True)
             reanalysis_row.scale_y = 0.9
-            reanalysis_row.prop(state, "force_reanalysis", text="Force re-analysis of correct materials", toggle=True)
+            reanalysis_row.prop(state, "force_reanalysis", text="Re-scan approved names", toggle=True)
 
         # Botones principales - distribución profesional
         controls = layout.box()

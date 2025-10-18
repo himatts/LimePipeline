@@ -185,7 +185,7 @@ def reconcile_proposal(
     
     # Step 3: Determine action
     if is_fully_indexed:
-        # Proposal matches taxonomy
+        # Proposal matches taxosnomy
         action = "accept"
         reason = "Proposal matches taxonomy standards"
         confidence_final = confidence_from_ai
