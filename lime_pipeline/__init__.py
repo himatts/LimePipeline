@@ -175,6 +175,9 @@ from .ops.ops_auto_camera_bg import (
     LIME_OT_auto_camera_background_bake,
     LIME_OT_auto_camera_background_cleanup,
 )
+from .ops.ops_stage_hdri import (
+    LIME_OT_stage_set_hdri,
+)
 
 
 # Class collections for organized registration
@@ -246,6 +249,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_auto_camera_background_toggle_live,
     LIME_OT_auto_camera_background_bake,
     LIME_OT_auto_camera_background_cleanup,
+    LIME_OT_stage_set_hdri,
     LIME_TB_OT_ai_test_connection,
     LIME_TB_OT_ai_rename_single,
     LIME_TB_OT_ai_scan_materials,
