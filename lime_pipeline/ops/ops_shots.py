@@ -173,3 +173,115 @@ class LIME_OT_activate_shot(Operator):
         return {'FINISHED'}
 
 
+
+class LIME_OT_jump_to_first_shot_marker(Operator):
+    bl_idname = "lime.jump_to_first_shot_marker"
+    bl_label = "Jump to First Shot Camera Marker"
+    bl_description = "Set current frame to the first timeline marker whose camera belongs to the target SHOT"
+    bl_options = {'REGISTER'}
+
+    shot_name: StringProperty(name="Shot Name", default="")
+
+    @classmethod
+    def poll(cls, ctx):
+        return True
+
+    def execute(self, context):
+        scene = context.scene
+        # Resolve shot by name or from context
+        shot = None
+        name = (self.shot_name or '').strip()
+        if name:
+            shot = bpy.data.collections.get(name)
+        if shot is None:
+            shot = validate_scene.active_shot_context(context)
+        if shot is None:
+            self.report({'WARNING'}, "No SHOT context to jump to markers")
+            return {'CANCELLED'}
+
+        # Collect cameras that belong to the SHOT subtree
+        def _iter_coll_tree(root):
+            stack = [root]
+            seen = set()
+            while stack:
+                c = stack.pop()
+                ident = c.as_pointer() if hasattr(c, 'as_pointer') else id(c)
+                if ident in seen:
+                    continue
+                seen.add(ident)
+                yield c
+                try:
+                    stack.extend(list(c.children))
+                except Exception:
+                    pass
+
+        cameras = []
+        for coll in _iter_coll_tree(shot):
+            try:
+                for obj in coll.objects:
+                    if getattr(obj, 'type', None) == 'CAMERA':
+                        cameras.append(obj)
+            except Exception:
+                pass
+
+        if not cameras:
+            self.report({'WARNING'}, f"No cameras found in SHOT '{shot.name}'")
+            return {'CANCELLED'}
+
+        allowed = set(cameras)
+        # Build camera name prefixes for this SHOT (02d and 03d width)
+        try:
+            from ..core import validate_scene as _vs
+            idx = _vs.parse_shot_index(getattr(shot, 'name', '') or '') or 0
+        except Exception:
+            idx = 0
+        prefixes = []
+        if idx > 0:
+            prefixes = [f"SHOT_{idx:02d}_CAMERA_", f"SHOT_{idx:03d}_CAMERA_"]
+
+        # Gather candidate frames: markers with camera in allowed or matching name prefixes
+        try:
+            markers = sorted(scene.timeline_markers, key=lambda m: m.frame)
+        except Exception:
+            markers = list(scene.timeline_markers)
+
+        current = int(getattr(scene, 'frame_current', 0) or 0)
+        future_frames = []
+        all_frames = []
+        for marker in markers:
+            cam = getattr(marker, 'camera', None)
+            if not cam:
+                continue
+            ok = cam in allowed
+            if not ok and prefixes:
+                try:
+                    n = getattr(cam, 'name', '') or ''
+                    ok = any(n.startswith(p) for p in prefixes)
+                except Exception:
+                    ok = False
+            if not ok:
+                continue
+            f = int(marker.frame)
+            all_frames.append(f)
+            if f >= current:
+                future_frames.append(f)
+
+        target_frame = None
+        if future_frames:
+            target_frame = min(future_frames)
+        elif all_frames:
+            target_frame = min(all_frames)
+
+        if target_frame is None:
+            self.report({'WARNING'}, f"No camera markers for SHOT '{shot.name}'")
+            return {'CANCELLED'}
+
+        try:
+            scene.frame_set(target_frame)
+        except Exception:
+            self.report({'ERROR'}, "Failed to set frame")
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, f"Jumped to frame {target_frame} for '{shot.name}'")
+        return {'FINISHED'}
+

@@ -138,6 +138,7 @@ from .ops.ops_shots import (
     LIME_OT_duplicate_shot,
     LIME_OT_activate_shot,
     LIME_OT_delete_shot,
+    LIME_OT_jump_to_first_shot_marker,
 )
 from .ops.ops_add_missing import (
     LIME_OT_add_missing_collections,
@@ -237,6 +238,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_duplicate_shot,
     LIME_OT_activate_shot,
     LIME_OT_delete_shot,
+    LIME_OT_jump_to_first_shot_marker,
     LIME_OT_add_missing_collections,
     LIME_OT_rev_prev,
     LIME_OT_rev_next,

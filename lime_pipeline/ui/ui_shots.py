@@ -45,6 +45,11 @@ class LIME_PT_shots(Panel):
         row.prop(st, "solo_shot_activo", text="Solo Shot Activo",
                 icon='RESTRICT_VIEW_ON' if getattr(st, 'solo_shot_activo', False) else 'RESTRICT_VIEW_OFF')
 
+        # Optional: Jump to first camera marker toggle (visible only in Solo mode)
+        if getattr(st, 'solo_shot_activo', False):
+            row2 = layout.row()
+            row2.prop(st, "jump_to_first_shot_marker", text="Saltar a Última Cámara Activa", icon='MARKER_HLT')
+
         # Main shot list with controls
         row = layout.row(align=True)
         row.template_list("LIME_UL_shots", "", scene, "lime_shots", scene, "lime_shots_index", rows=6)
@@ -342,6 +347,12 @@ def register_shot_list_props():
                 st = context.window_manager.lime_pipeline
                 if getattr(st, 'solo_shot_activo', False):
                     bpy.ops.lime.isolate_active_shot(shot_name=name)
+                    # If jump toggle is enabled, jump to the first camera marker of this SHOT
+                    if getattr(st, 'jump_to_first_shot_marker', False):
+                        try:
+                            bpy.ops.lime.jump_to_first_shot_marker(shot_name=name)
+                        except Exception:
+                            pass
             except Exception:
                 pass
         except Exception:

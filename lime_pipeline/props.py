@@ -259,6 +259,47 @@ class LimePipelineState(PropertyGroup):
         update=_on_solo_shot_activo_update,
     )
 
+    def _on_jump_to_first_shot_marker_update(self, context):
+        try:
+            # Trigger jump only when enabling the toggle
+            if not getattr(self, 'jump_to_first_shot_marker', False):
+                return
+            import bpy  # local import per core rules
+            scene = context.scene
+            shot_name = ''
+            try:
+                idx = getattr(scene, 'lime_shots_index', -1)
+                items = getattr(scene, 'lime_shots', None)
+                if items is not None and 0 <= idx < len(items):
+                    shot_name = items[idx].name
+            except Exception:
+                shot_name = ''
+            if not shot_name:
+                try:
+                    from .core import validate_scene
+                    active = validate_scene.active_shot_context(context)
+                    if active is not None:
+                        shot_name = active.name
+                except Exception:
+                    pass
+            if shot_name:
+                try:
+                    bpy.ops.lime.jump_to_first_shot_marker(shot_name=shot_name)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    jump_to_first_shot_marker: BoolProperty(
+        name="Jump to First Shot Marker",
+        description=(
+            "When enabled, switching/activating a SHOT in Solo mode will jump the timeline "
+            "to the first camera marker that belongs to that SHOT."
+        ),
+        default=False,
+        update=_on_jump_to_first_shot_marker_update,
+    )
+
     # (Removed) UI collapsible flags for Render Configs; now using subpanels
 
     # UI collapsible sections for Shots panel
