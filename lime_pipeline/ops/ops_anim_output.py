@@ -21,7 +21,7 @@ from pathlib import Path
 import bpy
 from bpy.types import Operator
 
-from ..core.naming import hydrate_state_from_filepath
+from ..core.naming import hydrate_state_from_filepath, resolve_project_name
 from ..core.paths import paths_for_type
 from ..core.validate_scene import active_shot_context, parse_shot_index
 
@@ -161,8 +161,111 @@ class LIME_OT_set_anim_output_final(_LimeSetAnimOutput):
     use_test_variant = False
 
 
+class _LimeSetAnimOutputLocal(Operator):
+    """Shared logic for local desktop animation output buttons."""
+
+    bl_options = {"REGISTER"}
+    output_label = "Animation Output (Local)"
+    use_test_variant = False
+
+    def execute(self, context):
+        try:
+            state, _scene = _ensure_state(context)
+        except RuntimeError as ex:
+            self.report({"ERROR"}, str(ex))
+            return {"CANCELLED"}
+        except Exception as ex:
+            self.report({"ERROR"}, f"Error preparando contexto: {ex}")
+            return {"CANCELLED"}
+
+        try:
+            sc_number = int(getattr(state, "sc_number", 0) or 0)
+        except Exception:
+            sc_number = 0
+        if sc_number <= 0:
+            self.report({"ERROR"}, "No se pudo resolver el número de escena (SC###). Revisa Project Organization.")
+            return {"CANCELLED"}
+
+        shot = active_shot_context(context)
+        if shot is None:
+            self.report({"ERROR"}, "No hay SHOT activo. Activa un SHOT en el Outliner.")
+            return {"CANCELLED"}
+        shot_idx = parse_shot_index(getattr(shot, "name", ""))
+        if shot_idx is None or shot_idx <= 0:
+            self.report({"ERROR"}, "No se pudo leer el índice del SHOT activo. Usa colecciones 'SHOT 01', 'SHOT 02', etc.")
+            return {"CANCELLED"}
+
+        # Get project name
+        project_name = resolve_project_name(state)
+        if not project_name:
+            self.report({"ERROR"}, "No se pudo obtener el nombre del proyecto. Revisa Project Organization.")
+            return {"CANCELLED"}
+
+        # Get desktop path
+        try:
+            desktop = Path.home() / "Desktop"
+            if not desktop.exists():
+                # Fallback for Windows OneDrive desktop
+                desktop = Path.home() / "OneDrive" / "Desktop"
+                if not desktop.exists():
+                    raise RuntimeError(f"Escritorio no encontrado en: {desktop}")
+        except Exception as ex:
+            self.report({"ERROR"}, f"No se pudo acceder al escritorio: {ex}")
+            return {"CANCELLED"}
+
+        # Create project folder on desktop
+        project_dir = desktop / project_name
+        shot_token = f"SC{sc_number:03d}_SH{shot_idx:02d}"
+        target_dir = project_dir / shot_token
+
+        if self.use_test_variant:
+            target_dir = target_dir / "test"
+            basename = f"{shot_token}_test_"
+            mode_label = "Test (Local)"
+        else:
+            basename = f"{shot_token}_"
+            mode_label = "Final (Local)"
+
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as ex:
+            self.report({"ERROR"}, f"No se pudo crear la carpeta destino:\n{target_dir}\n{ex}")
+            return {"CANCELLED"}
+
+        output_path = target_dir / basename
+        try:
+            context.scene.render.filepath = str(output_path)
+        except Exception as ex:
+            self.report({"ERROR"}, f"Blender rechazó la ruta de salida: {ex}")
+            return {"CANCELLED"}
+
+        self.report(
+            {"INFO"},
+            f"{mode_label} output listo en escritorio: {output_path}",
+        )
+        return {"FINISHED"}
+
+
+class LIME_OT_set_anim_output_test_local(_LimeSetAnimOutputLocal):
+    bl_idname = "lime.set_anim_output_test_local"
+    bl_label = "Set Anim Output: Test (Local)"
+    bl_description = "Configura la salida de animación para pruebas rápidas en el escritorio local"
+    output_label = "Animation Output (Test Local)"
+    use_test_variant = True
+
+
+class LIME_OT_set_anim_output_final_local(_LimeSetAnimOutputLocal):
+    bl_idname = "lime.set_anim_output_final_local"
+    bl_label = "Set Anim Output: Final (Local)"
+    bl_description = "Configura la salida de animación final en el escritorio local"
+    output_label = "Animation Output (Final Local)"
+    use_test_variant = False
+
+
 __all__ = [
     "LIME_OT_set_anim_output_test",
     "LIME_OT_set_anim_output_final",
+    "LIME_OT_set_anim_output_test_local",
+    "LIME_OT_set_anim_output_final_local",
 ]
 

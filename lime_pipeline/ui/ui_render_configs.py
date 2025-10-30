@@ -100,9 +100,14 @@ class LIME_PT_render_configs(Panel):
 
         anim_box = layout.box()
         anim_box.label(text="Output Files (Animation)")
-        anim_row = anim_box.row(align=True)
-        anim_row.operator("lime.set_anim_output_test", text="Set Anim Output: Test", icon='FILE_CACHE')
-        anim_row.operator("lime.set_anim_output_final", text="Set Anim Output: Final", icon='RENDER_ANIMATION')
+        # Existing buttons (RAMV path)
+        anim_row_top = anim_box.row(align=True)
+        anim_row_top.operator("lime.set_anim_output_test", text="Set Anim Output: Test", icon='FILE_CACHE')
+        anim_row_top.operator("lime.set_anim_output_final", text="Set Anim Output: Final", icon='RENDER_ANIMATION')
+        # New local buttons (Desktop)
+        anim_row_bottom = anim_box.row(align=True)
+        anim_row_bottom.operator("lime.set_anim_output_test_local", text="Set Anim Output: Test (Local)", icon='FILE_CACHE')
+        anim_row_bottom.operator("lime.set_anim_output_final_local", text="Set Anim Output: Final (Local)", icon='RENDER_ANIMATION')
 
         cy = getattr(scene, 'cycles', None)
 

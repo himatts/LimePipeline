@@ -95,6 +95,8 @@ from .ops.ops_folders import LIME_OT_open_output_folder
 from .ops.ops_anim_output import (
     LIME_OT_set_anim_output_test,
     LIME_OT_set_anim_output_final,
+    LIME_OT_set_anim_output_test_local,
+    LIME_OT_set_anim_output_final_local,
 )
 from .ops.ops_create_file import LIME_OT_create_file
 from .ops.ops_backup import LIME_OT_create_backup
@@ -192,6 +194,8 @@ NON_PANEL_CLASSES = (
     LIME_OT_open_output_folder,
     LIME_OT_set_anim_output_test,
     LIME_OT_set_anim_output_final,
+    LIME_OT_set_anim_output_test_local,
+    LIME_OT_set_anim_output_final_local,
     LIME_OT_create_file,
     LIME_OT_create_backup,
     LIME_OT_show_text,
