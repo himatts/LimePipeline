@@ -24,6 +24,7 @@ Key Features:
 from __future__ import annotations
 
 import json
+import colorsys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -84,6 +85,169 @@ def _get_texture_basenames(mat: Material) -> List[str]:
     return basenames
 
 
+_BACKGROUND_KEYWORDS = (
+    "background",
+    "backdrop",
+    "backplate",
+    "sky",
+    "skybox",
+    "skydome",
+    "horizon",
+    "environment",
+    "env",
+    "envmap",
+    "fondo",
+)
+
+
+def _has_background_hint(text: str) -> bool:
+    lower = text.lower()
+    for keyword in _BACKGROUND_KEYWORDS:
+        if keyword in lower:
+            return True
+    if lower.startswith("bg") and (len(lower) == 2 or not lower[2].isalpha()):
+        return True
+    for sep in ("_", "-", " "):
+        if f"{sep}bg" in lower or f"bg{sep}" in lower:
+            return True
+    return False
+
+
+def _is_background_material(mat: Material, object_hints: List[str], collection_hints: List[str]) -> bool:
+    try:
+        if _has_background_hint(mat.name):
+            return True
+        for hint in object_hints:
+            if _has_background_hint(hint):
+                return True
+        for hint in collection_hints:
+            if _has_background_hint(hint):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _rgb_to_color_name(r: float, g: float, b: float) -> str:
+    r = max(0.0, min(1.0, float(r)))
+    g = max(0.0, min(1.0, float(g)))
+    b = max(0.0, min(1.0, float(b)))
+
+    brightness = max(r, g, b)
+    min_channel = min(r, g, b)
+    saturation = brightness - min_channel
+
+    if brightness < 0.1:
+        return "Black"
+    if saturation < 0.08:
+        if brightness > 0.85:
+            return "White"
+        if brightness > 0.6:
+            return "LightGray"
+        if brightness > 0.3:
+            return "Gray"
+        return "DarkGray"
+
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    hue = (h * 360.0) % 360.0
+    prefix = ""
+    if v > 0.75:
+        prefix = "Light"
+    elif v < 0.35:
+        prefix = "Dark"
+
+    if 0 <= hue < 20 or hue >= 340:
+        base = "Red"
+    elif 20 <= hue < 45:
+        base = "Orange"
+    elif 45 <= hue < 70:
+        base = "Yellow"
+    elif 70 <= hue < 150:
+        base = "Green"
+    elif 150 <= hue < 200:
+        base = "Teal"
+    elif 200 <= hue < 255:
+        base = "Blue"
+    elif 255 <= hue < 290:
+        base = "Purple"
+    elif 290 <= hue < 330:
+        base = "Magenta"
+    else:
+        base = "Red"
+
+    if prefix and base not in ("Teal", "Magenta"):
+        return f"{prefix}{base}"
+    return base
+
+
+def _extract_color_from_input(node, socket_name: str) -> Optional[Tuple[float, float, float]]:
+    try:
+        if socket_name not in node.inputs:
+            return None
+        socket = node.inputs[socket_name]
+        if socket.is_linked:
+            return None
+        color = socket.default_value
+        if not color or len(color) < 3:
+            return None
+        return (float(color[0]), float(color[1]), float(color[2]))
+    except Exception:
+        return None
+
+
+def _extract_background_color(mat: Material) -> Optional[str]:
+    try:
+        nt = mat.node_tree
+        if not nt:
+            return None
+
+        candidate_colors: List[Tuple[float, float, float]] = []
+
+        for node in nt.nodes:
+            bl_idname = getattr(node, "bl_idname", "")
+
+            if bl_idname == "ShaderNodeValToRGB":
+                elements = getattr(node.color_ramp, "elements", None)
+                if elements and len(elements) >= 1:
+                    color = elements[0].color
+                    candidate_colors.append((float(color[0]), float(color[1]), float(color[2])))
+            elif bl_idname == "ShaderNodeBackground":
+                color = _extract_color_from_input(node, "Color")
+                if color:
+                    candidate_colors.append(color)
+            elif bl_idname == "ShaderNodeEmission":
+                color = _extract_color_from_input(node, "Color")
+                if color:
+                    candidate_colors.append(color)
+            elif bl_idname == "ShaderNodeBsdfPrincipled":
+                base_color = _extract_color_from_input(node, "Base Color")
+                if base_color:
+                    candidate_colors.append(base_color)
+                emission_color = _extract_color_from_input(node, "Emission Color")
+                if emission_color:
+                    candidate_colors.append(emission_color)
+
+        if not candidate_colors:
+            return None
+
+        # Prefer brightest colors (backgrounds are usually luminous)
+        candidate_colors.sort(key=lambda c: max(c), reverse=True)
+        color = candidate_colors[0]
+        return _rgb_to_color_name(*color)
+    except Exception:
+        return None
+
+
+def _build_background_material_name(
+    mat: Material,
+    color_name: str,
+    universe: List[str],
+    start_idx: int = 1,
+) -> str:
+    finish = normalize_finish(color_name or "Generic")
+    return bump_version_until_unique(universe, "Background", finish, start_idx=max(1, int(start_idx or 1)))
+
+
 def _get_object_and_collection_hints(mat: Material) -> Tuple[List[str], List[str]]:
     object_hints = []
     collection_hints = []
@@ -105,11 +269,28 @@ def _get_object_and_collection_hints(mat: Material) -> Tuple[List[str], List[str
 def _summarize_nodes(mat: Material) -> Dict[str, object]:
     ids: List[str] = []
     counts: Dict[str, int] = {}
-    principled = None
+    principled: Optional[Dict[str, object]] = None
+    texture_basenames: List[str] = []
+    object_hints, collection_hints = _get_object_and_collection_hints(mat)
+    is_background = _is_background_material(mat, object_hints, collection_hints)
+    background_color: Optional[str] = None
+
     try:
         nt = mat.node_tree
         if not nt:
-            return {"ids": ids, "counts": counts, "principled": principled, "texture_basenames": [], "object_hints": [], "collection_hints": []}
+            return {
+                "ids": ids,
+                "counts": counts,
+                "principled": principled,
+                "texture_basenames": texture_basenames,
+                "object_hints": object_hints,
+                "collection_hints": collection_hints,
+                "is_background": is_background,
+                "background_color": background_color,
+            }
+
+        texture_basenames = _get_texture_basenames(mat)
+
         for n in nt.nodes:
             bl_idname = getattr(n, 'bl_idname', '')
             if bl_idname:
@@ -127,10 +308,18 @@ def _summarize_nodes(mat: Material) -> Dict[str, object]:
                     "clearcoat": float(n.inputs["Clearcoat"].default_value) if "Clearcoat" in n.inputs else 0.0,
                     "transmission": float(n.inputs["Transmission"].default_value) if "Transmission" in n.inputs else 0.0,
                 }
+                base_color = _extract_color_from_input(n, "Base Color")
+                if base_color:
+                    principled["base_color"] = base_color
+                emission_color = _extract_color_from_input(n, "Emission Color")
+                if emission_color:
+                    principled["emission_color"] = emission_color
+
+        if is_background:
+            background_color = _extract_background_color(mat)
     except Exception:
         pass
-    texture_basenames = _get_texture_basenames(mat)
-    object_hints, collection_hints = _get_object_and_collection_hints(mat)
+
     return {
         "ids": ids,
         "counts": counts,
@@ -138,6 +327,8 @@ def _summarize_nodes(mat: Material) -> Dict[str, object]:
         "texture_basenames": texture_basenames,
         "object_hints": object_hints,
         "collection_hints": collection_hints,
+        "is_background": is_background,
+        "background_color": background_color,
     }
 
 
@@ -163,9 +354,24 @@ def _build_review_proposal_entry(
     material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
     finish = normalize_finish(parsed["finish"] if parsed else "Generic")
     current_idx = (parsed.get("version_index") if parsed else None) or 1
-    proposed = bump_version_until_unique(universe, material_type, finish, start_idx=current_idx + 1)
-    parts = proposed.split("_")
-    version_block = parts[-1] if len(parts) > 2 else "V01"
+    
+    # Check if current name is valid and unique - preserve it if so
+    current_name_clean = strip_numeric_suffix(material_name)
+    current_is_valid = parse_name(current_name_clean) is not None
+    current_is_unique = current_name_clean not in universe or current_name_clean == material_name
+    
+    if current_is_valid and current_is_unique:
+        # Material name is already valid and unique - preserve it
+        proposed = current_name_clean
+        version_block = parsed.get("version") if parsed else "V01"
+        notes = "Review proposal - keeping current valid name"
+    else:
+        # Need to find a unique version - try current version first, then bump if needed
+        proposed = bump_version_until_unique(universe, material_type, finish, start_idx=current_idx)
+        parts = proposed.split("_")
+        version_block = parts[-1] if len(parts) > 2 else "V01"
+        notes = "Review proposal - adjusted version for uniqueness"
+    
     return {
         "material_name": material_name,
         "proposed_name": proposed,
@@ -173,7 +379,7 @@ def _build_review_proposal_entry(
         "finish": finish,
         "version_token": version_block,
         "read_only": False,
-        "notes": "Review proposal - bumped version",
+        "notes": notes,
         "similar_group_id": _fingerprint_material(mat),
         "needs_rename": False,
         "review_requested": True,
@@ -716,13 +922,15 @@ def _system_prompt() -> str:
         "Deliberative rubric (internal):\n"
         "1) Understand: Does the current name precisely describe the real-world material? Identify domain: architectural (Concrete/Brick/Tile/Marble/Granite/Slate/Herringbone/Hex), product/industrial (ABS/PC/Steel/Aluminum/Anodized/Brushed/Galvanized), natural (Wood/Leather/Paper/Cardboard/Stone), textiles (Velvet/Denim/Knitting/Embroidery), coatings/paint (Paint/Varnish/Polished/Rough/Matte/Gloss), liquids (Water/Oil), optics (Glass/Frosted/Tint), decals/signage (Decal/Sticker/Label), FX/emissive (Emissive/Neon), and organic/anatomical (Skin/Iris/Sclera/Cornea/Pupil/Hair/Beard/Eyelash/Eyebrow/Nail/Tooth/Gum/Tongue).\n"
         "2) **CONTEXT ANALYSIS**: If scene_context is provided, analyze it FIRST to understand the overall material domain. Look for keywords that indicate the primary material types in the scene (e.g., 'toalla' suggests textiles, 'piel' suggests organic materials). Use this context to guide material type selection, especially for ambiguous names like 'Crease' or 'Stitch'.\n"
-        "3) Decide: If the name is expressive and compliant, do not rename. Otherwise, transform to the schema preserving as much descriptive semantics as possible in Finish (e.g., for 'HairMatAniso' → 'MAT_Organic_Hair_V01' with 'Aniso' as sub-element if needed; for 'Eyeball' → 'MAT_Tissue_Eyeball_V01'). Select the closest MaterialType from the allowed list, but prioritize preserving key terms in Finish for clarity and replicability (e.g., Hair, Eyeball, Skin, Tooth).\n"
-        "4) Validate: Ensure the final name strictly matches the schema and does not conflict with existing names; only bump V## for uniqueness.\n\n"
+        "3) **BACKGROUND MATERIALS**: If object/collection names or material name contain background cues (bg, background, sky, skybox, skydome, environment, backdrop, backplate), set MaterialType='Background'. Derive MaterialFinish from the dominant color: inspect Background/Principled/Emission nodes or color ramps; use descriptive CamelCase color names (e.g., Blue, LightBlue, DarkGray).\n"
+        "4) Decide: If the name is expressive and compliant, do not rename. Otherwise, transform to the schema preserving as much descriptive semantics as possible in Finish (e.g., for 'HairMatAniso' → 'MAT_Organic_Hair_V01' with 'Aniso' as sub-element if needed; for 'Eyeball' → 'MAT_Tissue_Eyeball_V01'). Select the closest MaterialType from the allowed list, but prioritize preserving key terms in Finish for clarity and replicability (e.g., Hair, Eyeball, Skin, Tooth).\n"
+        "5) Validate: Ensure the final name strictly matches the schema and does not conflict with existing names; only bump V## for uniqueness.\n\n"
         "Signals (use in order):\n"
         "- **PRIORITY 1**: Scene context analysis - if scene_context contains material domain keywords, use them to guide type selection\n"
         "- **PRIORITY 2**: Use 'material_type_hint' and 'finish_candidates' from context. Respect policy flags (versioning_only, preserve_semantics, force_reanalysis).\n"
-        "- **PRIORITY 3**: Principled heuristics: metallic>=0.5→Metal; transmission>=0.3→Glass/Liquid (favor Glass for solids, Liquid for fluids); emission_strength>0→Emissive; roughness>=0.6 & metallic<0.5→Rubber; else Plastic.\n"
-        "- **PRIORITY 4**: Tokens by domain (non-exhaustive): Architecture (Concrete/Brick/Tile/Marble/Granite/Slate/Herringbone/Hex), Product (ABS/PC/Steel/Aluminum/Anodized/Brushed/Galvanized), Natural (Wood/Leather/Paper/Cardboard/Stone), Textiles (Denim/Velvet/Knitting/Embroidery), Coatings (Paint/Varnish/Polished/Rough/Matte/Gloss), Liquids (Water/Oil), Optics (Glass/Frosted/Tint), Decals (Decal/Sticker/Label), FX (Emissive/Neon), Organics (Skin/Iris/Tooth/Hair/etc.).\n"
+        "- **PRIORITY 3**: Background detection - if payload marks is_background=true or hints include background keywords, force MaterialType='Background' and use color-derived finish (see rubric step 3).\n"
+        "- **PRIORITY 4**: Principled heuristics: metallic>=0.5→Metal; transmission>=0.3→Glass/Liquid (favor Glass for solids, Liquid for fluids); emission_strength>0→Emissive (unless Background applies); roughness>=0.6 & metallic<0.5→Rubber; else Plastic.\n"
+        "- **PRIORITY 5**: Tokens by domain (non-exhaustive): Architecture (Concrete/Brick/Tile/Marble/Granite/Slate/Herringbone/Hex), Product (ABS/PC/Steel/Aluminum/Anodized/Brushed/Galvanized), Natural (Wood/Leather/Paper/Cardboard/Stone), Textiles (Denim/Velvet/Knitting/Embroidery), Coatings (Paint/Varnish/Polished/Rough/Matte/Gloss), Liquids (Water/Oil), Optics (Glass/Frosted/Tint), Decals (Decal/Sticker/Label), FX (Emissive/Neon), Organics (Skin/Iris/Tooth/Hair/etc.).\n"
         "- Prefer specific tokens over generic ones (e.g., Herringbone over Tiles; ToothEnamel over Tooth).\n"
         "- **FORCE REANALYSIS**: If force_reanalysis=True, reconsider ALL materials including those already correctly named. For materials with current_name_quality=high, carefully evaluate if the current name is already excellent and should be preserved. Only suggest changes if there's a significantly better alternative based on material properties, scene context, or naming consistency.\n\n"
         "Scene Context (if provided):\n"
@@ -732,6 +940,7 @@ def _system_prompt() -> str:
         "  * 'toalla', 'tela', 'textil', 'ropa' → Fabric type with appropriate finish\n"
         "  * 'piel', 'diente', 'ojo', 'cabello' → Organic/Tissue type with anatomical finish\n"
         "  * 'plástico', 'silicona', 'goma' → Plastic/Rubber type with appropriate finish\n"
+        "  * 'cielo', 'sky', 'bg', 'environment', 'skybox' → Background type with color-derived finish\n"
         "  * 'metal', 'acero', 'aluminio' → Metal type with finish (Brushed, Polished, etc.)\n"
         "  * 'madera', 'piedra', 'mármol' → Wood/Stone type with appropriate finish\n"
         "- **Priority**: Context clues should override generic heuristics when material names are ambiguous.\n"
@@ -1050,16 +1259,38 @@ class LIME_TB_OT_ai_rename_single(Operator):
 
         if not item:
             # Fallback local baseline
+            summary = _summarize_nodes(mat)
+            is_background = bool(summary.get("is_background", False))
+            background_color = summary.get("background_color")
+            background_finish = normalize_finish(background_color) if background_color else "Generic"
+
             base_name = strip_numeric_suffix(mat.name)
             parsed = parse_name(base_name)
             material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
             finish = normalize_finish(parsed["finish"] if parsed else "Generic")
 
+            if is_background:
+                target_finish = background_finish
+                target_type = "Background"
+            else:
+                target_type = material_type
+                target_finish = finish
+
+            background_requires_rename = False
+            if is_background:
+                current_is_background = parsed and parsed["material_type"] == "Background"
+                current_finish_norm = normalize_finish(parsed["finish"]) if parsed else ""
+                if (not current_is_background) or (current_finish_norm != background_finish):
+                    background_requires_rename = True
+
+            material_type = target_type
+            finish = target_finish
+
             # Check if we're in force reanalysis mode
             force_reanalysis = getattr(scene.lime_ai_mat, 'force_reanalysis', False)
 
             # If name is already valid, handle based on force_reanalysis mode
-            if parsed is not None:
+            if parsed is not None and not background_requires_rename:
                 if force_reanalysis:
                     # In force reanalysis mode, keep current name as proposal for review
                     # Only suggest improvements if the current name could be enhanced
@@ -1104,10 +1335,23 @@ class LIME_TB_OT_ai_rename_single(Operator):
                         "quality_issues": quality_issues,
                         "taxonomy_match": quality_result.taxonomy_match,
                         "review_requested": quality_label == "fair",
+                        "is_background": is_background,
+                        "background_color": background_color,
                     }
             else:
                 universe = _collect_existing_names()
-                proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
+                # Try to preserve current version if valid, otherwise start from 1
+                parsed_current = parse_name(strip_numeric_suffix(mat.name))
+                current_version_idx = parsed_current.get("version_index") if parsed_current else None
+                start_idx = max(1, current_version_idx) if current_version_idx else 1
+                if is_background:
+                    proposed = _build_background_material_name(mat, background_color or "Generic", universe, start_idx=start_idx)
+                    notes = "Background material - local proposal"
+                    finish = background_finish
+                    material_type = "Background"
+                else:
+                    proposed = bump_version_until_unique(universe, material_type, finish, start_idx=start_idx)
+                    notes = "Local baseline proposal"
                 parts = proposed.split("_")
                 version_block = parts[-1] if len(parts) > 2 else "V01"
                 item = {
@@ -1117,7 +1361,7 @@ class LIME_TB_OT_ai_rename_single(Operator):
                     "finish": finish,
                     "version_token": version_block,
                     "read_only": False,
-                    "notes": "Local baseline proposal",
+                    "notes": notes,
                     "similar_group_id": _fingerprint_material(mat),
                     "needs_rename": True,
                     "selected_for_apply": True,
@@ -1125,6 +1369,8 @@ class LIME_TB_OT_ai_rename_single(Operator):
                     "quality_score": quality_score,
                     "quality_issues": quality_issues,
                     "taxonomy_match": quality_result.taxonomy_match,
+                    "is_background": is_background,
+                    "background_color": background_color,
                 }
 
         # Apply reconciliation logic to the item
@@ -1176,6 +1422,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
         scene = _get_active_scene(context)
         prefs: LimePipelinePrefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences  # type: ignore
         existing_names = _collect_existing_names()
+        universe = existing_names[:]
         mats = list(sorted(bpy.data.materials, key=lambda m: m.name.lower()))
         allowed_material_types: List[str] = []
 
@@ -1209,12 +1456,33 @@ class LIME_TB_OT_ai_scan_materials(Operator):
             quality_score = quality_result.score
             quality_issues = "; ".join(quality_result.issues)
 
+            is_background = bool(summary.get("is_background", False))
+            background_color = summary.get("background_color")
+            background_finish = normalize_finish(background_color) if background_color else "Generic"
+
             needs_rename = bool(issues) or quality_label in ("poor", "invalid")
             needs_review = not needs_rename and quality_label == "fair"
+            background_requires_rename = False
+
+            if is_background:
+                parsed_current = parse_name(strip_numeric_suffix(mat.name))
+                current_is_background = parsed_current and parsed_current["material_type"] == "Background"
+                current_finish_norm = normalize_finish(parsed_current["finish"]) if parsed_current else ""
+                if (not current_is_background) or (current_finish_norm != background_finish):
+                    background_requires_rename = True
+                    needs_rename = True
+                    needs_review = False
 
             if needs_rename:
                 incorrect_count += 1
-                print(f"[AI Scan] Material '{mat.name}' marked for rename (issues: {issues}, quality={quality_label})")
+                if background_requires_rename:
+                    print(
+                        f"[AI Scan] Material '{mat.name}' marked for background rename (target finish: {background_finish})"
+                    )
+                else:
+                    print(
+                        f"[AI Scan] Material '{mat.name}' marked for rename (issues: {issues}, quality={quality_label})"
+                    )
             elif needs_review:
                 print(f"[AI Scan] Material '{mat.name}' flagged for review (quality={quality_label})")
             else:
@@ -1247,6 +1515,10 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 "quality_issues": quality_issues,
                 "taxonomy_match": quality_result.taxonomy_match,
                 "read_only": ro,
+                "is_background": is_background,
+                "background_color": background_color,
+                "background_finish": background_finish,
+                "background_requires_rename": background_requires_rename,
             })
         print(f"[AI Scan] Incorrect count: {incorrect_count}, Total: {total_count}")
 
@@ -1328,6 +1600,9 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                                 item["quality_label"] = mat_data.get("quality_label")
                                 item["quality_score"] = mat_data.get("quality_score")
                                 item["quality_issues"] = mat_data.get("quality_issues")
+                                item["is_background"] = mat_data.get("is_background", False)
+                                item["background_color"] = mat_data.get("background_color")
+                                item["background_finish"] = mat_data.get("background_finish")
                                 if "taxonomy_match" not in item or not item.get("taxonomy_match"):
                                     item["taxonomy_match"] = mat_data.get("taxonomy_match")
                                 if _is_read_only(bpy.data.materials.get(mat_data["material_name"])):
@@ -1392,6 +1667,8 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         "quality_issues": mat_data.get("quality_issues"),
                         "taxonomy_match": mat_data.get("taxonomy_match"),
                         "review_requested": mat_data.get("needs_review", False),
+                        "is_background": mat_data.get("is_background", False),
+                        "background_color": mat_data.get("background_color"),
                     })
                     continue
                 parsed = parse_name(strip_numeric_suffix(mat_name))
@@ -1400,11 +1677,27 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                 quality_score = float(mat_data.get("quality_score") or 0.0)
                 quality_issues = mat_data.get("quality_issues") or ""
                 taxonomy_match = mat_data.get("taxonomy_match") or ""
+                is_background = bool(mat_data.get("is_background", False))
+                background_color = mat_data.get("background_color")
+                background_finish = mat_data.get("background_finish") or (
+                    normalize_finish(background_color) if background_color else "Generic"
+                )
 
                 if mat_data["needs_rename"]:
-                    material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
-                    finish = normalize_finish(parsed["finish"] if parsed else "Generic")
-                    proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
+                    if is_background:
+                        material_type = "Background"
+                        finish = normalize_finish(background_finish)
+                        current_version_idx = parsed.get("version_index") if parsed else None
+                        start_idx = max(1, current_version_idx) if current_version_idx else 1
+                        proposed = _build_background_material_name(mat, background_color or "Generic", universe, start_idx=start_idx)
+                        notes = "Background material - local proposal"
+                    else:
+                        material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
+                        finish = normalize_finish(parsed["finish"] if parsed else "Generic")
+                        current_version_idx = parsed.get("version_index") if parsed else None
+                        start_idx = max(1, current_version_idx) if current_version_idx else 1
+                        proposed = bump_version_until_unique(universe, material_type, finish, start_idx=start_idx)
+                        notes = "Local baseline proposal"
                     parts = proposed.split("_")
                     version_block = parts[-1] if len(parts) > 2 else "V01"
                     items.append({
@@ -1414,7 +1707,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         "finish": finish,
                         "version_token": version_block,
                         "read_only": False,
-                        "notes": "Local baseline proposal",
+                        "notes": notes,
                         "similar_group_id": _fingerprint_material(mat),
                         "needs_rename": True,
                         "quality_label": quality_label,
@@ -1422,6 +1715,8 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         "quality_issues": quality_issues,
                         "taxonomy_match": taxonomy_match,
                         "review_requested": review_requested,
+                        "is_background": is_background,
+                        "background_color": background_color,
                     })
                     if proposed not in universe:
                         universe.append(proposed)
@@ -1522,11 +1817,28 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                         })
                     else:
                         if mat_data["needs_rename"]:
-                            # provide a conservative proposal
                             parsed = parse_name(strip_numeric_suffix(mat_name))
-                            material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
-                            finish = normalize_finish(parsed["finish"] if parsed else "Generic")
-                            proposed = bump_version_until_unique(universe, material_type, finish, start_idx=1)
+                            is_background = bool(mat_data.get("is_background", False))
+                            background_color = mat_data.get("background_color")
+                            background_finish = mat_data.get("background_finish") or (
+                                normalize_finish(background_color) if background_color else "Generic"
+                            )
+
+                            if is_background:
+                                material_type = "Background"
+                                finish = normalize_finish(background_finish)
+                                current_version_idx = parsed.get("version_index") if parsed else None
+                                start_idx = max(1, current_version_idx) if current_version_idx else 1
+                                proposed = _build_background_material_name(mat, background_color or "Generic", universe, start_idx=start_idx)
+                                notes = "Background material - local proposal"
+                            else:
+                                material_type = normalize_material_type(parsed["material_type"] if parsed else "Plastic")
+                                finish = normalize_finish(parsed["finish"] if parsed else "Generic")
+                                current_version_idx = parsed.get("version_index") if parsed else None
+                                start_idx = max(1, current_version_idx) if current_version_idx else 1
+                                proposed = bump_version_until_unique(universe, material_type, finish, start_idx=start_idx)
+                                notes = "Local baseline proposal"
+
                             parts = proposed.split("_")
                             version_block = parts[-1] if len(parts) > 2 else "V01"
                             items.append({
@@ -1536,7 +1848,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                                 "finish": finish,
                                 "version_token": version_block,
                                 "read_only": False,
-                                "notes": "Local baseline proposal",
+                                "notes": notes,
                                 "similar_group_id": _fingerprint_material(mat),
                                 "needs_rename": True,
                                 "quality_label": mat_data.get("quality_label"),
@@ -1544,6 +1856,8 @@ class LIME_TB_OT_ai_scan_materials(Operator):
                                 "quality_issues": mat_data.get("quality_issues"),
                                 "taxonomy_match": mat_data.get("taxonomy_match"),
                                 "review_requested": mat_data.get("needs_review", False),
+                                "is_background": is_background,
+                                "background_color": background_color,
                             })
                             if proposed not in universe:
                                 universe.append(proposed)

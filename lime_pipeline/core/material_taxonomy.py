@@ -16,6 +16,8 @@ FALLBACK_TAXONOMY = {
         "Metal",
         "Glass",
         "Rubber",
+        "Silicone",
+        "Background",
         "Paint",
         "Wood",
         "Fabric",
@@ -78,6 +80,22 @@ FALLBACK_TAXONOMY = {
         "PU": "Leather",
         "Paper": "Paper",
         "Cardboard": "Paper",
+        "Rubber": "Rubber",
+        "Latex": "Rubber",
+        "Silicone": "Silicone",
+        "Siloxane": "Silicone",
+        "Silastic": "Silicone",
+        "SiliconeRubber": "Silicone",
+        "LSR": "Silicone",
+        "VMQ": "Silicone",
+        "Background": "Background",
+        "Sky": "Background",
+        "Skybox": "Background",
+        "Skydome": "Background",
+        "Backplate": "Background",
+        "Backdrop": "Background",
+        "Environment": "Background",
+        "Env": "Background",
         "Annotation": "Text",  # For simple flat annotations, labels
         "Label": "Text",
         "Decal": "Plastic",  # For decals, often plastic/vinyl adhesive
@@ -144,6 +162,34 @@ FALLBACK_TAXONOMY = {
     "ToothEnamel": ["Enamel", "Tooth", "Teeth"],
         "Generic": ["Generic", "Base", "Default"],
     },
+}
+
+
+SILICONE_TOKEN_HINTS: Set[str] = {
+    "silicone",
+    "siliconerubber",
+    "silastic",
+    "siloxane",
+    "lsr",
+    "vmq",
+}
+
+RUBBER_TOKEN_HINTS: Set[str] = {
+    "rubber",
+    "latex",
+    "neoprene",
+    "nitrile",
+}
+
+BACKGROUND_TOKEN_HINTS: Set[str] = {
+    "background",
+    "sky",
+    "skybox",
+    "skydome",
+    "backdrop",
+    "backplate",
+    "environment",
+    "env",
 }
 
 
@@ -229,8 +275,18 @@ def infer_material_type_and_finishes(
         scores["Glass"] = scores.get("Glass", 0) + 3
     if emission > 0:
         scores["Emissive"] = scores.get("Emissive", 0) + 3
+
+    lower_tokens = {token.lower() for token in all_tokens}
+
+    has_silicone_hint = any(hint in lower_tokens for hint in SILICONE_TOKEN_HINTS)
+    has_rubber_hint = any(hint in lower_tokens for hint in RUBBER_TOKEN_HINTS)
+    has_background_hint = any(hint in lower_tokens for hint in BACKGROUND_TOKEN_HINTS)
+
     if roughness >= 0.6 and metallic < 0.5:
-        scores["Rubber"] = scores.get("Rubber", 0) + 2
+        if has_silicone_hint:
+            scores["Silicone"] = scores.get("Silicone", 0) + 2
+        else:
+            scores["Rubber"] = scores.get("Rubber", 0) + 2
         scores["Plastic"] = scores.get("Plastic", 0) - 1
 
     for token in all_tokens:
@@ -238,13 +294,21 @@ def infer_material_type_and_finishes(
         if mapped:
             scores[mapped] = scores.get(mapped, 0) + 2
 
+    if has_silicone_hint:
+        scores["Silicone"] = scores.get("Silicone", 0) + 4
+
+    if has_rubber_hint:
+        scores["Rubber"] = scores.get("Rubber", 0) + 2
+
+    if has_background_hint:
+        scores["Background"] = scores.get("Background", 0) + 5
+
     if not scores:
         scores["Plastic"] = 1
 
     material_type = max(scores.items(), key=lambda item: item[1])[0]
 
     finish_candidates: Set[str] = set()
-    lower_tokens = {token.lower() for token in all_tokens}
     for finish, synonyms in finish_synonyms.items():
         for synonym in synonyms:
             if synonym.lower() in lower_tokens:

@@ -17,6 +17,8 @@ ALLOWED_MATERIAL_TYPES = [
     "Metal",
     "Glass",
     "Rubber",
+    "Silicone",
+    "Background",
     "Paint",
     "Wood",
     "Fabric",
