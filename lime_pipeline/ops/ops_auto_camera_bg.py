@@ -285,6 +285,68 @@ def _iter_scene_bg_planes(scene: bpy.types.Scene):
     except Exception:
         return tuple()
 
+
+def ensure_auto_bg_live_updates(
+    *,
+    scene: bpy.types.Scene | None = None,
+    force_update: bool = True,
+) -> bool:
+    """Garantizar que los planos Auto BG tengan handler y actualización tras cargar un archivo.
+
+    Args:
+        scene: Escena específica a comprobar. Si es ``None`` se recorren todas las escenas disponibles.
+        force_update: Si es ``True`` se fuerza una actualización inmediata tras reinstalar el handler.
+
+    Returns:
+        bool: ``True`` si se encontraron planos Auto BG en alguna escena y se realizaron acciones.
+    """
+
+    scenes: list[bpy.types.Scene | None] = []
+    if scene is not None:
+        scenes.append(scene)
+    else:
+        try:
+            scenes.extend(list(bpy.data.scenes))
+        except Exception:
+            pass
+        if not scenes:
+            try:
+                ctx_scene = getattr(bpy.context, "scene", None)
+            except Exception:
+                ctx_scene = None
+            if ctx_scene is not None:
+                scenes.append(ctx_scene)
+
+    has_planes = False
+    for scn in scenes:
+        if scn is None:
+            continue
+        planes = list(_iter_scene_bg_planes(scn))
+        if not planes:
+            continue
+        has_planes = True
+        for plane in planes:
+            try:
+                _ensure_plane_properties(plane)
+            except Exception:
+                pass
+
+    if not has_planes:
+        return False
+
+    _install_handler()
+
+    if force_update:
+        for scn in scenes:
+            if scn is None:
+                continue
+            try:
+                _auto_bg_update_handler(scn)
+            except Exception:
+                pass
+
+    return True
+
 def _iter_camera_markers(
     scene: bpy.types.Scene,
     frame_limit: int | None = None,
@@ -836,6 +898,7 @@ __all__ = [
     "LIME_OT_auto_camera_background_toggle_live",
     "LIME_OT_auto_camera_background_bake",
     "LIME_OT_auto_camera_background_cleanup",
+    "ensure_auto_bg_live_updates",
     "_diagnostic_info",
 ]
  

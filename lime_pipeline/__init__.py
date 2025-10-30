@@ -174,6 +174,7 @@ from .ops.ops_auto_camera_bg import (
     LIME_OT_auto_camera_background_toggle_live,
     LIME_OT_auto_camera_background_bake,
     LIME_OT_auto_camera_background_cleanup,
+    ensure_auto_bg_live_updates,
 )
 from .ops.ops_stage_hdri import (
     LIME_OT_stage_set_hdri,
@@ -436,6 +437,11 @@ def register():
         bpy.app.handlers.load_post.append(_on_load_post)
 
     try:
+        ensure_auto_bg_live_updates(scene=bpy.context.scene, force_update=False)
+    except Exception:
+        pass
+
+    try:
         ensure_preset_slots(bpy.context, ensure_scene=True)
         # Initialize UHD shortcut base resolution values
         try:
@@ -523,6 +529,11 @@ def _on_load_post(dummy):
                 wm_state.lime_shortcut_base_y = 1080
         except Exception:
             pass
+    except Exception:
+        pass
+
+    try:
+        ensure_auto_bg_live_updates(scene=bpy.context.scene)
     except Exception:
         pass
 
