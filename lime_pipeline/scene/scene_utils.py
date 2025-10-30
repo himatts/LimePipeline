@@ -30,7 +30,7 @@ from pathlib import Path
 import bpy
 
 from ..core.validate_scene import parse_shot_index, get_shot_child_by_basename
-from ..data import SHOT_TREE, C_CAM
+from ..data import SHOT_TREE, C_CAM, C_MAIN_FMT, C_PROPS, C_BG
 
 
 def _ensure_child(parent: bpy.types.Collection, name: str) -> bpy.types.Collection:
@@ -71,6 +71,140 @@ def ensure_shot_tree(root: bpy.types.Collection, project_name: str) -> None:
     shot_idx = parse_shot_index(root.name) or 0
     for node in SHOT_TREE:
         _apply_tree(root, node, project_name, shot_idx)
+
+
+def ensure_stage_collections(
+    shot: bpy.types.Collection,
+    project_name: str,
+) -> dict[str, bpy.types.Collection | None]:
+    """Ensure shot has stage collections and return them.
+
+    Returns a dict with keys: "main", "props", "bg". Missing collections
+    are reported as None after attempting to build the standard tree.
+    """
+    if shot is None:
+        return {"main": None, "props": None, "bg": None}
+
+    try:
+        ensure_shot_tree(shot, project_name)
+    except Exception:
+        pass
+
+    base_main = C_MAIN_FMT.format(ProjectName=project_name)
+    main_coll = get_shot_child_by_basename(shot, base_main)
+    props_coll = get_shot_child_by_basename(shot, C_PROPS)
+    bg_coll = get_shot_child_by_basename(shot, C_BG)
+
+    return {"main": main_coll, "props": props_coll, "bg": bg_coll}
+
+
+def find_layer_collection(
+    layer: bpy.types.LayerCollection | None,
+    collection: bpy.types.Collection | None,
+) -> bpy.types.LayerCollection | None:
+    """Locate the LayerCollection matching collection inside a view layer tree."""
+
+    if layer is None or collection is None:
+        return None
+    try:
+        if layer.collection == collection:
+            return layer
+    except Exception:
+        return None
+
+    try:
+        for child in getattr(layer, "children", []) or []:
+            found = find_layer_collection(child, collection)
+            if found is not None:
+                return found
+    except Exception:
+        pass
+    return None
+
+
+def set_layer_collection_flags(
+    layer: bpy.types.LayerCollection | None,
+    *,
+    holdout: bool | None = None,
+    indirect_only: bool | None = None,
+) -> None:
+    """Safely assign holdout/indirect_only flags on a layer collection."""
+
+    if layer is None:
+        return
+    if holdout is not None:
+        try:
+            layer.holdout = bool(holdout)
+        except Exception:
+            pass
+    if indirect_only is not None:
+        try:
+            layer.indirect_only = bool(indirect_only)
+        except Exception:
+            pass
+
+
+def configure_stage_view_layer(
+    view_layer: bpy.types.ViewLayer | None,
+    *,
+    shot_root: bpy.types.Collection | None,
+    main_collection: bpy.types.Collection | None,
+    props_collection: bpy.types.Collection | None,
+    bg_collection: bpy.types.Collection | None,
+    mode: str,
+) -> None:
+    """Apply stage-specific flags to a view layer.
+
+    mode can be "COMPLETE", "BG" or "MAIN".
+    """
+
+    if view_layer is None:
+        return
+
+    root_layer = getattr(view_layer, "layer_collection", None)
+    if root_layer is None:
+        return
+
+    mode = (mode or "").upper()
+
+    def _apply(coll: bpy.types.Collection | None, *, holdout: bool | None, indirect: bool | None) -> None:
+        if coll is None:
+            return
+        layer = find_layer_collection(root_layer, coll)
+        set_layer_collection_flags(layer, holdout=holdout, indirect_only=indirect)
+
+    shot_children: tuple[bpy.types.Collection, ...]
+    if shot_root is not None:
+        try:
+            shot_children = tuple(shot_root.children)
+        except Exception:
+            shot_children = tuple()
+    else:
+        shot_children = tuple()
+
+    if not shot_children:
+        shot_children = tuple(
+            coll
+            for coll in (main_collection, props_collection, bg_collection)
+            if coll is not None
+        )
+
+    if mode == "BG":
+        for coll in shot_children:
+            if coll is bg_collection:
+                _apply(coll, holdout=False, indirect=False)
+            else:
+                _apply(coll, holdout=False, indirect=True)
+    elif mode == "MAIN":
+        for coll in shot_children:
+            if coll is bg_collection:
+                _apply(coll, holdout=True, indirect=False)
+            else:
+                _apply(coll, holdout=False, indirect=False)
+    else:
+        # Complete view layer: no special flags
+        for coll in shot_children:
+            _apply(coll, holdout=False, indirect=False)
 
 
 def _format_shot_name(index: int) -> str:

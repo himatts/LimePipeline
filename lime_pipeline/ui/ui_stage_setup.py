@@ -34,15 +34,18 @@ class LIME_PT_stage_setup(Panel):
 
     def draw(self, ctx):
         layout = self.layout
+        shot_active = validate_scene.active_shot_context(ctx)
         layout.operator("lime.duplicate_scene_sequential", text="Duplicate Shot Scene", icon='SCENE_DATA')
+        row = layout.row()
+        row.enabled = shot_active is not None
+        row.operator("lime.create_view_layers", text="Create View Layers", icon='RENDERLAYERS')
         layout.separator()
         layout.label(text="Create scene elements")
         col = layout.column(align=True)
-        col.enabled = validate_scene.active_shot_context(ctx) is not None
+        col.enabled = shot_active is not None
         col.operator("lime.import_layout", text="Import Layout", icon='APPEND_BLEND')
         # Auto Camera Background
         layout.separator()
-        shot_active = validate_scene.active_shot_context(ctx)
         has_bg_plane = bool(getattr(ctx, 'object', None) and getattr(ctx.object, 'get', lambda *_: None)("LP_AUTO_BG"))
         allow_bg_ops = bool(shot_active) or has_bg_plane
 
