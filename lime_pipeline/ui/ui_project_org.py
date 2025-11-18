@@ -192,3 +192,8 @@ class LIME_PT_project_org(Panel):
         secondary_row = box3.row(align=True)
         secondary_row.operator("lime.ensure_folders", text="Create Folders", icon='FILE_NEW')
         secondary_row.operator("lime.open_folder", text="Open Folder", icon='FILE_FOLDER')
+
+        # Linked Collections section
+        box_linked = layout.box()
+        box_linked.label(text="Linked Collections")
+        box_linked.operator("lime.localize_linked_collection", icon='LIBRARY_DATA_DIRECT')

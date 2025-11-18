@@ -2350,6 +2350,20 @@ class LIME_TB_OT_open_ai_material_manager(Operator):
         scan_col.scale_x = 2.0
         scan_col.operator("lime_tb.ai_scan_materials", text="Scan Materials", icon='VIEWZOOM')
 
+        # Count linked materials and show warning
+        linked_count = 0
+        if state and state.rows:
+            linked_count = sum(1 for it in state.rows if getattr(it, 'read_only', False))
+        
+        if linked_count > 0:
+            linked_box = layout.box()
+            linked_box.alert = True
+            linked_row = linked_box.row(align=True)
+            linked_row.label(text=f"{linked_count} linked material(s) detected", icon="LIBRARY_DATA_DIRECT")
+            linked_row = linked_box.row(align=True)
+            linked_row.label(text="Convert to local in 'Project Organization' panel first", icon="INFO")
+            linked_box.separator()
+
         # Contador de seleccionados
         actionable_selected = 0
         if state and state.rows:

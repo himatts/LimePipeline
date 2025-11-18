@@ -53,7 +53,11 @@ class LIME_TB_UL_ai_mat_rows(UIList):
         # Material name
         name_col = row_layout.column(align=True)
         name_col.ui_units_x = 5.0
-        name_col.label(text=material_name)
+        name_row = name_col.row(align=True)
+        name_row.label(text=material_name)
+        # Show linked icon if read-only
+        if read_only:
+            name_row.label(text="", icon="LIBRARY_DATA_DIRECT")
 
         # Status icon + text
         status_col = row_layout.column(align=True)
@@ -89,7 +93,9 @@ class LIME_TB_UL_ai_mat_rows(UIList):
         proposal_col = row_layout.column(align=True)
         proposal_col.ui_units_x = 7.0
         if read_only:
-            proposal_col.label(text=proposed_name if proposed_name else "—")
+            proposal_row = proposal_col.row(align=True)
+            proposal_row.label(text=proposed_name if proposed_name else "—")
+            proposal_row.label(text="(Linked)", icon="INFO")
         else:
             if hasattr(row, "proposed_name"):
                 proposal_col.prop(row, "proposed_name", text="")
@@ -180,11 +186,21 @@ class LIME_TB_PT_ai_material_renamer(Panel):
         rename_count = sum(1 for r in state.rows if getattr(r, "needs_rename", False))
         review_count = sum(1 for r in state.rows if getattr(r, "review_requested", False))
         valid_count = sum(1 for r in state.rows if (getattr(r, "status", "") or "").upper().startswith("VALID"))
+        linked_count = sum(1 for r in state.rows if getattr(r, "read_only", False))
         
         status_text = f"Needs rename: {rename_count}  Valid: {valid_count}"
         if review_count > 0:
             status_text += f"  Review: {review_count}"
         box.label(text=status_text)
+        
+        # Show warning if there are linked materials
+        if linked_count > 0:
+            linked_box = layout.box()
+            linked_box.alert = True
+            linked_row = linked_box.row(align=True)
+            linked_row.label(text=f"{linked_count} linked material(s) cannot be renamed", icon="LIBRARY_DATA_DIRECT")
+            linked_row = linked_box.row(align=True)
+            linked_row.label(text="Use 'Convert Linked Collection to Local' first", icon="INFO")
 
         # Quality distribution - simplified
         excellent = sum(1 for r in state.rows if getattr(r, "quality_label", "") == "excellent")

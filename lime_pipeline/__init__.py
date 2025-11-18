@@ -185,6 +185,9 @@ from .ops.ops_stage_hdri import (
 from .ops.ops_view_layers import (
     LIME_OT_create_view_layers,
 )
+from .ops.ops_linked_collections import (
+    LIME_OT_localize_linked_collection,
+)
 
 
 # Class collections for organized registration
@@ -261,6 +264,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_auto_camera_background_cleanup,
     LIME_OT_stage_set_hdri,
     LIME_OT_create_view_layers,
+    LIME_OT_localize_linked_collection,
     LIME_TB_OT_ai_test_connection,
     LIME_TB_OT_ai_rename_single,
     LIME_TB_OT_ai_scan_materials,
