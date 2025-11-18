@@ -237,7 +237,14 @@ class LIME_PT_render_outputs(Panel):
             root = Path(getattr(st, 'project_root', '') or '')
             rev = (getattr(st, 'rev_letter', '') or '').upper()
             sc = getattr(st, 'sc_number', None)
-            _ramv, folder_type, _scenes, _target, _backups = paths_for_type(root, 'PV', rev, sc)
+            local_mode = bool(getattr(st, "use_local_project", False))
+            _ramv, folder_type, _scenes, _target, _backups = paths_for_type(
+                root,
+                'PV',
+                rev,
+                sc,
+                local=local_mode,
+            )
             pv_dir = folder_type / 'editables'
         except Exception:
             pv_dir = None
@@ -254,7 +261,14 @@ class LIME_PT_render_outputs(Panel):
             root = Path(getattr(st, 'project_root', '') or '')
             rev = (getattr(st, 'rev_letter', '') or '').upper()
             sc = getattr(st, 'sc_number', None)
-            _ramv, folder_type, _scenes, _target, _backups = paths_for_type(root, 'REND', rev, sc)
+            local_mode = bool(getattr(st, "use_local_project", False))
+            _ramv, folder_type, _scenes, _target, _backups = paths_for_type(
+                root,
+                'REND',
+                rev,
+                sc,
+                local=local_mode,
+            )
             rd_dir = folder_type / 'editables'
         except Exception:
             rd_dir = None

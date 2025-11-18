@@ -46,9 +46,13 @@ class LIME_OT_ensure_folders(Operator):
             self.report({'ERROR'}, "Set Project Root first")
             return {'CANCELLED'}
         root = Path(st.project_root)
-        ramv = get_ramv_dir(root)
-        ramv.mkdir(parents=True, exist_ok=True)
-        self.report({'INFO'}, f"Ensured: {ramv}")
+        if getattr(st, "use_local_project", False):
+            root.mkdir(parents=True, exist_ok=True)
+            self.report({'INFO'}, f"Ensured: {root}")
+        else:
+            ramv = get_ramv_dir(root)
+            ramv.mkdir(parents=True, exist_ok=True)
+            self.report({'INFO'}, f"Ensured: {ramv}")
         return {'FINISHED'}
 
 
@@ -68,8 +72,15 @@ class LIME_OT_open_folder(Operator):
             self.report({'ERROR'}, "Set Project Root first")
             return {'CANCELLED'}
         rev = (st.rev_letter or '').strip().upper()
+        local_mode = bool(getattr(st, "use_local_project", False))
         try:
-            _, folder_type, scenes, target_dir, backups = paths_for_type(Path(st.project_root), st.project_type, rev, st.sc_number)
+            _, folder_type, scenes, target_dir, backups = paths_for_type(
+                Path(st.project_root),
+                st.project_type,
+                rev,
+                st.sc_number,
+                local=local_mode,
+            )
         except Exception as ex:
             self.report({'ERROR'}, f"Invalid state: {ex}")
             return {'CANCELLED'}
@@ -109,8 +120,15 @@ class LIME_OT_open_output_folder(Operator):
         rev = (st.rev_letter or '').strip().upper()
         sc = getattr(st, 'sc_number', None)
         ptype = (self.ptype or '').strip().upper() or (st.project_type or '').strip().upper()
+        local_mode = bool(getattr(st, "use_local_project", False))
         try:
-            _, folder_type, _scenes, _target_dir, _backups = paths_for_type(root, ptype, rev, sc)
+            _, folder_type, _scenes, _target_dir, _backups = paths_for_type(
+                root,
+                ptype,
+                rev,
+                sc,
+                local=local_mode,
+            )
         except Exception as ex:
             self.report({'ERROR'}, f"Invalid state: {ex}")
             return {'CANCELLED'}
@@ -132,5 +150,3 @@ class LIME_OT_open_output_folder(Operator):
             self.report({'ERROR'}, f"Failed to open folder: {ex}")
             return {'CANCELLED'}
         return {'FINISHED'}
-
-

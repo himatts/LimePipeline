@@ -35,11 +35,25 @@ class LIME_PT_project_org(Panel):
         box = layout.box()
         box.label(text="Project Settings")
 
+        mode_col = box.column(align=True)
+        mode_col.use_property_split = False
+        mode_row = mode_col.row(align=True)
+        mode_row.prop(st, "use_local_project", text="Local Project Mode", toggle=True)
+
         step_root = box.column(align=True)
         step_root.use_property_split = False
         root_row = step_root.row(align=True)
+        root_row.enabled = not st.use_local_project
         root_row.prop(st, "project_root_display", text="")
         root_row.operator("lime.pick_root", text="", icon='FILE_FOLDER')
+        if st.use_local_project:
+            local_col = step_root.column(align=True)
+            local_col.use_property_split = False
+            local_col.prop(st, "local_project_name", text="")
+            preview = getattr(st, "project_root", "") or ""
+            if preview:
+                preview_row = local_col.row(align=True)
+                preview_row.label(text=preview, icon='FILE_BLEND')
 
         box.separator()
 
@@ -90,14 +104,14 @@ class LIME_PT_project_org(Panel):
         row_free.enabled = needs_sc
         row_free.prop(st, "free_scene_numbering", text="Free numbering", toggle=True)
         row_custom = toggle_split.column(align=True)
-        row_custom.enabled = needs_sc
+        row_custom.enabled = needs_sc and not st.use_local_project
         row_custom.prop(st, "use_custom_name", text="Custom name", toggle=True)
 
         # Optional custom name field below
         custom_col = step_toggles.column(align=True)
-        custom_col.enabled = st.use_custom_name
+        custom_col.enabled = st.use_custom_name and needs_sc and not st.use_local_project
         custom_col.prop(st, "custom_name", text="")
-        if st.use_custom_name:
+        if st.use_custom_name and not st.use_local_project:
             hint = custom_col.row()
             hint.alignment = 'CENTER'
             hint.label(text="Appends as suffix to the generated filename", icon='OUTLINER_OB_FONT')

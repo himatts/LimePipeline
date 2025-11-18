@@ -82,6 +82,10 @@ def resolve_project_name(state) -> str:
     - Else: normalize the basename of state.project_root.
     - Fallbacks handled gracefully (empty -> empty string).
     """
+    if bool(getattr(state, "use_local_project", False)):
+        raw_local = getattr(state, "local_project_name", "") or ""
+        return normalize_project_name(raw_local)
+
     use_custom = bool(getattr(state, "use_custom_name", False))
     if use_custom:
         raw = getattr(state, "custom_name", "") or ""
@@ -254,5 +258,4 @@ def hydrate_state_from_filepath(state, force: bool = False) -> None:
             state.project_root = str(root)
     except Exception:
         pass
-
 

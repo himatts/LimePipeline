@@ -23,12 +23,11 @@ Key Features:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
 from .naming import RE_PROJECT_DIR, make_filename, resolve_project_name, TOKENS_BY_PTYPE, find_project_root
-from .paths import paths_for_type, get_ramv_dir
+from .paths import paths_for_type
 
 
 def _glob_scene_exists(scenes_dir: Path, sc: int) -> bool:
@@ -50,49 +49,69 @@ def validate_all(state: Any, prefs: Any):
     target_path: Path | None = None
     backups: Path | None = None
 
+    local_mode = bool(getattr(state, "use_local_project", False))
+
+    if local_mode:
+        local_name = (getattr(state, "local_project_name", "") or "").strip()
+        if not local_name:
+            errors.append("Enter a Local Project Name")
+
     # Root directory (accept subfolders and auto-detect project root)
     root_input = getattr(state, "project_root", None)
     root: Path | None = None
     if root_input:
         try:
-            # If user selected a deeper folder, walk up to find the actual project root
-            detected = find_project_root(root_input)
-            if detected is not None and detected.exists():
-                root = detected
+            if local_mode:
+                root = Path(root_input)
             else:
-                cand = Path(root_input)
-                root = cand if cand.exists() else None
+                # If user selected a deeper folder, walk up to find the actual project root
+                detected = find_project_root(root_input)
+                if detected is not None and detected.exists():
+                    root = detected
+                else:
+                    cand = Path(root_input)
+                    root = cand if cand.exists() else None
         except Exception:
             root = None
 
-    if not root or not root.exists():
+    if not root:
+        errors.append("Set a Local Project Name to generate a project folder" if local_mode else "Pick a valid project root folder")
+        return False, errors, warns, filename, target_path, backups
+    if not local_mode and not root.exists():
         errors.append("Pick a valid project root folder")
         return False, errors, warns, filename, target_path, backups
 
     # Root must match pattern after detection
-    if not RE_PROJECT_DIR.match(root.name):
+    if not local_mode and not RE_PROJECT_DIR.match(root.name):
         errors.append("Root folder must match 'XX-##### Project Name'")
 
     # Enforce root resides under default projects root (studio invariant)
-    try:
-        default_root = Path(getattr(prefs, 'default_projects_root', '') or '')
-        if default_root and default_root.exists():
-            try:
-                # Python 3.11: use relative_to for robust check
-                _ = root.resolve().relative_to(default_root.resolve())
-            except Exception:
-                errors.append(f"Project must be inside: {default_root}")
-    except Exception:
-        pass
+    if not local_mode:
+        try:
+            default_root = Path(getattr(prefs, 'default_projects_root', '') or '')
+            if default_root and default_root.exists():
+                try:
+                    # Python 3.11: use relative_to for robust check
+                    _ = root.resolve().relative_to(default_root.resolve())
+                except Exception:
+                    errors.append(f"Project must be inside: {default_root}")
+        except Exception:
+            pass
 
     # Revision letter
     rev = (getattr(state, "rev_letter", "") or "").strip().upper()
     if not (len(rev) == 1 and 'A' <= rev <= 'Z'):
-        errors.append("Rev must be exactly 1 letter A–Z")
+        errors.append("Rev must be exactly 1 letter A-Z")
 
     # Project type and base paths
     try:
-        _, folder_type, scenes, target_dir, backups = paths_for_type(root, state.project_type, rev, getattr(state, "sc_number", None))
+        base_dir, folder_type, scenes, target_dir, backups = paths_for_type(
+            root,
+            state.project_type,
+            rev,
+            getattr(state, "sc_number", None),
+            local=local_mode,
+        )
     except Exception:
         errors.append("Select a valid Project Type")
         return False, errors, warns, filename, target_path, backups
@@ -102,7 +121,7 @@ def validate_all(state: Any, prefs: Any):
     if needs_sc:
         sc = int(getattr(state, "sc_number", 0) or 0)
         if not (1 <= sc <= 999):
-            errors.append("SC must be 001–999")
+            errors.append("SC must be 001-999")
         else:
             free_mode = bool(getattr(state, "free_scene_numbering", False))
             if not free_mode and (sc % prefs.scene_step != 0):
@@ -112,8 +131,7 @@ def validate_all(state: Any, prefs: Any):
                 errors.append(f"Scene SC{sc:03d} already exists")
 
     # Critical directories must exist to proceed
-    ramv = get_ramv_dir(root)
-    if not ramv.exists():
+    if not local_mode and not base_dir.exists():
         errors.append("Critical directories missing; use 'Create missing folders'")
     if needs_sc and scenes and not scenes.exists():
         warns.append("Scenes directory missing; can be created")

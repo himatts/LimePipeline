@@ -38,16 +38,16 @@ def get_ramv_dir(root: Path) -> Path:
     return root / RAMV_DIR_1 / RAMV_DIR_2
 
 
-def paths_for_type(root: Path, ptype: str, rev: str, sc: int | None):
+def paths_for_type(root: Path, ptype: str, rev: str, sc: int | None, *, local: bool = False):
     """Return tuple: (ramv, folder_type, scenes, target_dir, backups).
 
-    - ramv: Base RAMV directory under project root
+    - ramv: Base directory used for type folders (root in local mode, RAMV dir otherwise)
     - folder_type: Directory for project type and revision
     - scenes: Scenes directory if applicable, else None
     - target_dir: Directory where .blend should be placed
     - backups: Directory for backups under folder_type
     """
-    ramv = get_ramv_dir(root)
+    ramv = root if local else get_ramv_dir(root)
 
     if ptype == 'BASE':
         folder_type = ramv / "3D Base Model" / f"Rev {rev}"

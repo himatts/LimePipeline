@@ -52,8 +52,8 @@ def _ensure_state(context) -> tuple[object, bpy.types.Scene]:
     return state, scene
 
 
-def _resolve_core_context(context) -> tuple[Path, str, int, int, str]:
-    """Resolve root path, container type, scene number, shot index, and revision."""
+def _resolve_core_context(context) -> tuple[object, Path, str, int, int, str]:
+    """Resolve Lime state, root path, container type, scene number, shot index, and revision."""
     state, _scene = _ensure_state(context)
 
     root_str = (getattr(state, "project_root", "") or "").strip()
@@ -86,7 +86,7 @@ def _resolve_core_context(context) -> tuple[Path, str, int, int, str]:
         )
 
     container_ptype = _container_type_for_state(state)
-    return root, container_ptype, sc_number, shot_idx, rev
+    return state, root, container_ptype, sc_number, shot_idx, rev
 
 
 class _LimeSetAnimOutput(Operator):
@@ -98,7 +98,7 @@ class _LimeSetAnimOutput(Operator):
 
     def execute(self, context):
         try:
-            root, container_ptype, sc_number, shot_idx, rev = _resolve_core_context(context)
+            state, root, container_ptype, sc_number, shot_idx, rev = _resolve_core_context(context)
         except RuntimeError as ex:
             self.report({"ERROR"}, str(ex))
             return {"CANCELLED"}
@@ -107,8 +107,13 @@ class _LimeSetAnimOutput(Operator):
             return {"CANCELLED"}
 
         try:
+            local_mode = bool(getattr(state, "use_local_project", False))
             _ramv, folder_type, _scenes, _target, _backups = paths_for_type(
-                root, container_ptype, rev, sc_number
+                root,
+                container_ptype,
+                rev,
+                sc_number,
+                local=local_mode,
             )
         except Exception as ex:
             self.report({"ERROR"}, f"No se pudo resolver carpeta RAMV: {ex}")

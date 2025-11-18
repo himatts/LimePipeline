@@ -43,7 +43,14 @@ def _ensure_editables_dir(state, ptype: str) -> Path:
     root = Path(root_str)
     rev = (getattr(state, "rev_letter", "") or "").upper()
     sc = getattr(state, "sc_number", None)
-    _ramv, folder_type, _scenes, _target, _backups = paths_for_type(root, ptype, rev, sc)
+    local_mode = bool(getattr(state, "use_local_project", False))
+    _ramv, folder_type, _scenes, _target, _backups = paths_for_type(
+        root,
+        ptype,
+        rev,
+        sc,
+        local=local_mode,
+    )
     editables_dir = folder_type / "editables"
     editables_dir.mkdir(parents=True, exist_ok=True)
     return editables_dir

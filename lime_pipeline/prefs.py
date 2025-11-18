@@ -20,6 +20,8 @@ Key Features:
 - Integration with Blender's native preferences system
 """
 
+from pathlib import Path
+
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import StringProperty, IntProperty, BoolProperty, CollectionProperty
@@ -28,6 +30,7 @@ from .props import LimeRenderPresetSlot
 
 
 ADDON_PKG = __package__
+DEFAULT_DESKTOP = str((Path.home() / "Desktop").resolve())
 
 
 class LimePipelinePrefs(AddonPreferences):
@@ -44,6 +47,12 @@ class LimePipelinePrefs(AddonPreferences):
         subtype='DIR_PATH',
         default=r"D:\\Lime Testing",
         description="Local path used as initial directory for folder picker",
+    )
+    local_projects_root: StringProperty(
+        name="Local Projects Root",
+        subtype='DIR_PATH',
+        default=DEFAULT_DESKTOP,
+        description="Base directory used when working in Local Project mode (defaults to Desktop)",
     )
     scene_step: IntProperty(
         name="Scene Step",
@@ -105,6 +114,7 @@ class LimePipelinePrefs(AddonPreferences):
         col = layout.column()
         col.prop(self, "default_projects_root")
         col.prop(self, "dev_test_root")
+        col.prop(self, "local_projects_root")
         col.separator()
         col.prop(self, "scene_step")
         col.prop(self, "path_warn_len")

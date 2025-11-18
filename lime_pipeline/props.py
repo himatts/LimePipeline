@@ -50,6 +50,76 @@ UNIT_PRESET_ITEMS = [
 ]
 
 
+def _local_desktop_fallback() -> str:
+    try:
+        from pathlib import Path as _P
+        return str((_P.home() / "Desktop").resolve())
+    except Exception:
+        return ""
+
+
+def _local_base_dir() -> str:
+    try:
+        import bpy as _bpy
+        prefs = _bpy.context.preferences.addons[__package__.split('.')[0]].preferences
+        base = getattr(prefs, "local_projects_root", "") or ""
+    except Exception:
+        base = ""
+    return base or _local_desktop_fallback()
+
+
+def _sanitize_local_folder_name(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return "LocalProject"
+    try:
+        from .core.naming import normalize_project_name as _normalize
+        cleaned = _normalize(text)
+        return cleaned or "LocalProject"
+    except Exception:
+        return text or "LocalProject"
+
+
+def _sync_local_project_root(state) -> None:
+    if not getattr(state, "use_local_project", False):
+        return
+    try:
+        from pathlib import Path as _P
+    except Exception:
+        _P = None  # type: ignore
+    folder = _sanitize_local_folder_name(getattr(state, "local_project_name", ""))
+    base = _local_base_dir()
+    if _P is None:
+        state.project_root = folder
+        return
+    state.project_root = str(_P(base) / folder) if base else folder
+
+
+def _on_local_project_name_update(self, context):
+    if getattr(self, "use_local_project", False):
+        _sync_local_project_root(self)
+
+
+def _on_use_local_project_update(self, context):
+    if getattr(self, "use_local_project", False):
+        current_root = getattr(self, "project_root", "") or ""
+        if current_root:
+            self.shared_root_snapshot = current_root
+        name = (getattr(self, "local_project_name", "") or "").strip()
+        if not name:
+            try:
+                from pathlib import Path as _P
+                base_name = _P(current_root).name if current_root else ""
+            except Exception:
+                base_name = ""
+            self.local_project_name = base_name or "Local Project"
+        _sync_local_project_root(self)
+    else:
+        cached = getattr(self, "shared_root_snapshot", "") or ""
+        if cached:
+            self.project_root = cached
+
+
 def _on_selected_camera_update(self, context):
     try:
         name = getattr(self, "selected_camera", "") or ""
@@ -116,6 +186,24 @@ class LimePipelineState(PropertyGroup):
             pass
         self.project_root = value
     project_root_display: StringProperty(name="Project Root", get=_get_project_root_display, set=_set_project_root_display, description="Project name (root shown as folder name only)")
+    use_local_project: BoolProperty(
+        name="Local Project Mode",
+        description="Save outside the shared projects root (Desktop/local workflow)",
+        default=False,
+        update=_on_use_local_project_update,
+    )
+    shared_root_snapshot: StringProperty(
+        name="Shared Root Snapshot",
+        description="Internal: remembers last shared project root when toggling local mode",
+        default="",
+        options={'HIDDEN'},
+    )
+    local_project_name: StringProperty(
+        name="Local Project Name",
+        description="Manual project name used when working locally",
+        default="",
+        update=_on_local_project_name_update,
+    )
     project_type: EnumProperty(name="Project Type", items=PROJECT_TYPES, default='REND', description="Type of project work: affects naming and target folders")
     # Sync helpers between letter and index
     def _on_rev_index_update(self, context):
