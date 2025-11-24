@@ -35,6 +35,7 @@ class LIME_PT_stage_setup(Panel):
     def draw(self, ctx):
         layout = self.layout
         shot_active = validate_scene.active_shot_context(ctx)
+
         layout.operator("lime.duplicate_scene_sequential", text="Duplicate Shot Scene", icon='SCENE_DATA')
         row = layout.row()
         row.enabled = shot_active is not None
@@ -158,4 +159,3 @@ class LIME_PT_stage_setup(Panel):
 __all__ = [
     "LIME_PT_stage_setup",
 ]
-

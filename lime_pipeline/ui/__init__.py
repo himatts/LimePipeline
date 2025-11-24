@@ -40,6 +40,7 @@ from .ui_ai_material_renamer import (
     LIME_TB_PT_ai_material_renamer,
     LIME_TB_UL_ai_mat_rows,
 )
+from .ui_experimental import LIME_TB_PT_experimental
 
 __all__ = [
     "LIME_PT_project_org",
@@ -65,4 +66,5 @@ __all__ = [
     "LIME_TB_PT_ai_material_renamer",
     "LIME_TB_UL_alpha_events",
     "LIME_TB_UL_ai_mat_rows",
+    "LIME_TB_PT_experimental",
 ]

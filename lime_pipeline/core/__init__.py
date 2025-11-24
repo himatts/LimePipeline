@@ -9,6 +9,7 @@ from .naming import (
     strip_diacritics,
     RE_PROJECT_DIR,
     make_filename,
+    build_next_scene_path,
 )
 from . import validate_scene
 
@@ -18,7 +19,7 @@ __all__ = [
     "strip_diacritics",
     "RE_PROJECT_DIR",
     "make_filename",
+    "build_next_scene_path",
     "validate_scene",
 ]
-
 

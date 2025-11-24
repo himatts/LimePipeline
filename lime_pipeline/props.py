@@ -260,6 +260,40 @@ class LimePipelineState(PropertyGroup):
 
     selected_camera: EnumProperty(name="Camera", items=_camera_items, update=_on_selected_camera_update)
 
+    # Scene continuity (Stage panel)
+    scene_continuity_frame_mode: EnumProperty(
+        name="Handoff Frame",
+        description="Frame to sample when creating the next scene file",
+        items=(
+            ("CURRENT", "Current Frame", "Use the current frame as handoff"),
+            ("SCENE_END", "Scene End", "Use scene frame_end as handoff"),
+        ),
+        default="CURRENT",
+    )
+    def _shot_enum_items(self, context):
+        try:
+            from .core import validate_scene as _vs
+        except Exception:
+            return [("NONE", "No SHOTs found", "", 0)]
+        scene = getattr(context, "scene", None)
+        if scene is None:
+            return [("NONE", "No SHOTs found", "", 0)]
+        try:
+            items = [("NONE", "No SHOTs found", "", 0)]
+            for idx, (coll, sh_idx) in enumerate(_vs.list_shot_roots(scene), 1):
+                name = getattr(coll, "name", f"SHOT {sh_idx:02d}") or f"SHOT {sh_idx:02d}"
+                items.append((name, name, "", idx))
+            return items
+        except Exception:
+            return [("NONE", "No SHOTs found", "", 0)]
+
+    scene_continuity_shot_name: EnumProperty(
+        name="Continuity Shot",
+        description="SHOT root (top-level) whose pose will seed the next scene",
+        items=_shot_enum_items,
+        default=0,
+    )
+
     # Visibility behavior during renders and proposal views
     consider_all_shots: BoolProperty(
         name="Consider all SHOTs",

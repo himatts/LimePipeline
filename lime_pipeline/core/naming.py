@@ -22,9 +22,12 @@ Key Features:
 
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from pathlib import Path
+
+from .paths import paths_for_type
 
 
 # Extracts "Project Name" from "XX-##### Project Name"
@@ -259,3 +262,103 @@ def hydrate_state_from_filepath(state, force: bool = False) -> None:
     except Exception:
         pass
 
+
+def build_next_scene_path(
+    current_blend_path: str | Path,
+    *,
+    project_root: str | Path | None = None,
+    local_mode: bool = False,
+    state=None,
+    prefs=None,
+    scene_step: int | None = None,
+    free_scene_numbering: bool | None = None,
+):
+    """Compute the next scene .blend path based on the current file naming.
+
+    Relies on the canonical Lime naming helpers (parse_blend_details, make_filename,
+    paths_for_type). Returns (target_path: Path, info: dict) where info includes:
+        project_name, ptype, rev, current_sc, next_sc, root
+
+    Raises ValueError with a descriptive message when the context cannot be resolved.
+    """
+    try:
+        path = Path(current_blend_path)
+    except Exception as ex:
+        raise ValueError(f"Invalid blend path: {ex}") from ex
+
+    if not path.name:
+        raise ValueError("Current .blend filepath is empty; save the file first.")
+    info = parse_blend_details(path.name)
+    if not info:
+        raise ValueError("Filename does not match Lime naming; cannot derive next scene.")
+
+    project_name = info.get("project_name") or ""
+    ptype = info.get("ptype")
+    rev = (info.get("rev") or "").strip().upper()
+    current_sc = info.get("sc")
+    if ptype not in TOKENS_BY_PTYPE:
+        raise ValueError("Project type not recognized from filename.")
+    if not rev:
+        raise ValueError("Revision letter missing in filename.")
+    if current_sc is None:
+        raise ValueError("Scene number (SC###) missing in filename; required for continuity.")
+
+    # Resolve numbering mode (respect Scene Step unless free numbering is enabled)
+    is_free = bool(
+        free_scene_numbering
+        if free_scene_numbering is not None
+        else getattr(state, "free_scene_numbering", False)
+    )
+
+    step_val = scene_step
+    if step_val is None and prefs is not None:
+        try:
+            step_val = int(getattr(prefs, "scene_step", 0) or 0)
+        except Exception:
+            step_val = None
+    if step_val is None:
+        try:
+            import bpy  # Local import to avoid hard dependency during docs/tests
+
+            addon_key = (__package__ or "lime_pipeline").split(".", 1)[0]
+            addons = getattr(bpy.context.preferences, "addons", None)
+            addon = addons.get(addon_key) if addons and hasattr(addons, "get") else None
+            if addon is not None:
+                step_val = int(getattr(addon.preferences, "scene_step", 0) or 0)
+        except Exception:
+            step_val = None
+    if step_val is None or step_val <= 0:
+        step_val = 1
+
+    if is_free:
+        next_sc = current_sc + 1
+    else:
+        next_sc = (math.floor(current_sc / step_val) + 1) * step_val
+
+    token = TOKENS_BY_PTYPE[ptype]
+
+    root = Path(project_root) if project_root else find_project_root(str(path))
+    if root is None:
+        raise ValueError("Project root could not be resolved from the current filepath.")
+
+    _ramv, folder_type, _scenes, target_dir, _backups = paths_for_type(
+        root,
+        ptype,
+        rev,
+        next_sc,
+        local=local_mode,
+    )
+    dest_dir = target_dir or folder_type
+    filename = make_filename(project_name, token, rev, next_sc) + ".blend"
+    target_path = dest_dir / filename
+
+    return target_path, {
+        "project_name": project_name,
+        "ptype": ptype,
+        "rev": rev,
+        "current_sc": current_sc,
+        "next_sc": next_sc,
+        "root": root,
+        "scene_step": step_val,
+        "free_scene_numbering": is_free,
+    }

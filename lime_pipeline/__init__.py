@@ -71,6 +71,7 @@ from .ui import (
     LIME_TB_UL_alpha_events,
 )
 from .ui import LIME_TB_PT_ai_material_renamer, LIME_TB_UL_ai_mat_rows
+from .ui import LIME_TB_PT_experimental
 from .ops.ops_ai_material_renamer import (
     LIME_TB_OT_ai_test_connection,
     LIME_TB_OT_ai_rename_single,
@@ -182,6 +183,9 @@ from .ops.ops_auto_camera_bg import (
 from .ops.ops_stage_hdri import (
     LIME_OT_stage_set_hdri,
 )
+from .ops.ops_scene_continuity import (
+    LIME_OT_stage_create_next_scene_file,
+)
 from .ops.ops_view_layers import (
     LIME_OT_create_view_layers,
 )
@@ -220,6 +224,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_add_camera_rig,
     LIME_OT_import_layout,
     LIME_OT_duplicate_scene_sequential,
+    LIME_OT_stage_create_next_scene_file,
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
@@ -301,6 +306,7 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_material_renamer,
+    LIME_TB_PT_experimental,
 )
 
 TOOLBOX_PANEL_CLASSES = (
@@ -308,6 +314,7 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_material_renamer,
+    LIME_TB_PT_experimental,
 )
 
 def _panel_is_child(cls) -> bool:
