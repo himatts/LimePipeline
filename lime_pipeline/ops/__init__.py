@@ -22,6 +22,7 @@ bl_label, and poll/execute methods for integration with Blender's UI system.
 from .ops_shots import (
     LIME_OT_new_shot,
     LIME_OT_duplicate_shot,
+    LIME_OT_render_shots_from_markers,
 )
 from .ops_duplicate_scene import (
     LIME_OT_duplicate_scene_sequential,
@@ -36,6 +37,7 @@ from .ops_view_layers import (
 __all__ = [
     "LIME_OT_new_shot",
     "LIME_OT_duplicate_shot",
+    "LIME_OT_render_shots_from_markers",
     "LIME_OT_duplicate_scene_sequential",
     "LIME_OT_stage_create_next_scene_file",
     "LIME_OT_create_view_layers",

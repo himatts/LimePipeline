@@ -24,6 +24,8 @@ CAT = "Lime Pipeline"
 
 
 _SHOTS_HANDLER = None
+# Guard to avoid recursive shot list updates while long operations (e.g., modal renders) run
+RENDER_SHOTS_GUARD = False
 
 
 class LIME_PT_shots(Panel):
@@ -70,6 +72,10 @@ class LIME_PT_shots(Panel):
         col.operator("lime.duplicate_shot_and_sync", text='', icon='DUPLICATE')
         col.operator("lime.add_missing_collections", text='', icon='WARNING_LARGE')
 
+        layout.separator()
+        render_box = layout.box()
+        render_box.label(text="Renders RAW por SHOT", icon='RENDER_STILL')
+        render_box.operator("lime.render_shots_from_markers", text="Render Shots (RAW)", icon='RENDER_STILL')
 
 
 
@@ -332,6 +338,8 @@ def register_shot_list_props():
     bpy.types.Scene.lime_shots = CollectionProperty(type=LimeShotItem)
 
     def _on_active_shot_index(self, context):
+        if RENDER_SHOTS_GUARD:
+            return
         try:
             idx = getattr(self, 'lime_shots_index', -1)
             items = getattr(self, 'lime_shots', None)
@@ -438,6 +446,8 @@ def register_shot_list_props():
             pass
 
     def _shots_depsgraph_update_post(_deps):
+        if RENDER_SHOTS_GUARD:
+            return
         scene = bpy.context.scene
         if scene is None:
             return

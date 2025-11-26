@@ -22,7 +22,6 @@ class LIME_PT_image_save_as(Panel):
     bl_category = CAT
     bl_label = "Save As"
     bl_idname = "LIME_PT_image_save_as"
-    bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
     def poll(cls, ctx):
