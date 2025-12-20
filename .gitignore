@@ -22,14 +22,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Repomix output files
-.repomix/
-repomix-output.xml
-
-# Documentation
-pyproject.toml
-mkdocs.yml
-fix_bom.py
-tools/
+# Documentation build output
 site/
-docs/

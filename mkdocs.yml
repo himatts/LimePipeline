@@ -1,0 +1,42 @@
+﻿site_name: Lime Pipeline
+theme:
+  name: material
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: ['.']
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+nav:
+  - Inicio: index.md
+  - Arquitectura:
+      - Visión general: arquitectura/vision-general.md
+      - Decisiones:
+          - ADR-0001: arquitectura/decisiones/ADR-0001.md
+  - Catálogo:
+      - Índice: catalogo/index.md
+      - UI: catalogo/ui.md
+      - OPS: catalogo/ops.md
+      - CORE: catalogo/core.md
+      - SCENE: catalogo/scene.md
+      - DATA: catalogo/data.md
+      - PROPS: catalogo/props.py.md
+      - PROPS AI: catalogo/props_ai_materials.py.md
+      - PREFS: catalogo/prefs.py.md
+      - INIT: catalogo/__init__.py.md
+  - Referencia API:
+      - Módulos: referencia/api/index.md
+  - Guías:
+      - Primeros Pasos: guias/primeros-pasos.md
+      - Desarrollo (Cursor + Blender Development): guias/desarrollo-cursor-blender-development.md
+      - Operadores y Paneles: guias/operadores-y-paneles.md
+      - Convenciones: guias/convenciones-nombres.md
+      - Flujos típicos: guias/flujos-tipicos.md
+      - Troubleshooting: guias/troubleshooting.md
+  - Contribuir: contribuir.md

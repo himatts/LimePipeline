@@ -114,7 +114,7 @@ from .ops.ops_render_presets import (
     LIME_OT_render_apply_resolution_shortcut,
     ensure_preset_slots,
 )
-from .ops.animation_params import LIME_TB_OT_apply_keyframe_style
+from .ops.ops_animation_params import LIME_TB_OT_apply_keyframe_style
 from .ops.ops_step_clean import LIME_OT_clean_step
 from .ops.ops_dimensions import LIME_OT_dimension_envelope, disable_dimension_overlay_guard
 from .ops.ops_noise import (

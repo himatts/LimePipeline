@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "lime-pipeline"
+version = "0.0.0"
+description = "Blender addon documentation tooling"
+authors = ["Lime Pipeline Team"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs-material = "*"
+mkdocstrings = {version = "*", extras = ["python"]}
+
+[tool.interrogate]
+fail_under = 60
+exclude = ["dist", "docs", "openspec"]
+
+[tool.pydocstyle]
+convention = "google"
+add-ignore = ["D1"]
+
+

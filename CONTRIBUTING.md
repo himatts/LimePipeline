@@ -1,10 +1,24 @@
-# Contributing to Lime Pipeline (Blender add-on)
+﻿# Contributing to Lime Pipeline (Blender add-on)
 
 Thank you for contributing! This guide explains how to propose changes while preserving stability and consistency.
 
+## Testing policy
+- Do not add new tests unless explicitly requested.
+- The primary validation loop is manual testing inside Blender during development.
+
+## Local development (Cursor + Blender)
+This add-on is developed primarily in the Cursor IDE using the **Blender Development** extension by **Jacques Lucke** (*Tools to simplify Blender development*).
+
+Typical workflow:
+1. Start Blender from the IDE.
+2. Install/enable the add-on once.
+3. Iterate quickly by reloading the add-on or running the current file from the Command Palette (search for `Blender:`).
+
+See `docs/guias/desarrollo-cursor-blender-development.md` for details.
+
 ## Scope and versions
 - Blender minimum version: 4.5.0
-- Python: Blender bundled (PEP 8–ish; see Style below)
+- Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
 
 ## Repository layout (high level)
@@ -19,8 +33,8 @@ See ARCHITECTURE.md for details.
 ## Development workflow
 1. Create a feature branch from `main`.
 2. Implement changes following rules below.
-3. Update docs if applicable: `.cursorrules`, `.cursor/rules/limepipelinerules.mdc`, ARCHITECTURE.md, this file, README.md.
-4. Run tests (core unit tests) and smoke tests if changed behavior.
+3. Update docs if applicable: `.cursor/rules/limepipelinerules.mdc`, ARCHITECTURE.md, this file, README.md.
+4. Manually test in Blender (preferred) using Blender Development.
 5. Open a Pull Request; include:
    - Summary and rationale (the "why")
    - Affected modules
@@ -59,13 +73,8 @@ See ARCHITECTURE.md for details.
 - [ ] Bump `bl_info["version"]` if user-facing behavior changes
 - [ ] Docs updated if visible behavior or structure changed (README, ARCHITECTURE, CONTRIBUTING)
 
-## Tests
-- Unit (no Blender):
-  - `core/naming.py` (normalize/parse/make_filename)
-  - `core/paths.py` (paths_for_type)
-  - `core/validate.py` (validate_all with fakes)
-- Smoke (optional): run Blender headless for key flows
-  - Example: `blender -b -P tests/smoke_render.py`
+## Existing tests (optional)
+The repo may contain a small number of unit tests for `core/` logic. Run them only when asked or when it helps validate a change.
 
 ## Commit style
 - Conventional summary preferred: feat:, fix:, chore:, refactor:, docs:
@@ -84,6 +93,5 @@ See ARCHITECTURE.md for details.
 
 ## Canonical rules file
 - The canonical rules live in: `.cursor/rules/limepipelinerules.mdc`.
-- `.cursorrules` may exist for editor compatibility, but the source of truth is `limepipelinerules.mdc`.
 
 Thanks for keeping Lime Pipeline robust and consistent!
