@@ -56,6 +56,11 @@ class LIME_PT_model_organizer(Panel):
         layout.separator()
         layout.operator("lime.colorize_parent_groups", text="Color Parent Groups", icon='COLOR')
         layout.operator("lime.apply_object_alpha_mix", text="Alpha Material Config", icon='SHADING_RENDERED')
+        layout.separator()
+
+        box_linked = layout.box()
+        box_linked.label(text="Linked Collections")
+        box_linked.operator("lime.localize_linked_collection", icon='LIBRARY_DATA_DIRECT')
 
 
 __all__ = [

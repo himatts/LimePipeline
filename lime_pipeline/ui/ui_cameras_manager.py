@@ -66,19 +66,15 @@ class LIME_PT_render_cameras(Panel):
                 layout.separator()
                 layout.label(text="Margins / Backgrounds:")
 
-                # Toggle for show_background_images with status message
+                # Toggle for show_background_images
                 row = layout.row(align=True)
                 row.prop(cam_data, 'show_background_images', text="Show backgrounds")
-                if not getattr(cam_data, 'show_background_images', True):
-                    row.label(text="", icon='INFO')
-                    activate_op = row.operator("lime.retry_camera_margin_backgrounds", text="Enable backgrounds", icon='CHECKBOX_HLT')
-                    if activate_op is not None:
-                        activate_op.set_visible = True
 
                 # Sliders for each margin image if visible or show toggle is off
                 if getattr(cam_data, 'show_background_images', True) or True:  # Always show sliders for config
                     # Target aliases in fixed order
                     margin_aliases = ["Box Horizontal", "Box", "Box Vertical"]
+                    missing_aliases = []
                     for alias in margin_aliases:
                         # Find matching background entry by checking if any entry's image name/filepath matches our target
                         entry = None
@@ -119,12 +115,18 @@ class LIME_PT_render_cameras(Panel):
                                     reset_op.alias = alias
                                     reset_op.target_alpha = 0.5
                         else:
-                            # Show missing entry with retry button
+                            # Show missing entry indicator
+                            missing_aliases.append(alias)
                             row = layout.row(align=True)
                             row.label(text=f"{alias}:", icon='ERROR')
-                            retry_op = row.operator("lime.retry_camera_margin_backgrounds", text="Retry", icon='FILE_REFRESH')
-                            if retry_op is not None:
-                                retry_op.alias = alias
+                            row.label(text="Missing", icon='INFO')
+
+                    if missing_aliases:
+                        warn_row = layout.row(align=True)
+                        warn_row.label(text="Missing margin backgrounds", icon='ERROR')
+                        retry_op = warn_row.operator("lime.retry_camera_margin_backgrounds", text="Repair backgrounds", icon='FILE_REFRESH')
+                        if retry_op is not None:
+                            retry_op.set_visible = True
 
 
 class LimeRenderCamItem(PropertyGroup):

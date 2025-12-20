@@ -20,6 +20,7 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Blender minimum version: 4.5.0
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
+- Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox)
 - Dimension Checker behavior: each run creates a new helper; manual cleanup is expected
 - Dimension Checker overlay units are user-configurable (mm/cm/m/in/ft)
 - Dimension Checker helpers parent to the active object and update live on scale

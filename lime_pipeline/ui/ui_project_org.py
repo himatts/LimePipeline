@@ -148,11 +148,6 @@ class LIME_PT_project_org(Panel):
                 parent = target_path
             row_path = box_preview.row(align=True)
             row_path.label(text=parent, icon='FILE_FOLDER')
-        elif not project_root:
-            row_hint = box_preview.row(align=True)
-            row_hint.alert = True
-            row_hint.label(text="Select a Project Root to finalize the destination path", icon='ERROR')
-
         # Status box (checks/warnings)
         box_status = layout.box()
         box_status.label(text="Status")
@@ -178,17 +173,19 @@ class LIME_PT_project_org(Panel):
         warn_count = len(warns)
         err_count = len(display_errors)
         if warn_count:
-            warn_header = box_status.row(align=True)
-            warn_header.label(text=f"{warn_count} warning(s)", icon='INFO')
+            if warn_count > 1:
+                warn_header = box_status.row(align=True)
+                warn_header.label(text=f"{warn_count} warning(s)", icon='INFO')
             for w in warns:
                 row = box_status.row(align=True)
                 row.label(text="", icon='ERROR')
                 op = row.operator("lime.show_text", text=w, emboss=False, icon='INFO')
                 op.text = w
         if err_count:
-            err_header = box_status.row(align=True)
-            err_header.alert = True
-            err_header.label(text=f"{err_count} blocking issue(s)", icon='CANCEL')
+            if err_count > 1:
+                err_header = box_status.row(align=True)
+                err_header.alert = True
+                err_header.label(text=f"{err_count} blocking issue(s)", icon='CANCEL')
             for e in display_errors:
                 row = box_status.row(align=True)
                 row.alert = True
@@ -206,8 +203,3 @@ class LIME_PT_project_org(Panel):
         secondary_row = box3.row(align=True)
         secondary_row.operator("lime.ensure_folders", text="Create Folders", icon='FILE_NEW')
         secondary_row.operator("lime.open_folder", text="Open Folder", icon='FILE_FOLDER')
-
-        # Linked Collections section
-        box_linked = layout.box()
-        box_linked.label(text="Linked Collections")
-        box_linked.operator("lime.localize_linked_collection", icon='LIBRARY_DATA_DIRECT')

@@ -12,6 +12,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Facilita la creación/duplicado/instanciado de “shots” con reglas claras.
 - Ayuda a mantener materiales bajo una nomenclatura consistente (manual y, opcionalmente, asistido por IA).
 - Añade utilidades prácticas de escena (por ejemplo, checks de dimensiones y ayudas de cámara).
+- El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (convertir a local manteniendo meshes linkeados).
 
 ## Requisitos
 - Blender 4.5 LTS (objetivo actual del add-on).
