@@ -247,6 +247,15 @@ class LimePipelineState(PropertyGroup):
         description="Optional descriptor word for render naming",
         default="",
     )
+    view_layer_output_format: EnumProperty(
+        name="View Layer Output",
+        description="Formato de salida para exportar View Layers",
+        items=[
+            ("EXR", "OpenEXR", "OpenEXR RGBA (Half) con codec DWAA"),
+            ("PNG", "PNG", "PNG RGBA 16-bit"),
+        ],
+        default="EXR",
+    )
     # Dynamic camera selection for Proposal Views
     def _camera_items(self, context):
         try:

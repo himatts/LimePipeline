@@ -195,6 +195,9 @@ from .ops.ops_scene_continuity import (
 from .ops.ops_view_layers import (
     LIME_OT_create_view_layers,
 )
+from .ops.ops_comp_view_layer_outputs import (
+    LIME_OT_setup_view_layer_outputs,
+)
 from .ops.ops_linked_collections import (
     LIME_OT_localize_linked_collection,
 )
@@ -276,6 +279,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_auto_camera_background_cleanup,
     LIME_OT_stage_set_hdri,
     LIME_OT_create_view_layers,
+    LIME_OT_setup_view_layer_outputs,
     LIME_OT_localize_linked_collection,
     LIME_TB_OT_ai_test_connection,
     LIME_TB_OT_ai_rename_single,

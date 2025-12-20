@@ -40,6 +40,14 @@ class LIME_PT_stage_setup(Panel):
         row = layout.row()
         row.enabled = shot_active is not None
         row.operator("lime.create_view_layers", text="Create View Layers", icon='RENDERLAYERS')
+        row = layout.row()
+        row.enabled = shot_active is not None
+        row.operator("lime.setup_view_layer_outputs", text="Setup View Layer Outputs", icon='NODETREE')
+        row = layout.row()
+        row.enabled = shot_active is not None
+        wm_state = getattr(ctx.window_manager, "lime_pipeline", None)
+        if wm_state is not None:
+            row.prop(wm_state, "view_layer_output_format", text="Output Format")
         layout.separator()
         layout.label(text="Create scene elements")
         col = layout.column(align=True)

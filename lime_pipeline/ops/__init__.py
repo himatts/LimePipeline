@@ -33,6 +33,9 @@ from .ops_scene_continuity import (
 from .ops_view_layers import (
     LIME_OT_create_view_layers,
 )
+from .ops_comp_view_layer_outputs import (
+    LIME_OT_setup_view_layer_outputs,
+)
 
 __all__ = [
     "LIME_OT_new_shot",
@@ -41,6 +44,7 @@ __all__ = [
     "LIME_OT_duplicate_scene_sequential",
     "LIME_OT_stage_create_next_scene_file",
     "LIME_OT_create_view_layers",
+    "LIME_OT_setup_view_layer_outputs",
 ]
 
 
