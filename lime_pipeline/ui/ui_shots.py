@@ -44,13 +44,13 @@ class LIME_PT_shots(Panel):
 
         # Solo Shot Active toggle
         row = layout.row()
-        row.prop(st, "solo_shot_activo", text="Solo Shot Activo",
+        row.prop(st, "solo_shot_activo", text="Solo Active Shot",
                 icon='RESTRICT_VIEW_ON' if getattr(st, 'solo_shot_activo', False) else 'RESTRICT_VIEW_OFF')
 
         # Optional: Jump to first camera marker toggle (visible only in Solo mode)
         if getattr(st, 'solo_shot_activo', False):
             row2 = layout.row()
-            row2.prop(st, "jump_to_first_shot_marker", text="Saltar a Última Cámara Activa", icon='MARKER_HLT')
+            row2.prop(st, "jump_to_first_shot_marker", text="Jump to Last Active Camera", icon='MARKER_HLT')
 
         # Main shot list with controls
         row = layout.row(align=True)
@@ -74,7 +74,7 @@ class LIME_PT_shots(Panel):
 
         layout.separator()
         render_box = layout.box()
-        render_box.label(text="Renders RAW por SHOT", icon='RENDER_STILL')
+        render_box.label(text="RAW Renders per SHOT", icon='RENDER_STILL')
         render_box.operator("lime.render_shots_from_markers", text="Render Shots (RAW)", icon='RENDER_STILL')
 
 

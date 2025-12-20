@@ -235,6 +235,18 @@ class LimePipelineState(PropertyGroup):
     custom_name: StringProperty(name="Custom Project Name", description="Letters/digits only; will be normalized to TitleCase")
     preview_name: StringProperty(name="Preview Name", options={'HIDDEN'})
     preview_path: StringProperty(name="Preview Path", subtype='FILE_PATH', options={'HIDDEN'})
+    render_version: IntProperty(
+        name="Render Version",
+        description="Optional render version (0 = none)",
+        default=0,
+        min=0,
+        max=99,
+    )
+    render_descriptor: StringProperty(
+        name="Render Descriptor",
+        description="Optional descriptor word for render naming",
+        default="",
+    )
     # Dynamic camera selection for Proposal Views
     def _camera_items(self, context):
         try:

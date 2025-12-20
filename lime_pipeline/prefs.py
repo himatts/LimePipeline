@@ -30,7 +30,7 @@ from .props import LimeRenderPresetSlot
 
 
 ADDON_PKG = __package__
-DEFAULT_DESKTOP = str((Path.home() / "Desktop").resolve())
+DEFAULT_LOCAL_ROOT = r"C:\\Users\\Usuario\\Documents\\Lime Design\\LocalProjects"
 
 
 class LimePipelinePrefs(AddonPreferences):
@@ -51,8 +51,8 @@ class LimePipelinePrefs(AddonPreferences):
     local_projects_root: StringProperty(
         name="Local Projects Root",
         subtype='DIR_PATH',
-        default=DEFAULT_DESKTOP,
-        description="Base directory used when working in Local Project mode (defaults to Desktop)",
+        default=DEFAULT_LOCAL_ROOT,
+        description="Base directory used when working in Local Project mode",
     )
     scene_step: IntProperty(
         name="Scene Step",

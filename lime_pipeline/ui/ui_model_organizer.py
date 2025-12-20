@@ -14,7 +14,7 @@ from bpy.types import Panel
 from ..ops.ops_model_organizer import objects_with_location_offset
 
 
-CAT = "Lime Pipeline"
+CAT = "Lime Toolbox"
 
 
 class LIME_PT_model_organizer(Panel):

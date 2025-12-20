@@ -21,7 +21,7 @@ from pathlib import Path
 import bpy
 from bpy.types import Operator
 
-from ..core.naming import hydrate_state_from_filepath, resolve_project_name
+from ..core.naming import hydrate_state_from_filepath, resolve_project_name, RE_PROJECT_DIR
 from ..core.paths import paths_for_type
 from ..core.validate_scene import active_shot_context, parse_shot_index
 
@@ -167,7 +167,7 @@ class LIME_OT_set_anim_output_final(_LimeSetAnimOutput):
 
 
 class _LimeSetAnimOutputLocal(Operator):
-    """Shared logic for local desktop animation output buttons."""
+    """Shared logic for local animation output buttons."""
 
     bl_options = {"REGISTER"}
     output_label = "Animation Output (Local)"
@@ -200,26 +200,46 @@ class _LimeSetAnimOutputLocal(Operator):
             self.report({"ERROR"}, "No se pudo leer el índice del SHOT activo. Usa colecciones 'SHOT 01', 'SHOT 02', etc.")
             return {"CANCELLED"}
 
+        # Warn about ambiguous project roots when not using Local Project Mode.
+        if not getattr(state, "use_local_project", False):
+            try:
+                root_name = Path(getattr(state, "project_root", "") or "").name
+                if root_name and not RE_PROJECT_DIR.match(root_name) and not getattr(state, "use_custom_name", False):
+                    self.report(
+                        {"WARNING"},
+                        "Project Root no parece un folder de proyecto; el nombre local puede ser incorrecto.",
+                    )
+            except Exception:
+                pass
+
         # Get project name
         project_name = resolve_project_name(state)
         if not project_name:
             self.report({"ERROR"}, "No se pudo obtener el nombre del proyecto. Revisa Project Organization.")
             return {"CANCELLED"}
 
-        # Get desktop path
+        # Resolve local output base directory from preferences (fallback to Desktop).
         try:
-            desktop = Path.home() / "Desktop"
-            if not desktop.exists():
-                # Fallback for Windows OneDrive desktop
-                desktop = Path.home() / "OneDrive" / "Desktop"
-                if not desktop.exists():
-                    raise RuntimeError(f"Escritorio no encontrado en: {desktop}")
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            base_dir = (getattr(prefs, "local_projects_root", "") or "").strip()
+        except Exception:
+            base_dir = ""
+        try:
+            if base_dir:
+                base = Path(base_dir)
+            else:
+                base = Path.home() / "Desktop"
+                if not base.exists():
+                    # Fallback for Windows OneDrive desktop when Desktop is missing
+                    base = Path.home() / "OneDrive" / "Desktop"
+            if not str(base):
+                raise RuntimeError("Ruta local no disponible")
         except Exception as ex:
-            self.report({"ERROR"}, f"No se pudo acceder al escritorio: {ex}")
+            self.report({"ERROR"}, f"No se pudo resolver la ruta local: {ex}")
             return {"CANCELLED"}
 
-        # Create project folder on desktop
-        project_dir = desktop / project_name
+        # Create project folder under local base
+        project_dir = base / project_name
         shot_token = f"SC{sc_number:03d}_SH{shot_idx:02d}"
         target_dir = project_dir / shot_token
 
@@ -246,7 +266,7 @@ class _LimeSetAnimOutputLocal(Operator):
 
         self.report(
             {"INFO"},
-            f"{mode_label} output listo en escritorio: {output_path}",
+            f"{mode_label} output listo en local: {output_path}",
         )
         return {"FINISHED"}
 

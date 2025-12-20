@@ -288,8 +288,6 @@ NON_PANEL_CLASSES = (
 )
 
 PIPELINE_PANEL_CLASSES = (
-    LIME_PT_model_organizer,
-    LIME_PT_dimension_utilities,
     LIME_PT_project_org,
     LIME_PT_render_configs,
     LIME_PT_render_preset_actions,
@@ -304,6 +302,8 @@ OTHER_PANEL_CLASSES = (
 )
 
 TOOLBOX_CATEGORY_PANELS = (
+    LIME_PT_model_organizer,
+    LIME_PT_dimension_utilities,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
@@ -312,6 +312,8 @@ TOOLBOX_CATEGORY_PANELS = (
 )
 
 TOOLBOX_PANEL_CLASSES = (
+    LIME_PT_model_organizer,
+    LIME_PT_dimension_utilities,
     LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,

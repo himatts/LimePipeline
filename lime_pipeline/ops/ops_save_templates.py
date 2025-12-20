@@ -30,6 +30,7 @@ from ..core.naming import (
     resolve_project_name,
     parse_blend_details,
     hydrate_state_from_filepath,
+    normalize_project_name,
 )
 from ..core import validate_scene
 from ..data.templates import C_CAM
@@ -109,6 +110,22 @@ def _camera_index_for_shot(shot, camera_obj) -> int:
     except Exception:
         pass
     return 1
+
+
+def _build_optional_render_suffix(state) -> str:
+    parts = []
+    try:
+        version = int(getattr(state, "render_version", 0) or 0)
+    except Exception:
+        version = 0
+    if version > 0:
+        parts.append(f"V{version}")
+    raw_desc = (getattr(state, "render_descriptor", "") or "").strip()
+    if raw_desc:
+        desc = normalize_project_name(raw_desc)
+        if desc:
+            parts.append(desc)
+    return "_".join(parts)
 
 
 class _SaveTemplateOperatorBase:
@@ -236,21 +253,25 @@ class LIME_OT_save_as_with_template(_SaveTemplateOperatorBase, Operator):
             # Fallback to home if not configured; dialog still opens
             editables_dir = Path.home()
         project_name, sc_number, rev = _resolve_prj_rev_sc(st)
+        suffix = _build_optional_render_suffix(st)
         scene = context.scene
         shot = validate_scene.active_shot_context(context)
         camera_obj = scene.camera
         if ptype == 'REND':
             shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
             cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
-            filename = f"{project_name}_Render_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"{project_name}_Render_SC{sc_number:03d}_SH{shot_idx:02d}C{cam_idx}"
         elif ptype == 'PV':
             shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
             cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
-            filename = f"{project_name}_PV_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"{project_name}_PV_SC{sc_number:03d}_SH{shot_idx:02d}C{cam_idx}"
         elif ptype == 'SB':
-            filename = f"{project_name}_SB_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"{project_name}_SB_SC{sc_number:03d}"
         else:
-            filename = f"{project_name}_TMP_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"{project_name}_TMP_SC{sc_number:03d}"
+        if suffix:
+            core = f"{core}_{suffix}"
+        filename = f"{core}_Rev_{rev}.png"
         return (editables_dir / filename).as_posix()
 
 
@@ -271,21 +292,25 @@ class LIME_OT_save_as_with_template_raw(_SaveTemplateOperatorBase, Operator):
             # Fallback to home if not configured; dialog still opens
             raw_dir = Path.home()
         project_name, sc_number, rev = _resolve_prj_rev_sc(st)
+        suffix = _build_optional_render_suffix(st)
         scene = context.scene
         shot = validate_scene.active_shot_context(context)
         camera_obj = scene.camera
         if ptype == 'REND':
             shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
             cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
-            filename = f"RAW_{project_name}_Render_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"RAW_{project_name}_Render_SC{sc_number:03d}_SH{shot_idx:02d}C{cam_idx}"
         elif ptype == 'PV':
             shot_idx = validate_scene.parse_shot_index(shot.name) if shot else 0
             cam_idx = _camera_index_for_shot(shot, camera_obj) if shot and camera_obj else 1
-            filename = f"RAW_{project_name}_PV_SH{shot_idx:02d}C{cam_idx}_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"RAW_{project_name}_PV_SC{sc_number:03d}_SH{shot_idx:02d}C{cam_idx}"
         elif ptype == 'SB':
-            filename = f"RAW_{project_name}_SB_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"RAW_{project_name}_SB_SC{sc_number:03d}"
         else:
-            filename = f"RAW_{project_name}_TMP_SC{sc_number:03d}_Rev_{rev}.png"
+            core = f"RAW_{project_name}_TMP_SC{sc_number:03d}"
+        if suffix:
+            core = f"{core}_{suffix}"
+        filename = f"{core}_Rev_{rev}.png"
         return (raw_dir / filename).as_posix()
 
 

@@ -58,20 +58,20 @@ class LIME_PT_render_cameras(Panel):
         col.operator("lime.duplicate_active_camera", text='', icon='DUPLICATE')
         col.operator("lime.sync_camera_list", text='', icon='FILE_REFRESH')
 
-        # -- Márgenes / Backgrounds section for selected camera --
+        # -- Margins / Backgrounds section for selected camera --
         cam = getattr(scene, 'camera', None)
         if cam is not None and getattr(cam, 'type', None) == 'CAMERA':
             cam_data = getattr(cam, 'data', None)
             if cam_data is not None:
                 layout.separator()
-                layout.label(text="Márgenes / Backgrounds:")
+                layout.label(text="Margins / Backgrounds:")
 
                 # Toggle for show_background_images with status message
                 row = layout.row(align=True)
-                row.prop(cam_data, 'show_background_images', text="Mostrar fondos")
+                row.prop(cam_data, 'show_background_images', text="Show backgrounds")
                 if not getattr(cam_data, 'show_background_images', True):
                     row.label(text="", icon='INFO')
-                    activate_op = row.operator("lime.retry_camera_margin_backgrounds", text="Activar fondos", icon='CHECKBOX_HLT')
+                    activate_op = row.operator("lime.retry_camera_margin_backgrounds", text="Enable backgrounds", icon='CHECKBOX_HLT')
                     if activate_op is not None:
                         activate_op.set_visible = True
 
@@ -122,7 +122,7 @@ class LIME_PT_render_cameras(Panel):
                             # Show missing entry with retry button
                             row = layout.row(align=True)
                             row.label(text=f"{alias}:", icon='ERROR')
-                            retry_op = row.operator("lime.retry_camera_margin_backgrounds", text="Reintentar", icon='FILE_REFRESH')
+                            retry_op = row.operator("lime.retry_camera_margin_backgrounds", text="Retry", icon='FILE_REFRESH')
                             if retry_op is not None:
                                 retry_op.alias = alias
 

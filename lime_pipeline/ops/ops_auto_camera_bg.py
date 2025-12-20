@@ -451,6 +451,26 @@ def _update_plane(
         plane.rotation_quaternion = cam_matrix.to_quaternion()
     except Exception:
         pass
+# Animation helpers
+_AUTO_BG_ANIM_PATHS = {
+    "location",
+    "rotation_euler",
+    "rotation_quaternion",
+    "scale",
+}
+
+def _clear_plane_auto_bg_keys(plane: bpy.types.Object) -> None:
+    """Remove auto-BG transform keys so live updates can drive the plane."""
+    try:
+        ad = getattr(plane, "animation_data", None)
+        action = getattr(ad, "action", None) if ad else None
+        if not action:
+            return
+        for fc in list(action.fcurves):
+            if getattr(fc, "data_path", "") in _AUTO_BG_ANIM_PATHS:
+                action.fcurves.remove(fc)
+    except Exception:
+        pass
     if bool(plane.get(PROP_MANUAL_SCALE)):
         return
     try:
@@ -680,6 +700,7 @@ class LIME_OT_auto_camera_background_refresh(Operator):
         if shot and not allowed:
             self.report({'ERROR'}, f"No cameras found in shot '{shot.name}'.")
             return {'CANCELLED'}
+        _clear_plane_auto_bg_keys(plane)
         dist = float(plane.get(PROP_DIST, DEFAULT_DIST))
         pad = float(plane.get(PROP_PAD, DEFAULT_PAD))
         _update_plane(scene, plane, dist, pad, shot=shot, allowed_cameras=allowed or None)
@@ -731,6 +752,7 @@ class LIME_OT_auto_camera_background_toggle_live(Operator):
                 return {'CANCELLED'}
             _ensure_plane_properties(plane)
             plane["LP_AUTO_BG"] = True
+            _clear_plane_auto_bg_keys(plane)
             allowed = set(_collect_shot_cameras(shot))
             if not allowed:
                 self.report({'ERROR'}, f"No cameras found in shot '{shot.name}'.")
@@ -766,7 +788,7 @@ class LIME_OT_auto_camera_background_bake(Operator):
             ('PER_MARKER', "Per Marker", "Keyframe at each camera marker frame"),
             ('EACH_FRAME', "Each Frame", "Keyframe every frame (or step) in scene range"),
         ],
-        default='PER_MARKER'
+        default='EACH_FRAME'
     )
     step: IntProperty(
         name="Step",

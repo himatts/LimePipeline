@@ -12,7 +12,7 @@ import bpy
 from bpy.types import Panel, Operator
 from bpy.props import EnumProperty
 
-CAT = "Lime Pipeline"
+CAT = "Lime Toolbox"
 ADDON_PKG = __package__.split('.')[0]
 
 _UNIT_PRESET_ITEMS = [

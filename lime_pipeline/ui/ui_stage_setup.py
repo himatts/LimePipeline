@@ -60,6 +60,10 @@ class LIME_PT_stage_setup(Panel):
         row2.operator("lime.auto_camera_background_toggle_live", icon='CHECKBOX_HLT', text="Live ON").enable = True
         row2.operator("lime.auto_camera_background_toggle_live", icon='CHECKBOX_DEHLT', text="Live OFF").enable = False
 
+        row3 = layout.row(align=True)
+        row3.enabled = allow_bg_ops
+        row3.operator("lime.auto_camera_background_bake", icon='REC', text="Bake BG")
+
         plane = getattr(ctx, "object", None)
         if plane and plane.get("LP_AUTO_BG"):
             layout.separator()

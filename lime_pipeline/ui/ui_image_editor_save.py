@@ -34,6 +34,10 @@ class LIME_PT_image_save_as(Panel):
 
     def draw(self, ctx):
         layout = self.layout
+        st = ctx.window_manager.lime_pipeline
+        box = layout.box()
+        box.prop(st, "render_version")
+        box.prop(st, "render_descriptor", text="Descriptor")
         col = layout.column(align=True)
         col.operator("lime.save_as_with_template", text="Render", icon='RENDER_RESULT').ptype = 'REND'
         col.operator("lime.save_as_with_template", text="Proposal View", icon='OUTLINER_DATA_CAMERA').ptype = 'PV'
