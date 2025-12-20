@@ -20,6 +20,10 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Blender minimum version: 4.5.0
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
+- Dimension Checker behavior: each run creates a new helper; manual cleanup is expected
+- Dimension Checker overlay units are user-configurable (mm/cm/m/in/ft)
+- Dimension Checker helpers parent to the active object and update live on scale
+- Dimension Checker overlay warns about unapplied scale (yellow labels)
 
 ## Repository layout (high level)
 - `lime_pipeline/core`: naming, paths, validation, parsing (no hard `bpy` dependency)

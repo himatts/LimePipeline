@@ -6,6 +6,10 @@ measurement units (MM/CM/M/IN/FT) to the current scene.
 Key classes: LIME_PT_dimension_utilities, LIME_OT_set_unit_preset.
 Depends on: Blender unit settings; optional addon preferences.
 Notes: UI-only; unit changes are applied through a lightweight operator.
+
+NOTE(known-issue): Dimension Checker live scaling (parented helper) can be visually
+incorrect during interactive scaling without applying transforms. Do not attempt to
+address that issue unless explicitly requested; confirm scope first.
 """
 
 import bpy
@@ -153,9 +157,22 @@ class LIME_PT_dimension_utilities(Panel):
         if state is not None:
             op.orientation_mode = state.dimension_orientation_mode
             op.lock_z_up = state.dimension_lock_z_up
+        dim_box.label(text="Each run creates a new helper; delete manually.", icon='INFO')
+
+        overlay_box = layout.box()
+        overlay_box.label(text="Dimension Checker Units")
+        if state is not None:
+            metric_row = overlay_box.row(align=True)
+            metric_row.prop(state, "dimension_show_mm", text="mm", toggle=True)
+            metric_row.prop(state, "dimension_show_cm", text="cm", toggle=True)
+            metric_row.prop(state, "dimension_show_m", text="m", toggle=True)
+            imperial_row = overlay_box.row(align=True)
+            imperial_row.prop(state, "dimension_show_in", text="in", toggle=True)
+            imperial_row.prop(state, "dimension_show_ft", text="ft", toggle=True)
+        overlay_box.label(text="These affect the overlay only.", icon='INFO')
 
         units_box = layout.box()
-        units_box.label(text="Measurement Units")
+        units_box.label(text="Scene Measurement Units")
         scene = getattr(ctx, "scene", None)
         current = _format_current_units(scene)
         if current:

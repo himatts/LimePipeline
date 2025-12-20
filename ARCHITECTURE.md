@@ -59,7 +59,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Layout and user interactions; no heavy IO
 - Highlights:
   - `ui_ai_material_renamer.py`: Lime Toolbox / AI Material Renamer panel with simplified UI (2-column editable list, local detection, filtering/ordering)
-  - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI and measurement unit presets (mm/cm/m/in/ft)
+- Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI, overlay unit visibility toggles, and measurement unit presets (mm/cm/m/in/ft); each run creates a new helper, which remains until manually removed and updates live when its active parent is scaled; overlay text turns yellow when targets have unapplied scale
 - Rules:
   - Prefer Blender native subpanels for sections (parent/child panels) instead of manual collapsible boxes
   - `draw()` must be fast (no disk scans/hydration); use handlers or cached state

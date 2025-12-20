@@ -43,11 +43,17 @@ DIM_SIZE_PROP = "lp_dimension_size"
 
 DIM_ORIENTATION_PROP = "lp_dimension_orientation_mode"
 
+DIM_TARGETS_PROP = "lp_dimension_targets"
+
+DIM_LOCK_Z_PROP = "lp_dimension_lock_z_up"
+
 OVERLAY_FONT_SIZE_PX = 12
 
 OVERLAY_PADDING_PX = 6
 
 OVERLAY_TEXT_COLOR = (1.0, 1.0, 1.0, 1.0)
+
+OVERLAY_TEXT_COLOR_WARNING = (1.0, 0.9, 0.1, 1.0)
 
 OVERLAY_BG_COLOR = (0.0, 0.0, 0.0, 0.45)
 
@@ -81,6 +87,19 @@ PCA_EPSILON = 1e-6
 
 _OVERLAY_DRAW_HANDLE = None
 
+_DIMENSION_LIVE_HANDLER = None
+
+_DIMENSION_LIVE_GUARD = False
+
+# NOTE(known-issue): The Dimension Checker helper is parented to the active object and
+# updated via a depsgraph handler. During interactive scaling (without applying scale),
+# the envelope may visually drift or not match the parent's scale proportion in real time.
+# This is not fully solved yet.
+#
+# When working on Dimension Utilities / Dimension Checker, do not attempt to "fix" this
+# behavior unless explicitly requested; first confirm whether this issue is in scope for
+# the current task.
+
 def _overlay_debug_print(*args) -> None:
 
     if OVERLAY_DEBUG:
@@ -89,17 +108,35 @@ def _overlay_debug_print(*args) -> None:
         except Exception:
             pass
 
-def _find_existing_envelope(scene: bpy.types.Scene) -> bpy.types.Object | None:
-
-    for obj in scene.objects:
+def _dimension_live_debug(*args) -> None:
+    if OVERLAY_DEBUG:
         try:
-            if obj.get(DIM_ENVELOPE_PROP):
-                return obj
+            print("[Lime][DimensionLive]", *args)
         except Exception:
-            continue
-    return None
+            pass
 
-def _filtered_selection(context: bpy.types.Context, envelope: bpy.types.Object | None) -> list[bpy.types.Object]:
+def _object_has_unapplied_scale(obj: bpy.types.Object | None, *, epsilon: float = 1e-4) -> bool:
+    if obj is None:
+        return False
+    try:
+        scale = obj.scale
+    except Exception:
+        return False
+    try:
+        return any(abs(float(value) - 1.0) > epsilon for value in scale)
+    except Exception:
+        return False
+
+def _targets_have_unapplied_scale(scene: bpy.types.Scene, envelope: bpy.types.Object) -> bool:
+    targets = _resolve_dimension_targets(scene, envelope.get(DIM_TARGETS_PROP))
+    if not targets:
+        return False
+    for obj in targets:
+        if _object_has_unapplied_scale(obj):
+            return True
+    return False
+
+def _filtered_selection(context: bpy.types.Context) -> list[bpy.types.Object]:
 
     selection: list[bpy.types.Object] = []
     try:
@@ -113,8 +150,6 @@ def _filtered_selection(context: bpy.types.Context, envelope: bpy.types.Object |
     filtered: list[bpy.types.Object] = []
     for obj in selection:
         if obj is None:
-            continue
-        if obj is envelope:
             continue
         try:
             if obj.get(DIM_ENVELOPE_PROP) or obj.get(DIM_LABEL_PROP):
@@ -193,14 +228,17 @@ def _collect_world_points(
     objects: list[bpy.types.Object],
     *,
     sample_limit: int | None = None,
+    depsgraph_override=None,
 ) -> list[Vector]:
     if not objects:
         return []
     points: list[Vector] = []
-    try:
-        depsgraph = context.evaluated_depsgraph_get()
-    except Exception:
-        depsgraph = None
+    depsgraph = depsgraph_override
+    if depsgraph is None:
+        try:
+            depsgraph = context.evaluated_depsgraph_get()
+        except Exception:
+            depsgraph = None
     selected_handles: set[int] = set()
     for obj in objects:
         if obj is None:
@@ -477,6 +515,7 @@ def _pick_reference_rotation(
     mode: str,
     *,
     lock_z_up: bool = False,
+    depsgraph=None,
 ) -> OrientationPick:
     identity = Matrix.Identity(4)
     if not objects:
@@ -492,6 +531,7 @@ def _pick_reference_rotation(
                 context,
                 objects,
                 sample_limit=PCA_POINT_SAMPLE_LIMIT,
+                depsgraph_override=depsgraph,
             )
         return points_cache
     if desired_mode == 'WORLD':
@@ -534,6 +574,7 @@ def _compute_oriented_aabb(
     orientation_matrix: Matrix,
     *,
     points_override: list[Vector] | None = None,
+    depsgraph=None,
 ) -> tuple[Vector, Vector] | None:
     if not objects:
         return None
@@ -571,6 +612,7 @@ def _compute_oriented_aabb(
             context,
             objects,
             sample_limit=PCA_POINT_SAMPLE_LIMIT,
+            depsgraph_override=depsgraph,
         )
         for point in points:
             accumulate(point)
@@ -595,32 +637,9 @@ def _ensure_dimension_collection(scene: bpy.types.Scene) -> bpy.types.Collection
                 pass
     return collection
 
-def _ensure_envelope_object(scene: bpy.types.Scene, selection: list[bpy.types.Object]) -> bpy.types.Object:
+def _create_envelope_object(scene: bpy.types.Scene) -> bpy.types.Object:
 
     target_collection = _ensure_dimension_collection(scene)
-    envelope = _find_existing_envelope(scene)
-    if envelope is not None:
-        if envelope.data is None or envelope.type != 'MESH':
-            mesh = bpy.data.meshes.new("LP_DimensionEnvelopeMesh")
-            envelope.data = mesh
-        if target_collection is not None:
-            try:
-                existing_collections = list(getattr(envelope, "users_collection", []) or [])
-            except Exception:
-                existing_collections = []
-            if target_collection not in existing_collections:
-                try:
-                    target_collection.objects.link(envelope)
-                except Exception:
-                    pass
-            for collection in existing_collections:
-                if collection is target_collection:
-                    continue
-                try:
-                    collection.objects.unlink(envelope)
-                except Exception:
-                    continue
-        return envelope
     mesh = bpy.data.meshes.new("LP_DimensionEnvelopeMesh")
     envelope = bpy.data.objects.new(DIMENSION_HELPER_SUFFIX, mesh)
     envelope.hide_render = True
@@ -685,12 +704,17 @@ def _update_envelope_geometry(
     except Exception:
         rotation3 = Matrix.Identity(3)
     center_world = rotation3 @ center_o
-    envelope.location = center_world
     envelope.rotation_mode = 'QUATERNION'
     try:
-        envelope.rotation_quaternion = orientation_matrix.to_quaternion()
+        matrix_world = orientation_matrix.copy()
+        matrix_world.translation = center_world
+        envelope.matrix_world = matrix_world
     except Exception:
-        envelope.rotation_quaternion = rotation3.to_quaternion()
+        envelope.location = center_world
+        try:
+            envelope.rotation_quaternion = orientation_matrix.to_quaternion()
+        except Exception:
+            envelope.rotation_quaternion = rotation3.to_quaternion()
     envelope.scale = (1.0, 1.0, 1.0)
     envelope.hide_render = True
     envelope.show_in_front = True
@@ -741,6 +765,123 @@ def disable_dimension_overlay_guard() -> None:
     _overlay_debug_print('Disabling overlay draw handler from unregister')
     _remove_overlay_draw_handler()
 
+def _resolve_dimension_targets(scene: bpy.types.Scene, raw_targets) -> list[bpy.types.Object]:
+    if not raw_targets:
+        return []
+    names: list[str] = []
+    if isinstance(raw_targets, (list, tuple)):
+        names = [str(item) for item in raw_targets if item]
+    elif isinstance(raw_targets, str):
+        names = [item for item in raw_targets.split("|") if item]
+    else:
+        try:
+            names = [str(raw_targets)]
+        except Exception:
+            names = []
+    if not names:
+        return []
+    resolved: list[bpy.types.Object] = []
+    for name in names:
+        obj = scene.objects.get(name)
+        if obj is None:
+            obj = bpy.data.objects.get(name)
+        if obj is None:
+            continue
+        resolved.append(obj)
+    return resolved
+
+def _dimension_live_update_handler(depsgraph) -> None:
+    global _DIMENSION_LIVE_GUARD
+    if _DIMENSION_LIVE_GUARD:
+        return
+    _DIMENSION_LIVE_GUARD = True
+    try:
+        scene = None
+        if depsgraph is not None:
+            scene = getattr(depsgraph, "scene", None) or getattr(depsgraph, "scene_eval", None)
+        if scene is None:
+            scene = getattr(bpy.context, "scene", None)
+        if scene is None:
+            return
+        envelopes = [obj for obj in scene.objects if obj.get(DIM_ENVELOPE_PROP)]
+        if not envelopes:
+            return
+        context = bpy.context
+        for envelope in envelopes:
+            try:
+                targets = _resolve_dimension_targets(scene, envelope.get(DIM_TARGETS_PROP))
+                if not targets:
+                    continue
+                parent = getattr(envelope, "parent", None)
+                if parent is not None:
+                    try:
+                        envelope.inherit_scale = 'NONE'
+                    except Exception:
+                        pass
+                try:
+                    envelope.lock_scale = (True, True, True)
+                except Exception:
+                    pass
+                mode = envelope.get(DIM_ORIENTATION_PROP, DEFAULT_ORIENTATION_MODE)
+                lock_z = bool(envelope.get(DIM_LOCK_Z_PROP, False))
+                use_lock_z = bool(lock_z and mode == 'PCA3D')
+                orientation = _pick_reference_rotation(
+                    context,
+                    targets,
+                    mode,
+                    lock_z_up=use_lock_z,
+                    depsgraph=depsgraph,
+                )
+                bounds = _compute_oriented_aabb(
+                    context,
+                    targets,
+                    orientation.matrix,
+                    points_override=orientation.points,
+                    depsgraph=depsgraph,
+                )
+                if not bounds:
+                    continue
+                min_corner, max_corner = bounds
+                size = max_corner - min_corner
+                center_o = (max_corner + min_corner) * 0.5
+                _update_envelope_geometry(envelope, size, center_o, orientation.matrix)
+                envelope[DIM_ORIENTATION_PROP] = orientation.effective_mode
+            except Exception as exc:
+                _dimension_live_debug(f"Failed to update envelope {envelope.name}: {exc}")
+    finally:
+        _DIMENSION_LIVE_GUARD = False
+
+def enable_dimension_live_updates() -> None:
+    global _DIMENSION_LIVE_HANDLER
+    if _DIMENSION_LIVE_HANDLER is None:
+        _DIMENSION_LIVE_HANDLER = _dimension_live_update_handler
+    if _DIMENSION_LIVE_HANDLER not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(_DIMENSION_LIVE_HANDLER)
+
+def disable_dimension_live_updates() -> None:
+    global _DIMENSION_LIVE_HANDLER
+    if _DIMENSION_LIVE_HANDLER in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(_DIMENSION_LIVE_HANDLER)
+
+def _dimension_unit_visibility() -> dict[str, bool]:
+    state = getattr(getattr(bpy, "context", None), "window_manager", None)
+    state = getattr(state, "lime_pipeline", None)
+    if state is None:
+        return {
+            "MM": True,
+            "CM": True,
+            "M": True,
+            "IN": True,
+            "FT": True,
+        }
+    return {
+        "MM": bool(getattr(state, "dimension_show_mm", True)),
+        "CM": bool(getattr(state, "dimension_show_cm", True)),
+        "M": bool(getattr(state, "dimension_show_m", True)),
+        "IN": bool(getattr(state, "dimension_show_in", True)),
+        "FT": bool(getattr(state, "dimension_show_ft", True)),
+    }
+
 def _format_dimension_lines(axis: str, length: float, scene: bpy.types.Scene | None) -> list[tuple[str, str]]:
 
     scene_obj = scene or getattr(bpy.context, "scene", None)
@@ -754,13 +895,22 @@ def _format_dimension_lines(axis: str, length: float, scene: bpy.types.Scene | N
     length_m = float(length) * scale_length
     mm_value = length_m * 1000.0
     cm_value = length_m * 100.0
+    m_value = length_m
     inch_value = length_m / 0.0254 if length_m else 0.0
-    return [
-        ("Axis", f"{axis}"),
-        (f"{mm_value:.1f}", "mm"),
-        (f"{cm_value:.2f}", "cm"),
-        (f"{inch_value:.2f}", "in"),
-    ]
+    ft_value = length_m / 0.3048 if length_m else 0.0
+    visibility = _dimension_unit_visibility()
+    rows = [("Axis", f"{axis}")]
+    if visibility.get("MM", True):
+        rows.append((f"{mm_value:.1f}", "mm"))
+    if visibility.get("CM", True):
+        rows.append((f"{cm_value:.2f}", "cm"))
+    if visibility.get("M", True):
+        rows.append((f"{m_value:.3f}", "m"))
+    if visibility.get("IN", True):
+        rows.append((f"{inch_value:.2f}", "in"))
+    if visibility.get("FT", True):
+        rows.append((f"{ft_value:.2f}", "ft"))
+    return rows
 
 def _dimension_axis_data(envelope: bpy.types.Object) -> list[tuple[str, float, Vector]]:
 
@@ -895,7 +1045,8 @@ def _draw_dimension_overlay() -> None:
             shader.bind()
             shader.uniform_float('color', OVERLAY_BG_COLOR)
             batch.draw(shader)
-            blf.color(font_id, *OVERLAY_TEXT_COLOR)
+            text_color = OVERLAY_TEXT_COLOR_WARNING if (scene and _targets_have_unapplied_scale(scene, active)) else OVERLAY_TEXT_COLOR
+            blf.color(font_id, *text_color)
             cursor_y = origin_y + total_height
             for idx, (left_w, row_height, (left_text, right_text)) in enumerate(zip(left_row_widths, row_heights, rows)):
                 cursor_y -= row_height
@@ -934,8 +1085,7 @@ class LIME_OT_dimension_envelope(bpy.types.Operator):
     def execute(self, context: bpy.types.Context) -> set[str]:
 
         scene = context.scene
-        envelope = _find_existing_envelope(scene)
-        selection = _filtered_selection(context, envelope)
+        selection = _filtered_selection(context)
         if not selection:
             self.report({'WARNING'}, "Select at least one object to measure.")
             return {'CANCELLED'}
@@ -944,19 +1094,25 @@ class LIME_OT_dimension_envelope(bpy.types.Operator):
                 bpy.ops.object.mode_set(mode='OBJECT')
         except Exception:
             pass
-        envelope = _ensure_envelope_object(scene, selection)
+        envelope = _create_envelope_object(scene)
         use_lock_z = bool(self.lock_z_up and self.orientation_mode == 'PCA3D')
+        try:
+            depsgraph = context.evaluated_depsgraph_get()
+        except Exception:
+            depsgraph = None
         orientation = _pick_reference_rotation(
             context,
             selection,
             self.orientation_mode,
             lock_z_up=use_lock_z,
+            depsgraph=depsgraph,
         )
         bounds = _compute_oriented_aabb(
             context,
             selection,
             orientation.matrix,
             points_override=orientation.points,
+            depsgraph=depsgraph,
         )
         if not bounds:
             self.report({'WARNING'}, "Unable to compute dimensions for the current selection.")
@@ -966,10 +1122,28 @@ class LIME_OT_dimension_envelope(bpy.types.Operator):
         center_o = (max_corner + min_corner) * 0.5
         _update_envelope_geometry(envelope, size, center_o, orientation.matrix)
         envelope[DIM_ORIENTATION_PROP] = orientation.effective_mode
+        envelope[DIM_LOCK_Z_PROP] = bool(self.lock_z_up)
+        envelope[DIM_TARGETS_PROP] = [obj.name for obj in selection if obj is not None]
         _remove_existing_labels(envelope)
         display_label = selection[0].name if len(selection) == 1 else "Group"
         envelope.name = f"{display_label} {DIMENSION_HELPER_SUFFIX}"
         _ensure_overlay_draw_handler()
+        active = getattr(context.view_layer.objects, "active", None)
+        parent_candidate = active if active in selection else selection[0]
+        if parent_candidate is not None:
+            try:
+                envelope.parent = parent_candidate
+                envelope.matrix_parent_inverse = parent_candidate.matrix_world.inverted()
+                try:
+                    envelope.inherit_scale = 'NONE'
+                except Exception:
+                    pass
+                try:
+                    envelope.lock_scale = (True, True, True)
+                except Exception:
+                    pass
+            except Exception as exc:
+                _overlay_debug_print(f"Failed to parent envelope: {exc}")
         view_layer = context.view_layer
         for obj in view_layer.objects:
             try:
@@ -984,12 +1158,14 @@ class LIME_OT_dimension_envelope(bpy.types.Operator):
         if orientation.message:
             self.report({'INFO'}, orientation.message)
         mode_label = ORIENTATION_MODE_LABELS.get(orientation.effective_mode, orientation.effective_mode)
-        self.report({'INFO'}, f"Dimension checker updated ({mode_label}).")
+        self.report({'INFO'}, f"Dimension checker created ({mode_label}).")
         return {'FINISHED'}
 
 __all__ = [
 
     "LIME_OT_dimension_envelope",
     "disable_dimension_overlay_guard",
+    "enable_dimension_live_updates",
+    "disable_dimension_live_updates",
 
 ]

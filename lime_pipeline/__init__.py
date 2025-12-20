@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 3, 0),  # Material Manager UX refresh
+    "version": (0, 3, 3),  # Dimension Checker unapplied scale warning
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -116,7 +116,12 @@ from .ops.ops_render_presets import (
 )
 from .ops.ops_animation_params import LIME_TB_OT_apply_keyframe_style
 from .ops.ops_step_clean import LIME_OT_clean_step
-from .ops.ops_dimensions import LIME_OT_dimension_envelope, disable_dimension_overlay_guard
+from .ops.ops_dimensions import (
+    LIME_OT_dimension_envelope,
+    disable_dimension_overlay_guard,
+    enable_dimension_live_updates,
+    disable_dimension_live_updates,
+)
 from .ops.ops_noise import (
     LIME_TB_OT_noise_add_profile,
     LIME_TB_OT_noise_sync,
@@ -467,6 +472,11 @@ def register():
         pass
 
     try:
+        enable_dimension_live_updates()
+    except Exception:
+        pass
+
+    try:
         ensure_preset_slots(bpy.context, ensure_scene=True)
         # Initialize UHD shortcut base resolution values
         try:
@@ -491,6 +501,10 @@ def unregister():
     """
     global REGISTERED_CLASSES
     disable_dimension_overlay_guard()
+    try:
+        disable_dimension_live_updates()
+    except Exception:
+        pass
     for cls in reversed(REGISTERED_CLASSES):
         try:
             bpy.utils.unregister_class(cls)

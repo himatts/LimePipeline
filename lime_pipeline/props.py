@@ -460,6 +460,31 @@ class LimePipelineState(PropertyGroup):
         description="Force global Z upright when using PCA orientations.",
         default=False,
     )
+    dimension_show_mm: BoolProperty(
+        name="Show Millimeters",
+        description="Show millimeters in Dimension Checker overlay.",
+        default=True,
+    )
+    dimension_show_cm: BoolProperty(
+        name="Show Centimeters",
+        description="Show centimeters in Dimension Checker overlay.",
+        default=True,
+    )
+    dimension_show_m: BoolProperty(
+        name="Show Meters",
+        description="Show meters in Dimension Checker overlay.",
+        default=True,
+    )
+    dimension_show_in: BoolProperty(
+        name="Show Inches",
+        description="Show inches in Dimension Checker overlay.",
+        default=True,
+    )
+    dimension_show_ft: BoolProperty(
+        name="Show Feet",
+        description="Show feet in Dimension Checker overlay.",
+        default=True,
+    )
 
 
     dimension_units_preset: EnumProperty(
