@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 3, 4),  # Linked Collections button moved to 3D Model Organizer
+    "version": (0, 4, 0),  # AI Render Converter added
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -46,6 +46,7 @@ from .ui import (
     LIME_PT_render_outputs,
     LIME_PT_render_cameras,
 )
+from .ui import LIME_PT_ai_render_converter
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
 from .ui import (
@@ -86,7 +87,20 @@ from .ops.ops_ai_material_renamer import (
     LIME_TB_OT_ai_toggle_review,
     LIME_TB_OT_open_ai_material_manager,
 )
+from .ops.ops_ai_render_converter import (
+    register_ai_render_handlers,
+    unregister_ai_render_handlers,
+    refresh_ai_render_state,
+    LIME_OT_ai_render_refresh,
+    LIME_OT_ai_render_frame,
+    LIME_OT_ai_render_generate,
+    LIME_OT_ai_render_retry,
+    LIME_OT_ai_render_cancel,
+    LIME_OT_ai_render_test_connection,
+    LIME_OT_ai_render_add_to_sequencer,
+)
 from .props_ai_materials import register as register_ai_props, unregister as unregister_ai_props
+from .props_ai_renders import register as register_ai_render_props, unregister as unregister_ai_render_props
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_render_shortcut_props, unregister_render_shortcut_props
 from .ui import register_shot_list_props, unregister_shot_list_props
@@ -294,6 +308,13 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_ai_toggle_review,
     LIME_TB_OT_open_ai_material_manager,
     LIME_TB_UL_ai_mat_rows,
+    LIME_OT_ai_render_refresh,
+    LIME_OT_ai_render_frame,
+    LIME_OT_ai_render_generate,
+    LIME_OT_ai_render_retry,
+    LIME_OT_ai_render_cancel,
+    LIME_OT_ai_render_test_connection,
+    LIME_OT_ai_render_add_to_sequencer,
 )
 
 PIPELINE_PANEL_CLASSES = (
@@ -301,6 +322,7 @@ PIPELINE_PANEL_CLASSES = (
     LIME_PT_render_configs,
     LIME_PT_render_preset_actions,
     LIME_PT_render_outputs,
+    LIME_PT_ai_render_converter,
     LIME_PT_shots,
     LIME_PT_stage_setup,
     LIME_PT_render_cameras,
@@ -405,6 +427,7 @@ def register():
     register_noise_props()
     register_alpha_props()
     register_ai_props()
+    register_ai_render_props()
     register_camera_list_props()
     register_shot_list_props()
     register_render_shortcut_props()
@@ -476,6 +499,15 @@ def register():
         pass
 
     try:
+        register_ai_render_handlers()
+    except Exception:
+        pass
+    try:
+        refresh_ai_render_state(bpy.context, force=True)
+    except Exception:
+        pass
+
+    try:
         enable_dimension_live_updates()
     except Exception:
         pass
@@ -520,6 +552,7 @@ def unregister():
     unregister_noise_props()
     unregister_alpha_props()
     unregister_ai_props()
+    unregister_ai_render_props()
     unregister_camera_list_props()
     unregister_shot_list_props()
     unregister_render_shortcut_props()
@@ -531,6 +564,11 @@ def unregister():
     unregister_props()
     try:
         bpy.app.handlers.load_post.remove(_on_load_post)
+    except Exception:
+        pass
+
+    try:
+        unregister_ai_render_handlers()
     except Exception:
         pass
 
@@ -577,6 +615,11 @@ def _on_load_post(dummy):
 
     try:
         ensure_auto_bg_live_updates(scene=bpy.context.scene)
+    except Exception:
+        pass
+
+    try:
+        refresh_ai_render_state(bpy.context, force=True)
     except Exception:
         pass
 

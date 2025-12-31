@@ -105,6 +105,28 @@ class LimePipelinePrefs(AddonPreferences):
         default="",
         description="Optional X-Title header for OpenRouter attribution",
     )
+    # --- AI Render Converter (Krea) ---
+    krea_api_key: StringProperty(
+        name="Krea API Key",
+        subtype="PASSWORD",
+        default="",
+        description="API key for Krea (used by AI Render Converter)",
+    )
+    krea_base_url: StringProperty(
+        name="Krea Base URL",
+        default="https://api.krea.ai",
+        description="Base URL for Krea API endpoints",
+    )
+    krea_model: StringProperty(
+        name="Krea Model Path",
+        default="google/nano-banana",
+        description="Model path used in the generate endpoint (e.g. google/nano-banana)",
+    )
+    krea_debug: BoolProperty(
+        name="Debug Krea Requests",
+        default=False,
+        description="Log Krea request/response info to the console for troubleshooting",
+    )
     global_render_presets: CollectionProperty(type=LimeRenderPresetSlot, options={'HIDDEN'})
     defaults_render_presets: CollectionProperty(type=LimeRenderPresetSlot, options={'HIDDEN'})
 
@@ -134,5 +156,12 @@ class LimePipelinePrefs(AddonPreferences):
         row.prop(self, "x_title")
         box.separator()
         box.operator("lime_tb.ai_test_connection", text="Test Connection")
+
+        krea_box = col.box()
+        krea_box.label(text="AI Render Converter (Krea)")
+        krea_box.prop(self, "krea_api_key")
+        krea_box.prop(self, "krea_base_url")
+        krea_box.prop(self, "krea_model")
+        krea_box.prop(self, "krea_debug")
 
 

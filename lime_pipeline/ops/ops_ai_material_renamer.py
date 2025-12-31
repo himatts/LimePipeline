@@ -28,14 +28,13 @@ import colorsys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
-import urllib.request
-import urllib.error
 
 import bpy
 from bpy.types import Material, Operator, Scene
 
 from ..prefs import LimePipelinePrefs
 from ..props_ai_materials import LimeAIMatRow
+from .ai_http import openrouter_headers, http_get_json, http_post_json
 from ..core.material_naming import (
     ALLOWED_MATERIAL_TYPES,
     PREFIX,
@@ -785,69 +784,6 @@ OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 
-def _openrouter_headers(prefs: LimePipelinePrefs) -> Dict[str, str]:
-    key = (getattr(prefs, 'openrouter_api_key', '') or '').strip()
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    if key:
-        headers["Authorization"] = f"Bearer {key}"
-    else:
-        print("[AI] Warning: OpenRouter API key empty after strip().")
-    if getattr(prefs, 'http_referer', None):
-        headers["HTTP-Referer"] = prefs.http_referer
-    else:
-        headers["HTTP-Referer"] = "https://limepipeline.local"  # safe default per OpenRouter attribution
-    if getattr(prefs, 'x_title', None):
-        headers["X-Title"] = prefs.x_title
-    else:
-        headers["X-Title"] = "Lime Pipeline"
-    # Debug (no secrets):
-    try:
-        print(f"[AI] Headers prepared. Authorization present: {'Authorization' in headers}")
-    except Exception:
-        pass
-    return headers
-
-
-def _http_get_json(url: str, headers: Dict[str, str], timeout: int = 20) -> Optional[Dict[str, object]]:
-    req = urllib.request.Request(url, headers=headers, method="GET")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return json.loads(body)
-    except urllib.error.HTTPError as e:
-        try:
-            err = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            err = str(e)
-        print(f"[AI] GET failed {e.code}: {err}")
-        return None
-    except Exception as e:
-        print(f"[AI] GET exception: {e}")
-        return None
-
-
-def _http_post_json(url: str, payload: Dict[str, object], headers: Dict[str, str], timeout: int = 60) -> Optional[Dict[str, object]]:
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return json.loads(body)
-    except urllib.error.HTTPError as e:
-        try:
-            err = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            err = str(e)
-        print(f"[AI] POST failed {e.code}: {err}")
-        return None
-    except Exception as e:
-        print(f"[AI] POST exception: {e}")
-        return None
-
-
 def _truncate_context(context: str, max_chars: int = 500) -> str:
     """Truncate scene context to max length, preserving key material keywords."""
     if not context or len(context) <= max_chars:
@@ -1095,8 +1031,8 @@ class LIME_TB_OT_ai_test_connection(Operator):
         if not prefs.openrouter_api_key:
             self.report({'ERROR'}, "OpenRouter API key not set in Preferences")
             return {'CANCELLED'}
-        headers = _openrouter_headers(prefs)
-        data = _http_get_json(OPENROUTER_MODELS_URL, headers=headers, timeout=15)
+        headers = openrouter_headers(prefs)
+        data = http_get_json(OPENROUTER_MODELS_URL, headers=headers, timeout=15)
         if not data or not isinstance(data, dict):
             self.report({'ERROR'}, "OpenRouter: request failed")
             return {'CANCELLED'}
@@ -1114,7 +1050,7 @@ class LIME_TB_OT_ai_test_connection(Operator):
                 "temperature": 0,
                 "response_format": _schema_json_object(),
             }
-            r = _http_post_json(OPENROUTER_CHAT_URL, payload, headers=headers, timeout=20)
+            r = http_post_json(OPENROUTER_CHAT_URL, payload, headers=headers, timeout=20)
             ok = bool(_extract_message_content(r or {}))
             self.report({'INFO'}, f"Chat endpoint: {'OK' if ok else 'UNKNOWN'}")
             return {'FINISHED'}
@@ -1231,7 +1167,7 @@ class LIME_TB_OT_ai_rename_single(Operator):
         result = None
         used_ai = False
         if (getattr(prefs, 'openrouter_api_key', '') or '').strip():
-            result = _http_post_json(OPENROUTER_CHAT_URL, payload, headers=_openrouter_headers(prefs), timeout=60)
+            result = http_post_json(OPENROUTER_CHAT_URL, payload, headers=openrouter_headers(prefs), timeout=60)
 
         item = None
         try:
@@ -1250,7 +1186,7 @@ class LIME_TB_OT_ai_rename_single(Operator):
         if not item and (getattr(prefs, 'openrouter_api_key', '') or '').strip():
             payload_fallback = dict(payload)
             payload_fallback["response_format"] = _schema_json_object()
-            result2 = _http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=_openrouter_headers(prefs), timeout=60)
+            result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=openrouter_headers(prefs), timeout=60)
             text = _extract_message_content(result2 or {}) if result2 else None
             parsed_text = _parse_json_from_text(text or "") if text else None
             if isinstance(parsed_text, dict):
@@ -1578,7 +1514,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
         result = None
         used_ai = False
         if (getattr(prefs, 'openrouter_api_key', '') or '').strip():
-            result = _http_post_json(OPENROUTER_CHAT_URL, payload, headers=_openrouter_headers(prefs), timeout=120)
+            result = http_post_json(OPENROUTER_CHAT_URL, payload, headers=openrouter_headers(prefs), timeout=120)
 
         items: List[Dict[str, object]] = []
         try:
@@ -1639,7 +1575,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
         if not items and (getattr(prefs, 'openrouter_api_key', '') or '').strip():
             payload_fallback = dict(payload)
             payload_fallback["response_format"] = _schema_json_object()
-            result2 = _http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=_openrouter_headers(prefs), timeout=120)
+            result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=openrouter_headers(prefs), timeout=120)
             text = _extract_message_content(result2 or {}) if result2 else None
             parsed_text = _parse_json_from_text(text or "") if text else None
             if isinstance(parsed_text, dict):

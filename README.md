@@ -11,6 +11,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Asiste en el primer guardado y crea backups numerados.
 - Facilita la creación/duplicado/instanciado de “shots” con reglas claras.
 - Ayuda a mantener materiales bajo una nomenclatura consistente (manual y, opcionalmente, asistido por IA).
+- Incluye un AI Render Converter para convertir renders a storyboard/sketch con Krea y OpenRouter.
 - Añade utilidades prácticas de escena (por ejemplo, checks de dimensiones y ayudas de cámara).
 - El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (convertir a local manteniendo meshes linkeados).
 

@@ -3,7 +3,7 @@
 This document describes the high-level architecture, responsibilities per module, key flows, and invariants.
 
 ## Overview
-Lime Pipeline is a Blender add-on that standardizes project structure and naming: assists with first save/backup, SHOT collections, render/proposal view outputs, folder navigation, and material normalization.
+Lime Pipeline is a Blender add-on that standardizes project structure and naming: assists with first save/backup, SHOT collections, render/proposal view outputs, folder navigation, material normalization, and AI render conversion to storyboard sketches.
 
 ## Modules and boundaries
 
@@ -28,10 +28,11 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - No imperative code; only data structures
 
 ### props
-- Files: `props.py` (WindowManager state), `props_ai_materials.py` (Scene-scoped AI material proposals)
+- Files: `props.py` (WindowManager state), `props_ai_materials.py` (Scene-scoped AI material proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
 - Responsibilities:
   - Centralize PropertyGroup definitions for persistent add-on state
   - Expose editable collections (`Scene.lime_ai_mat` for AI Material Renamer)
+  - Store AI render converter paths, prompts, previews, and job status (`Scene.lime_ai_render`)
 
 ### scene
 - Files: `scene/scene_utils.py`
@@ -48,6 +49,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
   - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
+  - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
   - Camera operations (`ops_cameras.py`): automatic margin background setup on camera creation/duplication
 - Rules:
   - UI feedback via `self.report`
@@ -59,6 +61,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Layout and user interactions; no heavy IO
 - Highlights:
   - `ui_ai_material_renamer.py`: Lime Toolbox / AI Material Renamer panel with simplified UI (2-column editable list, local detection, filtering/ordering)
+  - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, style, mode, generate/retry)
   - `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel
 - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI, overlay unit visibility toggles, and measurement unit presets (mm/cm/m/in/ft); each run creates a new helper, which remains until manually removed and updates live when its active parent is scaled; overlay text turns yellow when targets have unapplied scale
 - Rules:
@@ -82,6 +85,16 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 6. Selection helpers consider rename needs and review toggles; applying without a custom proposal leaves the original name intact.
 7. The summary counts in both panel and dialog highlight rename vs review workload and overall quality distribution.
 8. **Clear** removes proposals and resets review toggles without renaming anything.
+
+### AI Render Converter (Storyboard)
+1. Resolve current frame and expected source render path under Storyboard/editables/AI/sources.
+2. If missing, render the current frame to the source path.
+3. Select a style reference image (optional) and choose conversion mode (Sketch or Sketch + Details).
+4. For Sketch + Details, rewrite user details via OpenRouter and build the final prompt.
+5. Upload source/style assets to Krea and create a generation job (Nano Banana / Pro).
+6. Poll job status with backoff until completed, then download results.
+7. Save outputs under Storyboard/editables/AI/outputs and update the per-frame manifest.
+8. Optionally add the result image to the Video Sequencer.
 
 ### First save (Create .blend)
 1. User selects Project Root, Project Type, Rev letter, Scene (if required)

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased] - 2025-09-30
+### Added
+- AI Render Converter panel for storyboard sketch conversion (Krea + OpenRouter), with manifested outputs.
+
 ### Changed (LP-00003)
 - Simplified Shots UI panel by removing subpanels and leveraging native Blender list controls
 - Removed deprecated "Shot Instance" functionality completely
