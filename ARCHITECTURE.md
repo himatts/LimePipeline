@@ -61,7 +61,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Layout and user interactions; no heavy IO
 - Highlights:
   - `ui_ai_material_renamer.py`: Lime Toolbox / AI Material Renamer panel with simplified UI (2-column editable list, local detection, filtering/ordering)
-  - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, style, mode, generate/retry)
+  - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, thumbnail grids, large previews, generate/retry, cleanup)
   - `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel
 - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI, overlay unit visibility toggles, and measurement unit presets (mm/cm/m/in/ft); each run creates a new helper, which remains until manually removed and updates live when its active parent is scaled; overlay text turns yellow when targets have unapplied scale
 - Rules:
@@ -90,6 +90,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 1. Resolve current frame and expected source render path under Storyboard/editables/AI/sources.
 2. If missing, render the current frame to the source path.
 3. Select a style reference image (optional) and choose conversion mode (Sketch or Sketch + Details).
+   - The panel filters assets per section and supports large Image Editor previews.
 4. For Sketch + Details, rewrite user details via OpenRouter and build the final prompt.
 5. Upload source/style assets to Krea and create a generation job (Nano Banana / Pro).
 6. Poll job status with backoff until completed, then download results.

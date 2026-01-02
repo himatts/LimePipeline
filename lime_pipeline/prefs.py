@@ -92,7 +92,7 @@ class LimePipelinePrefs(AddonPreferences):
     )
     openrouter_model: StringProperty(
         name="OpenRouter Model",
-        default="google/gemini-2.5-flash-lite-preview-09-2025",
+        default="google/gemini-2.0-flash-lite-001",
         description="Default model slug for AI Material Renamer",
     )
     http_referer: StringProperty(
@@ -163,5 +163,7 @@ class LimePipelinePrefs(AddonPreferences):
         krea_box.prop(self, "krea_base_url")
         krea_box.prop(self, "krea_model")
         krea_box.prop(self, "krea_debug")
+        krea_box.separator()
+        krea_box.operator("lime.ai_render_test_connection", text="Test Krea Connection")
 
 

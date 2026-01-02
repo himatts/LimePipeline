@@ -8,7 +8,9 @@ and optional prompt rewriting via OpenRouter.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
 from pathlib import Path
+import re
 import hashlib
 import json
 import shutil
@@ -18,11 +20,12 @@ from typing import Dict, Iterable, List, Optional
 
 import bpy
 from bpy.types import Operator, Scene
-from bpy.props import BoolProperty
+from bpy.props import BoolProperty, EnumProperty, StringProperty
 
 from ..core import validate_scene
 from ..ops.ops_save_templates import _ensure_editables_dir, _resolve_prj_rev_sc, _camera_index_for_shot
 from ..prefs import LimePipelinePrefs
+from ..props_ai_renders import update_ai_render_asset_cache
 from .ai_http import (
     openrouter_headers,
     http_post_json,
@@ -41,8 +44,12 @@ KREA_ASSETS_PATH = "/assets"
 KREA_JOBS_PATH = "/jobs"
 
 STYLE_PROMPT = (
-    "Storyboard sketch, clean linework, pencil or ink drawing, simplified shading, "
-    "high readability, cinematic framing, sketch texture"
+    "Generate a storyboard style black and white illustration based on the analyzed object and the provided "
+    "concept. The image must be schematic, clear, and highly readable, using clean line work as the primary "
+    "visual language. Focus on accurately representing the object proportions, silhouette, and key features "
+    "identified in the analysis, while interpreting the concept to define the scene context and action. "
+    "Use minimal shading only to support depth and form. The result should look like a technical storyboard "
+    "frame intended to communicate function, usage, or interaction, not an artistic or stylized drawing."
 )
 SOURCE_BASE_PROMPT = (
     "Convert the source render image into a storyboard sketch. The source render is the image to transform."
@@ -58,6 +65,8 @@ PRESERVE_PROMPT = (
 
 SOURCE_STRENGTH = 1.6
 STYLE_STRENGTH = 0.6
+_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".exr"}
+_SOURCE_FRAME_RE = re.compile(r"_F(\d{1,6})_", re.IGNORECASE)
 
 
 @dataclass
@@ -198,32 +207,82 @@ def _build_prompt(mode: str, detail_text: str, has_style: bool) -> str:
     return f"{prefix} {STYLE_PROMPT}. {PRESERVE_PROMPT}."
 
 
-def _rewrite_details_with_llm(prefs: LimePipelinePrefs, raw_text: str) -> str:
+def _rewrite_details_with_llm(
+    prefs: LimePipelinePrefs,
+    raw_text: str,
+    image_path: Optional[Path] = None,
+    style_path: Optional[Path] = None,
+) -> str:
+    _debug_log(prefs, f"LLM detail input: {raw_text}")
+    vision_parts: List[Dict[str, object]] = [{"type": "text", "text": raw_text}]
+    image_attached = False
+    style_attached = False
+    if image_path and image_path.exists():
+        try:
+            encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+            mime = _guess_mimetype(image_path)
+            vision_parts.append(
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}}
+            )
+            image_attached = True
+            _debug_log(prefs, f"LLM detail image attached: {image_path.name}")
+        except Exception as ex:
+            _debug_log(prefs, f"LLM detail image attach failed: {ex}")
+    else:
+        _debug_log(prefs, "LLM detail image skipped: source image missing")
+    if style_path and style_path.exists():
+        try:
+            encoded = base64.b64encode(style_path.read_bytes()).decode("ascii")
+            mime = _guess_mimetype(style_path)
+            vision_parts.append({"type": "text", "text": "Style reference image:"})
+            vision_parts.append(
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}}
+            )
+            style_attached = True
+            _debug_log(prefs, f"LLM style image attached: {style_path.name}")
+        except Exception as ex:
+            _debug_log(prefs, f"LLM style image attach failed: {ex}")
     payload = {
-        "model": prefs.openrouter_model or "google/gemini-2.5-flash-lite-preview-09-2025",
+        "model": prefs.openrouter_model or "google/gemini-2.0-flash-lite-001",
         "messages": [
             {
                 "role": "system",
                 "content": (
-                    "You are a prompt rewriter for image generation. "
-                    "Rewrite the user details into a concise, vivid, camera-safe prompt. "
-                    "Keep the original intent, avoid changing composition, and output only the rewritten text."
+                    "Using all provided information, generate a single, refined image prompt in English that "
+                    "clearly describes a storyboard-style illustration. "
+                    "The prompt must follow an illustration-based structure: clearly describe the main subject "
+                    "first, then place it within its environment, followed by composition, framing, and visual "
+                    "emphasis. The object described must remain the primary focus, preserving its identity, "
+                    "structure, and function exactly as provided, while secondary elements and context derived "
+                    "from the scene concept are integrated coherently. "
+                    "The illustration should be described as black and white, storyboard-oriented, with "
+                    "simplified shapes, strong silhouettes, clean linework, and high contrast lighting. "
+                    "Emphasize cinematic framing, camera angle, and visual clarity suitable for sequential "
+                    "storytelling. If a style reference image is provided, briefly describe its visual style "
+                    "and integrate those cues into the prompt while preserving the main subject. Avoid "
+                    "decorative language; focus on visual intent, composition, and readable action."
                 ),
             },
-            {"role": "user", "content": raw_text},
+            {"role": "user", "content": vision_parts},
         ],
     }
     result = http_post_json(OPENROUTER_CHAT_URL, payload, headers=openrouter_headers(prefs), timeout=40)
     if not result:
+        _debug_log(prefs, "LLM detail output: (no response, using raw text)")
         return raw_text
     try:
         choices = result.get("choices", [])
         if not choices:
+            _debug_log(prefs, "LLM detail output: (empty choices, using raw text)")
             return raw_text
         message = choices[0].get("message", {})
         content = (message.get("content") or "").strip()
+        _debug_log(prefs, f"LLM detail output: {content or '(empty, using raw text)'}")
+        _debug_log(prefs, f"LLM detail image attached flag: {image_attached}")
+        _debug_log(prefs, f"LLM style image attached flag: {style_attached}")
         return content or raw_text
     except Exception:
+        _debug_log(prefs, "LLM detail output: (exception, using raw text)")
         return raw_text
 
 
@@ -238,6 +297,34 @@ def _file_sha256(path: Path) -> str:
 def _persist_style_image(src_path: Path, dest_dir: Path) -> Path:
     if dest_dir in src_path.parents:
         return src_path
+    try:
+        src_size = src_path.stat().st_size
+    except Exception:
+        src_size = -1
+    src_hash = ""
+    try:
+        src_hash = _file_sha256(src_path)
+    except Exception:
+        src_hash = ""
+    if src_hash:
+        try:
+            for existing in dest_dir.iterdir():
+                if not existing.is_file():
+                    continue
+                if existing.suffix.lower() not in _IMAGE_EXTS:
+                    continue
+                try:
+                    if src_size > 0 and existing.stat().st_size != src_size:
+                        continue
+                except Exception:
+                    pass
+                try:
+                    if _file_sha256(existing) == src_hash:
+                        return existing
+                except Exception:
+                    continue
+        except Exception:
+            pass
     stamp = time.strftime("%Y%m%d_%H%M%S")
     dest = dest_dir / f"Style_{stamp}{src_path.suffix or '.png'}"
     shutil.copy2(src_path, dest)
@@ -276,6 +363,67 @@ def _guess_mimetype(path: Path) -> str:
     if ext == ".exr":
         return "image/exr"
     return "image/png"
+
+
+def _list_images(folder: Path) -> List[Path]:
+    if not folder.exists():
+        return []
+    try:
+        return [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in _IMAGE_EXTS]
+    except Exception:
+        return []
+
+
+def _frame_from_source(path: Path) -> int | None:
+    match = _SOURCE_FRAME_RE.search(path.stem)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except Exception:
+        return None
+
+
+def _sort_sources(paths: List[Path]) -> List[Path]:
+    def sort_key(path: Path):
+        frame = _frame_from_source(path)
+        if frame is None:
+            return (1, path.name.lower())
+        return (0, frame, path.name.lower())
+
+    return sorted(paths, key=sort_key)
+
+
+def _sort_by_mtime(paths: List[Path]) -> List[Path]:
+    def sort_key(path: Path):
+        try:
+            return float(path.stat().st_mtime)
+        except Exception:
+            return 0.0
+
+    return sorted(paths, key=sort_key, reverse=True)
+
+
+def refresh_ai_render_assets(context, *, force: bool = False) -> None:
+    scene = context.scene
+    state = getattr(scene, "lime_ai_render", None)
+    if state is None:
+        return
+    now = time.monotonic()
+    if not force and (now - float(getattr(state, "assets_last_scan", 0.0) or 0.0)) < 0.75:
+        return
+    try:
+        paths = _ensure_ai_dirs(context.window_manager.lime_pipeline)
+    except Exception:
+        return
+    sources = _sort_sources(_list_images(paths.sources_dir))
+    styles = _sort_by_mtime(_list_images(paths.styles_dir))
+    results = _sort_by_mtime(_list_images(paths.outputs_dir))
+    try:
+        update_ai_render_asset_cache(state, sources, styles, results)
+        state.assets_last_scan = now
+    except Exception:
+        pass
 
 
 def _upload_krea_asset(prefs: LimePipelinePrefs, path: Path) -> Dict[str, str]:
@@ -529,8 +677,17 @@ def refresh_ai_render_state(context, *, force: bool = False) -> None:
         paths = _ensure_ai_dirs(context.window_manager.lime_pipeline)
         source_path = paths.sources_dir / _build_source_filename(ctx)
         new_path = source_path.as_posix()
-        if state.source_image_path != new_path:
-            state.source_image_path = new_path
+        if source_path.exists():
+            if state.source_image_path != new_path:
+                state.source_image_path = new_path
+        else:
+            if state.source_image_path:
+                state.source_image_path = ""
+            try:
+                state.source_exists = False
+                state.source_image = None
+            except Exception:
+                pass
         state.cached_frame = frame
     except Exception:
         # Keep previous state if context cannot be resolved
@@ -569,6 +726,7 @@ class LIME_OT_ai_render_refresh(Operator):
 
     def execute(self, context):
         refresh_ai_render_state(context, force=True)
+        refresh_ai_render_assets(context, force=True)
         self.report({"INFO"}, "Source render refreshed for current frame")
         return {"FINISHED"}
 
@@ -610,6 +768,7 @@ class LIME_OT_ai_render_frame(Operator):
         if state.source_image_path != new_path:
             state.source_image_path = new_path
         state.cached_frame = int(ctx.frame)
+        refresh_ai_render_assets(context, force=True)
         self.report({"INFO"}, f"Rendered frame to {source_path.name}")
         return {"FINISHED"}
 
@@ -689,9 +848,12 @@ class LIME_OT_ai_render_generate(Operator):
             if mode == "SKETCH_PLUS" and not detail_text:
                 self.report({"ERROR"}, "Details are required for Sketch + Details mode")
                 return {"CANCELLED"}
+            source_path = Path(state.source_image_path or "")
             if mode == "SKETCH_PLUS" and getattr(state, "rewrite_with_llm", True):
                 if (getattr(prefs, "openrouter_api_key", "") or "").strip():
-                    detail_opt = _rewrite_details_with_llm(prefs, detail_text)
+                    use_style = bool(getattr(state, "llm_use_style_reference", False))
+                    style_for_llm = Path(state.style_image_path or "") if use_style else None
+                    detail_opt = _rewrite_details_with_llm(prefs, detail_text, source_path, style_for_llm)
                 else:
                     detail_opt = detail_text
             else:
@@ -699,9 +861,9 @@ class LIME_OT_ai_render_generate(Operator):
             state.detail_text_optimized = detail_opt
             has_style = bool((getattr(state, "style_image_path", "") or "").strip())
             prompt = _build_prompt(mode, detail_opt, has_style)
+            _debug_log(prefs, f"Final prompt sent to Krea: {prompt}")
             state.prompt_final = prompt
             self._prompt_used = prompt
-            source_path = Path(state.source_image_path or "")
             style_path = Path(state.style_image_path or "") if (state.style_image_path or "").strip() else None
 
         if not source_path or not source_path.exists():
@@ -844,6 +1006,7 @@ class LIME_OT_ai_render_generate(Operator):
             if state.result_image_path != new_path:
                 state.result_image_path = new_path
             state.last_result_path = state.result_image_path
+            refresh_ai_render_assets(context, force=True)
 
         state.is_busy = False
         self._set_status(state, "COMPLETED", "AI render completed")
@@ -1071,6 +1234,266 @@ class LIME_OT_ai_render_add_to_sequencer(Operator):
         return {"FINISHED"}
 
 
+class LIME_OT_ai_render_delete_selected(Operator):
+    bl_idname = "lime.ai_render_delete_selected"
+    bl_label = "AI: Delete Selected Image"
+    bl_options = {"REGISTER"}
+    bl_description = "Delete the selected image from disk"
+
+    target: EnumProperty(
+        name="Target",
+        items=[
+            ("SOURCE", "Source Render", "Delete selected source render"),
+            ("STYLE", "Style Reference", "Delete selected style image"),
+            ("RESULT", "AI Result", "Delete selected AI result"),
+        ],
+        default="RESULT",
+    )
+
+    def execute(self, context):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_render", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Render state not available")
+            return {"CANCELLED"}
+        if self.target == "STYLE":
+            path = Path(state.style_image_path or "")
+        elif self.target == "RESULT":
+            path = Path(state.result_image_path or "")
+        else:
+            path = Path(state.source_image_path or "")
+        if not path.exists():
+            self.report({"WARNING"}, "Selected image not found on disk")
+            return {"CANCELLED"}
+        try:
+            path.unlink()
+        except Exception as ex:
+            self.report({"ERROR"}, f"Failed to delete image: {ex}")
+            return {"CANCELLED"}
+        if self.target == "STYLE":
+            state.style_image_path = ""
+        elif self.target == "RESULT":
+            state.result_image_path = ""
+            state.result_exists = False
+        else:
+            state.source_image_path = ""
+            state.source_exists = False
+        refresh_ai_render_assets(context, force=True)
+        self.report({"INFO"}, f"Deleted {path.name}")
+        return {"FINISHED"}
+
+
+class LIME_OT_ai_render_delete_batch(Operator):
+    bl_idname = "lime.ai_render_delete_batch"
+    bl_label = "AI: Delete Image Batch"
+    bl_options = {"REGISTER"}
+    bl_description = "Delete all images from the selected AI folder (double confirmation)"
+
+    target: EnumProperty(
+        name="Target",
+        items=[
+            ("SOURCES", "Sources", "Delete all source renders"),
+            ("STYLES", "Styles", "Delete all style references"),
+            ("RESULTS", "Results", "Delete all AI results"),
+        ],
+        default="RESULTS",
+    )
+
+    def execute(self, context):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_render", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Render state not available")
+            return {"CANCELLED"}
+        now = time.monotonic()
+        confirm_window = 10.0
+        if state.delete_confirm_action != self.target or (now - state.delete_confirm_time) > confirm_window:
+            state.delete_confirm_action = self.target
+            state.delete_confirm_time = now
+            self.report({"WARNING"}, "Run again within 10 seconds to confirm batch delete")
+            return {"CANCELLED"}
+
+        try:
+            paths = _ensure_ai_dirs(context.window_manager.lime_pipeline)
+        except Exception as ex:
+            self.report({"ERROR"}, str(ex))
+            return {"CANCELLED"}
+
+        if self.target == "SOURCES":
+            folder = paths.sources_dir
+        elif self.target == "STYLES":
+            folder = paths.styles_dir
+        else:
+            folder = paths.outputs_dir
+
+        removed = 0
+        for path in _list_images(folder):
+            try:
+                path.unlink()
+                removed += 1
+            except Exception:
+                continue
+
+        if self.target == "SOURCES":
+            state.source_image_path = ""
+            state.source_exists = False
+        elif self.target == "STYLES":
+            state.style_image_path = ""
+        else:
+            state.result_image_path = ""
+            state.result_exists = False
+
+        state.delete_confirm_action = ""
+        state.delete_confirm_time = 0.0
+        refresh_ai_render_assets(context, force=True)
+        self.report({"INFO"}, f"Deleted {removed} image(s)")
+        return {"FINISHED"}
+
+
+def _find_image_editor_area(window) -> Optional[bpy.types.Area]:
+    try:
+        for area in window.screen.areas:
+            if area.type == "IMAGE_EDITOR":
+                return area
+    except Exception:
+        return None
+    return None
+
+
+def _ensure_window_region(area) -> Optional[bpy.types.Region]:
+    try:
+        for reg in area.regions:
+            if reg.type == "WINDOW":
+                return reg
+    except Exception:
+        return None
+    return None
+
+
+def _open_new_image_editor_area(context) -> tuple[Optional[bpy.types.Window], Optional[bpy.types.Area]]:
+    wm = context.window_manager
+    before = set(wm.windows)
+    try:
+        bpy.ops.wm.window_new("EXEC_DEFAULT")
+        bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
+    except Exception:
+        return None, None
+    after = set(wm.windows)
+    new_windows = [w for w in after if w not in before]
+    if not new_windows and wm.windows:
+        new_windows = [wm.windows[-1]]
+    if not new_windows:
+        return None, None
+    win = new_windows[0]
+    if not win.screen.areas:
+        return win, None
+    area = win.screen.areas[0]
+    try:
+        area.type = "IMAGE_EDITOR"
+        bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
+    except Exception:
+        return win, None
+    return win, area
+
+
+class LIME_OT_ai_render_open_preview(Operator):
+    bl_idname = "lime.ai_render_open_preview"
+    bl_label = "AI: Open Image Preview"
+    bl_options = {"REGISTER"}
+    bl_description = "Open the selected image in a large Image Editor view"
+
+    target: EnumProperty(
+        name="Target",
+        items=[
+            ("SOURCE", "Source Render", "Open selected source render"),
+            ("STYLE", "Style Reference", "Open selected style reference"),
+            ("RESULT", "AI Result", "Open selected AI result"),
+        ],
+        default="SOURCE",
+    )
+
+    def execute(self, context):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_render", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Render state not available")
+            return {"CANCELLED"}
+        if self.target == "STYLE":
+            path = Path(state.style_image_path or "")
+        elif self.target == "RESULT":
+            path = Path(state.result_image_path or "")
+        else:
+            path = Path(state.source_image_path or "")
+        if not path.exists():
+            self.report({"ERROR"}, "Image not available")
+            return {"CANCELLED"}
+        try:
+            image = bpy.data.images.load(path.as_posix(), check_existing=True)
+        except Exception as ex:
+            self.report({"ERROR"}, f"Failed to load image: {ex}")
+            return {"CANCELLED"}
+        win, area = _open_new_image_editor_area(context)
+        if win is None or area is None:
+            self.report({"ERROR"}, "Could not create an Image Editor window")
+            return {"CANCELLED"}
+        region = _ensure_window_region(area)
+        if region is None:
+            self.report({"ERROR"}, "Image Editor region not available")
+            return {"CANCELLED"}
+        try:
+            with context.temp_override(window=win, screen=win.screen, area=area, region=region):
+                space = area.spaces.active
+                space.image = image
+                space.use_image_pin = True
+                area.tag_redraw()
+        except Exception as ex:
+            self.report({"ERROR"}, f"Failed to assign image: {ex}")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class LIME_OT_ai_render_import_style(Operator):
+    bl_idname = "lime.ai_render_import_style"
+    bl_label = "AI: Import Style Image"
+    bl_options = {"REGISTER"}
+    bl_description = "Import a style reference image into the styles library"
+
+    filepath: StringProperty(subtype="FILE_PATH")
+    filter_glob: StringProperty(default="*.png;*.jpg;*.jpeg;*.tif;*.tiff;*.webp;*.exr", options={"HIDDEN"})
+
+    def execute(self, context):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_render", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Render state not available")
+            return {"CANCELLED"}
+        if not self.filepath:
+            self.report({"ERROR"}, "No file selected")
+            return {"CANCELLED"}
+        src = Path(self.filepath)
+        if not src.exists():
+            self.report({"ERROR"}, "Selected file not found")
+            return {"CANCELLED"}
+        try:
+            paths = _ensure_ai_dirs(context.window_manager.lime_pipeline)
+        except Exception as ex:
+            self.report({"ERROR"}, str(ex))
+            return {"CANCELLED"}
+        try:
+            saved = _persist_style_image(src, paths.styles_dir)
+        except Exception as ex:
+            self.report({"ERROR"}, f"Failed to import style: {ex}")
+            return {"CANCELLED"}
+        state.style_image_path = saved.as_posix()
+        refresh_ai_render_assets(context, force=True)
+        self.report({"INFO"}, f"Imported style: {saved.name}")
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+
 __all__ = [
     "register_ai_render_handlers",
     "unregister_ai_render_handlers",
@@ -1081,4 +1504,9 @@ __all__ = [
     "LIME_OT_ai_render_cancel",
     "LIME_OT_ai_render_test_connection",
     "LIME_OT_ai_render_add_to_sequencer",
+    "LIME_OT_ai_render_delete_selected",
+    "LIME_OT_ai_render_delete_batch",
+    "LIME_OT_ai_render_open_preview",
+    "LIME_OT_ai_render_import_style",
+    "refresh_ai_render_assets",
 ]

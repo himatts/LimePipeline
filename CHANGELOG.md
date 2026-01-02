@@ -10,6 +10,10 @@
 - Relocated "Duplicate Shot" and "Add Missing Collections" as supplementary buttons alongside the main shot list
 - Maintained all core shot management functionality while improving UI consistency
 
+### Changed
+- AI Render Converter now uses thumbnail grids per section, includes large Image Editor previews, syncs Source Render selections to frames, and deduplicates style imports.
+- AI Render Converter adds deletion controls for selected images and batch cleanup with double confirmation.
+
 ## [0.2.1] - 2025-09-28
 ### Changed
 - Modularized `lime.duplicate_scene_sequential` into `ops/ops_stage_duplicate_scene.py` and centralized registration.

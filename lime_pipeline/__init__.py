@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 4, 0),  # AI Render Converter added
+    "version": (0, 4, 2),  # AI Render Converter cleanup tools
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -91,6 +91,7 @@ from .ops.ops_ai_render_converter import (
     register_ai_render_handlers,
     unregister_ai_render_handlers,
     refresh_ai_render_state,
+    refresh_ai_render_assets,
     LIME_OT_ai_render_refresh,
     LIME_OT_ai_render_frame,
     LIME_OT_ai_render_generate,
@@ -98,6 +99,10 @@ from .ops.ops_ai_render_converter import (
     LIME_OT_ai_render_cancel,
     LIME_OT_ai_render_test_connection,
     LIME_OT_ai_render_add_to_sequencer,
+    LIME_OT_ai_render_delete_selected,
+    LIME_OT_ai_render_delete_batch,
+    LIME_OT_ai_render_open_preview,
+    LIME_OT_ai_render_import_style,
 )
 from .props_ai_materials import register as register_ai_props, unregister as unregister_ai_props
 from .props_ai_renders import register as register_ai_render_props, unregister as unregister_ai_render_props
@@ -315,6 +320,10 @@ NON_PANEL_CLASSES = (
     LIME_OT_ai_render_cancel,
     LIME_OT_ai_render_test_connection,
     LIME_OT_ai_render_add_to_sequencer,
+    LIME_OT_ai_render_delete_selected,
+    LIME_OT_ai_render_delete_batch,
+    LIME_OT_ai_render_open_preview,
+    LIME_OT_ai_render_import_style,
 )
 
 PIPELINE_PANEL_CLASSES = (
@@ -506,6 +515,10 @@ def register():
         refresh_ai_render_state(bpy.context, force=True)
     except Exception:
         pass
+    try:
+        refresh_ai_render_assets(bpy.context, force=True)
+    except Exception:
+        pass
 
     try:
         enable_dimension_live_updates()
@@ -620,6 +633,10 @@ def _on_load_post(dummy):
 
     try:
         refresh_ai_render_state(bpy.context, force=True)
+    except Exception:
+        pass
+    try:
+        refresh_ai_render_assets(bpy.context, force=True)
     except Exception:
         pass
 
