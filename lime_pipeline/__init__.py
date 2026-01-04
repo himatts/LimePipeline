@@ -99,6 +99,7 @@ from .ops.ops_ai_render_converter import (
     LIME_OT_ai_render_cancel,
     LIME_OT_ai_render_test_connection,
     LIME_OT_ai_render_add_to_sequencer,
+    LIME_OT_ai_render_open_outputs_folder,
     LIME_OT_ai_render_delete_selected,
     LIME_OT_ai_render_delete_batch,
     LIME_OT_ai_render_open_preview,
@@ -320,6 +321,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_ai_render_cancel,
     LIME_OT_ai_render_test_connection,
     LIME_OT_ai_render_add_to_sequencer,
+    LIME_OT_ai_render_open_outputs_folder,
     LIME_OT_ai_render_delete_selected,
     LIME_OT_ai_render_delete_batch,
     LIME_OT_ai_render_open_preview,
@@ -331,7 +333,6 @@ PIPELINE_PANEL_CLASSES = (
     LIME_PT_render_configs,
     LIME_PT_render_preset_actions,
     LIME_PT_render_outputs,
-    LIME_PT_ai_render_converter,
     LIME_PT_shots,
     LIME_PT_stage_setup,
     LIME_PT_render_cameras,
@@ -349,6 +350,7 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_material_renamer,
     LIME_TB_PT_experimental,
+    LIME_PT_ai_render_converter,
 )
 
 TOOLBOX_PANEL_CLASSES = (
@@ -359,6 +361,7 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_material_renamer,
     LIME_TB_PT_experimental,
+    LIME_PT_ai_render_converter,
 )
 
 def _panel_is_child(cls) -> bool:

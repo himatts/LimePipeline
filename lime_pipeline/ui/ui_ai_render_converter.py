@@ -15,7 +15,7 @@ class LIME_PT_ai_render_converter(Panel):
     bl_idname = "LIME_PT_ai_render_converter"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Lime Pipeline"
+    bl_category = "Lime Toolbox"
     bl_order = 4
     bl_options = {"DEFAULT_CLOSED"}
 
@@ -73,6 +73,10 @@ class LIME_PT_ai_render_converter(Panel):
         style_delete_row = style_box.row(align=True)
         style_delete_row.enabled = bool(state.style_image_path)
         style_delete_row.operator("lime.ai_render_delete_selected", text="Delete Selected", icon="TRASH").target = "STYLE"
+        style_box.prop(state, "llm_use_style_reference", text="Use Style Reference Continuity")
+        strength_row = style_box.row(align=True)
+        strength_row.prop(state, "source_strength", text="Source Strength")
+        strength_row.prop(state, "style_strength", text="Style Strength")
         style_box.prop(state, "style_image_path", text="Style Path")
 
         mode_box = layout.box()
@@ -84,8 +88,6 @@ class LIME_PT_ai_render_converter(Panel):
             if state.detail_text:
                 details_row.operator("lime.show_text", text="", icon="INFO").text = state.detail_text
             mode_box.prop(state, "rewrite_with_llm", text="Rewrite with LLM")
-            if state.rewrite_with_llm:
-                mode_box.prop(state, "llm_use_style_reference", text="Use Style Reference in LLM")
             if state.detail_text_optimized:
                 opt_row = mode_box.row(align=True)
                 opt_row.label(text=f"Optimized: {state.detail_text_optimized[:60]}")
@@ -141,6 +143,8 @@ class LIME_PT_ai_render_converter(Panel):
         add_row = result_box.row(align=True)
         add_row.enabled = bool(state.result_exists)
         add_row.operator("lime.ai_render_add_to_sequencer", text="Add to Sequencer", icon="IMAGE_DATA")
+        folder_row = result_box.row(align=True)
+        folder_row.operator("lime.ai_render_open_outputs_folder", text="Open Outputs Folder", icon="FILE_FOLDER")
         result_delete_row = result_box.row(align=True)
         result_delete_row.enabled = bool(state.result_image_path)
         result_delete_row.operator("lime.ai_render_delete_selected", text="Delete Selected", icon="TRASH").target = "RESULT"
@@ -162,6 +166,9 @@ class LIME_PT_ai_render_converter(Panel):
         batch_row = manage_box.row(align=True)
         batch_row.alert = confirm_active and confirm_target == "RESULTS"
         batch_row.operator("lime.ai_render_delete_batch", text="Delete All Results", icon="TRASH").target = "RESULTS"
+        batch_row = manage_box.row(align=True)
+        batch_row.alert = confirm_active and confirm_target == "MANIFESTS"
+        batch_row.operator("lime.ai_render_delete_batch", text="Delete All Manifests", icon="TRASH").target = "MANIFESTS"
 
 
 __all__ = [

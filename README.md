@@ -14,6 +14,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Incluye un AI Render Converter para convertir renders a storyboard/sketch con Krea y OpenRouter.
 - Mejora la gestión visual del AI Render Converter con miniaturas, vista grande y filtros por sección.
 - Incluye opciones de limpieza de imágenes generadas (eliminación individual y batch con confirmación).
+- Permite abrir la carpeta de outputs de la IA y limpiar manifests generados.
 - Añade utilidades prácticas de escena (por ejemplo, checks de dimensiones y ayudas de cámara).
 - El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (convertir a local manteniendo meshes linkeados).
 

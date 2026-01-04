@@ -49,7 +49,12 @@ STYLE_PROMPT = (
     "visual language. Focus on accurately representing the object proportions, silhouette, and key features "
     "identified in the analysis, while interpreting the concept to define the scene context and action. "
     "Use minimal shading only to support depth and form. The result should look like a technical storyboard "
-    "frame intended to communicate function, usage, or interaction, not an artistic or stylized drawing."
+    "frame intended to communicate function, usage, or interaction, not an artistic or stylized drawing. "
+    "Avoid photorealistic rendering, surface materials, or color; render only black-and-white linework."
+)
+STYLE_CONTINUITY_PROMPT = (
+    "Match the style reference image closely: preserve its sketch line quality, simplification, and lack of "
+    "fills. Do not keep the original materials or colors from the source render."
 )
 SOURCE_BASE_PROMPT = (
     "Convert the source render image into a storyboard sketch. The source render is the image to transform."
@@ -63,8 +68,6 @@ PRESERVE_PROMPT = (
     "Do not change the main shapes or perspective."
 )
 
-SOURCE_STRENGTH = 1.6
-STYLE_STRENGTH = 0.6
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp", ".exr"}
 _SOURCE_FRAME_RE = re.compile(r"_F(\d{1,6})_", re.IGNORECASE)
 
@@ -198,25 +201,24 @@ def _manifest_path(paths: AiRenderPaths, ctx: FrameContext) -> Path:
     return paths.manifests_dir / name
 
 
-def _build_prompt(mode: str, detail_text: str, has_style: bool) -> str:
+def _build_prompt(mode: str, detail_text: str, has_style: bool, use_style_continuity: bool) -> str:
     prefix = STYLE_GUIDE_PROMPT if has_style else SOURCE_BASE_PROMPT
+    style_hint = STYLE_CONTINUITY_PROMPT if (has_style and use_style_continuity) else ""
     if mode == "SKETCH_PLUS":
         detail_block = detail_text.strip()
         if detail_block:
+            if style_hint:
+                return f"{prefix} {STYLE_PROMPT}. {style_hint} {PRESERVE_PROMPT}. Add: {detail_block}."
             return f"{prefix} {STYLE_PROMPT}. {PRESERVE_PROMPT}. Add: {detail_block}."
+    if style_hint:
+        return f"{prefix} {STYLE_PROMPT}. {style_hint} {PRESERVE_PROMPT}."
     return f"{prefix} {STYLE_PROMPT}. {PRESERVE_PROMPT}."
 
 
-def _rewrite_details_with_llm(
-    prefs: LimePipelinePrefs,
-    raw_text: str,
-    image_path: Optional[Path] = None,
-    style_path: Optional[Path] = None,
-) -> str:
+def _rewrite_details_with_llm(prefs: LimePipelinePrefs, raw_text: str, image_path: Optional[Path] = None) -> str:
     _debug_log(prefs, f"LLM detail input: {raw_text}")
     vision_parts: List[Dict[str, object]] = [{"type": "text", "text": raw_text}]
     image_attached = False
-    style_attached = False
     if image_path and image_path.exists():
         try:
             encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
@@ -230,18 +232,6 @@ def _rewrite_details_with_llm(
             _debug_log(prefs, f"LLM detail image attach failed: {ex}")
     else:
         _debug_log(prefs, "LLM detail image skipped: source image missing")
-    if style_path and style_path.exists():
-        try:
-            encoded = base64.b64encode(style_path.read_bytes()).decode("ascii")
-            mime = _guess_mimetype(style_path)
-            vision_parts.append({"type": "text", "text": "Style reference image:"})
-            vision_parts.append(
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}}
-            )
-            style_attached = True
-            _debug_log(prefs, f"LLM style image attached: {style_path.name}")
-        except Exception as ex:
-            _debug_log(prefs, f"LLM style image attach failed: {ex}")
     payload = {
         "model": prefs.openrouter_model or "google/gemini-2.0-flash-lite-001",
         "messages": [
@@ -279,7 +269,6 @@ def _rewrite_details_with_llm(
         content = (message.get("content") or "").strip()
         _debug_log(prefs, f"LLM detail output: {content or '(empty, using raw text)'}")
         _debug_log(prefs, f"LLM detail image attached flag: {image_attached}")
-        _debug_log(prefs, f"LLM style image attached flag: {style_attached}")
         return content or raw_text
     except Exception:
         _debug_log(prefs, "LLM detail output: (exception, using raw text)")
@@ -374,6 +363,15 @@ def _list_images(folder: Path) -> List[Path]:
         return []
 
 
+def _list_manifests(folder: Path) -> List[Path]:
+    if not folder.exists():
+        return []
+    try:
+        return [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".json"]
+    except Exception:
+        return []
+
+
 def _frame_from_source(path: Path) -> int | None:
     match = _SOURCE_FRAME_RE.search(path.stem)
     if not match:
@@ -420,7 +418,7 @@ def refresh_ai_render_assets(context, *, force: bool = False) -> None:
     styles = _sort_by_mtime(_list_images(paths.styles_dir))
     results = _sort_by_mtime(_list_images(paths.outputs_dir))
     try:
-        update_ai_render_asset_cache(state, sources, styles, results)
+        update_ai_render_asset_cache(state, sources, styles, results, force_reload=force)
         state.assets_last_scan = now
     except Exception:
         pass
@@ -503,13 +501,15 @@ def _resolve_source_size(source_path: Optional[Path]) -> tuple[int, int]:
 def _build_style_images(
     source_url: str,
     style_url: str,
+    source_strength: float,
+    style_strength: float,
 ) -> List[Dict[str, object]]:
     style_images: List[Dict[str, object]] = []
     if source_url:
         # Use the source render as a strong style reference to preserve composition.
-        style_images.append({"url": source_url, "strength": SOURCE_STRENGTH})
+        style_images.append({"url": source_url, "strength": _clamp_strength(source_strength)})
     if style_url:
-        style_images.append({"url": style_url, "strength": STYLE_STRENGTH})
+        style_images.append({"url": style_url, "strength": _clamp_strength(style_strength)})
     return style_images
 
 
@@ -519,6 +519,8 @@ def _create_krea_job(
     source_url: str,
     style_url: str,
     source_path: Optional[Path] = None,
+    source_strength: float = 1.6,
+    style_strength: float = 0.6,
 ) -> tuple[str, str]:
     url = _krea_generate_url(prefs)
     _debug_log(prefs, f"Create job: {url}")
@@ -532,7 +534,7 @@ def _create_krea_job(
         if len(snippet) > 200:
             snippet = f"{snippet[:200]}..."
         _debug_log(prefs, f"Prompt chars={len(prompt)} preview='{snippet}'")
-    style_images = _build_style_images(source_url, style_url)
+    style_images = _build_style_images(source_url, style_url, source_strength, style_strength)
     if style_images:
         payload["styleImages"] = style_images
         strengths = [img.get("strength") for img in style_images]
@@ -764,6 +766,10 @@ class LIME_OT_ai_render_frame(Operator):
         finally:
             scene.render.filepath = prev_path
 
+        if not source_path.exists():
+            self.report({"ERROR"}, "Render completed but output file was not found")
+            return {"CANCELLED"}
+
         new_path = source_path.as_posix()
         if state.source_image_path != new_path:
             state.source_image_path = new_path
@@ -853,14 +859,15 @@ class LIME_OT_ai_render_generate(Operator):
                 if (getattr(prefs, "openrouter_api_key", "") or "").strip():
                     use_style = bool(getattr(state, "llm_use_style_reference", False))
                     style_for_llm = Path(state.style_image_path or "") if use_style else None
-                    detail_opt = _rewrite_details_with_llm(prefs, detail_text, source_path, style_for_llm)
+                    detail_opt = _rewrite_details_with_llm(prefs, detail_text, source_path)
                 else:
                     detail_opt = detail_text
             else:
                 detail_opt = detail_text
             state.detail_text_optimized = detail_opt
             has_style = bool((getattr(state, "style_image_path", "") or "").strip())
-            prompt = _build_prompt(mode, detail_opt, has_style)
+            use_style = bool(getattr(state, "llm_use_style_reference", False))
+            prompt = _build_prompt(mode, detail_opt, has_style, use_style)
             _debug_log(prefs, f"Final prompt sent to Krea: {prompt}")
             state.prompt_final = prompt
             self._prompt_used = prompt
@@ -894,7 +901,15 @@ class LIME_OT_ai_render_generate(Operator):
                 "source_url": source_url,
                 "style_url": style_url,
             }
-            job_id, status_raw = _create_krea_job(prefs, prompt, source_url, style_url, source_path=source_path)
+            job_id, status_raw = _create_krea_job(
+                prefs,
+                prompt,
+                source_url,
+                style_url,
+                source_path=source_path,
+                source_strength=getattr(state, "source_strength", 1.6),
+                style_strength=getattr(state, "style_strength", 0.6),
+            )
         except Exception as ex:
             state.is_busy = False
             state.last_error = str(ex)
@@ -1210,27 +1225,73 @@ class LIME_OT_ai_render_add_to_sequencer(Operator):
         if seq is None:
             seq = scene.sequence_editor_create()
 
-        frame_start = int(getattr(scene, "frame_current", 1) or 1)
-        max_channel = 0
+        frame_start = 1
+        target_channel = 1
         try:
+            last_end = 0
             for s in seq.sequences_all:
-                max_channel = max(max_channel, int(getattr(s, "channel", 0) or 0))
+                if int(getattr(s, "channel", 0) or 0) != target_channel:
+                    continue
+                end = int(getattr(s, "frame_final_end", 0) or 0)
+                last_end = max(last_end, end)
+            if last_end > 0:
+                frame_start = last_end
         except Exception:
-            max_channel = 0
-        channel = max(1, max_channel + 1)
+            frame_start = 1
 
         try:
-            seq.sequences.new_image(
+            strip = seq.sequences.new_image(
                 name=path.stem,
                 filepath=path.as_posix(),
-                channel=channel,
+                channel=target_channel,
                 frame_start=frame_start,
             )
+            try:
+                strip.frame_final_duration = 12
+            except Exception:
+                try:
+                    strip.frame_final_end = frame_start + 12
+                except Exception:
+                    pass
+            try:
+                width = int(strip.elements[0].orig_width or 0)
+                height = int(strip.elements[0].orig_height or 0)
+            except Exception:
+                width = 0
+                height = 0
+            if width > 0 and height > 0:
+                scale_x = 1920.0 / float(width)
+                scale_y = 1080.0 / float(height)
+                try:
+                    strip.transform.scale_x = scale_x
+                    strip.transform.scale_y = scale_y
+                except Exception:
+                    pass
         except Exception as ex:
             self.report({"ERROR"}, f"Failed to add strip: {ex}")
             return {"CANCELLED"}
 
-        self.report({"INFO"}, f"Added AI result to Sequencer (channel {channel})")
+        self.report({"INFO"}, f"Added AI result to Sequencer (channel {target_channel})")
+        return {"FINISHED"}
+
+
+class LIME_OT_ai_render_open_outputs_folder(Operator):
+    bl_idname = "lime.ai_render_open_outputs_folder"
+    bl_label = "AI: Open Outputs Folder"
+    bl_options = {"REGISTER"}
+    bl_description = "Open the AI outputs folder in the system file browser"
+
+    def execute(self, context):
+        try:
+            paths = _ensure_ai_dirs(context.window_manager.lime_pipeline)
+        except Exception as ex:
+            self.report({"ERROR"}, str(ex))
+            return {"CANCELLED"}
+        try:
+            bpy.ops.wm.path_open(filepath=paths.outputs_dir.as_posix())
+        except Exception as ex:
+            self.report({"ERROR"}, f"Failed to open folder: {ex}")
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -1295,6 +1356,7 @@ class LIME_OT_ai_render_delete_batch(Operator):
             ("SOURCES", "Sources", "Delete all source renders"),
             ("STYLES", "Styles", "Delete all style references"),
             ("RESULTS", "Results", "Delete all AI results"),
+            ("MANIFESTS", "Manifests", "Delete all AI manifests"),
         ],
         default="RESULTS",
     )
@@ -1323,11 +1385,14 @@ class LIME_OT_ai_render_delete_batch(Operator):
             folder = paths.sources_dir
         elif self.target == "STYLES":
             folder = paths.styles_dir
+        elif self.target == "MANIFESTS":
+            folder = paths.manifests_dir
         else:
             folder = paths.outputs_dir
 
         removed = 0
-        for path in _list_images(folder):
+        targets = _list_manifests(folder) if self.target == "MANIFESTS" else _list_images(folder)
+        for path in targets:
             try:
                 path.unlink()
                 removed += 1
@@ -1339,7 +1404,7 @@ class LIME_OT_ai_render_delete_batch(Operator):
             state.source_exists = False
         elif self.target == "STYLES":
             state.style_image_path = ""
-        else:
+        elif self.target == "RESULTS":
             state.result_image_path = ""
             state.result_exists = False
 
@@ -1504,6 +1569,7 @@ __all__ = [
     "LIME_OT_ai_render_cancel",
     "LIME_OT_ai_render_test_connection",
     "LIME_OT_ai_render_add_to_sequencer",
+    "LIME_OT_ai_render_open_outputs_folder",
     "LIME_OT_ai_render_delete_selected",
     "LIME_OT_ai_render_delete_batch",
     "LIME_OT_ai_render_open_preview",

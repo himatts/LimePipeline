@@ -13,6 +13,7 @@
 ### Changed
 - AI Render Converter now uses thumbnail grids per section, includes large Image Editor previews, syncs Source Render selections to frames, and deduplicates style imports.
 - AI Render Converter adds deletion controls for selected images and batch cleanup with double confirmation.
+- AI Render Converter adds output folder access and batch manifest cleanup.
 
 ## [0.2.1] - 2025-09-28
 ### Changed

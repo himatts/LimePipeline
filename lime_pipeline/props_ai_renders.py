@@ -84,9 +84,13 @@ def _cached_entries(json_blob: str) -> list[dict[str, str]]:
             continue
         path = (item.get("path") or "").strip()
         name = (item.get("name") or "").strip()
+        icon_key = (item.get("icon_key") or "").strip()
         if not path or not name:
             continue
-        out.append({"path": path, "name": name})
+        entry = {"path": path, "name": name}
+        if icon_key:
+            entry["icon_key"] = icon_key
+        out.append(entry)
     return out
 
 
@@ -105,7 +109,8 @@ def _enum_items_from_cache(json_blob: str) -> list[tuple]:
     for idx, item in enumerate(_cached_entries(json_blob)):
         key = item["path"]
         name = item["name"]
-        icon_id = _asset_preview_icon_id(key)
+        icon_key = item.get("icon_key") or key
+        icon_id = _asset_preview_icon_id(icon_key)
         items.append((key, name, key, icon_id, idx))
     return items
 
@@ -194,12 +199,6 @@ def _update_source_path(self, context):
     if not (getattr(self, "source_image_path", "") or "").strip():
         if getattr(self, "assets_refreshing", False):
             return
-        if self.source_pick:
-            self.assets_refreshing = True
-            try:
-                self.source_pick = ""
-            finally:
-                self.assets_refreshing = False
         return
     if getattr(self, "assets_refreshing", False):
         return
@@ -261,7 +260,7 @@ def _update_result_pick(self, context):
         self.result_image_path = path
 
 
-def update_ai_render_asset_cache(state, source_paths, style_paths, result_paths) -> None:
+def update_ai_render_asset_cache(state, source_paths, style_paths, result_paths, *, force_reload: bool = False) -> None:
     pcoll = _ensure_asset_previews()
     asset_sets = {
         "source_assets_json": source_paths,
@@ -269,12 +268,21 @@ def update_ai_render_asset_cache(state, source_paths, style_paths, result_paths)
         "result_assets_json": result_paths,
     }
     keep_keys = set()
-    for paths in asset_sets.values():
+    cache_entries = {}
+    for json_attr, paths in asset_sets.items():
+        entries = []
         for path in paths:
             try:
-                keep_keys.add(path.as_posix())
+                mtime = path.stat().st_mtime
             except Exception:
-                pass
+                mtime = 0.0
+            try:
+                icon_key = f"{path.as_posix()}::{int(mtime)}"
+                keep_keys.add(icon_key)
+                entries.append({"path": path.as_posix(), "name": path.name, "icon_key": icon_key})
+            except Exception:
+                continue
+        cache_entries[json_attr] = entries
 
     for key in list(pcoll.keys()):
         if key not in keep_keys:
@@ -284,17 +292,22 @@ def update_ai_render_asset_cache(state, source_paths, style_paths, result_paths)
                 pass
 
     for key in keep_keys:
+        if key in pcoll and force_reload:
+            try:
+                pcoll.remove(key)
+            except Exception:
+                pass
         if key in pcoll:
             continue
         try:
-            pcoll.load(key, key, "IMAGE")
+            file_path = key.split("::", 1)[0]
+            pcoll.load(key, file_path, "IMAGE")
         except Exception:
             pass
 
     try:
         state.assets_refreshing = True
-        for json_attr, paths in asset_sets.items():
-            entries = [{"path": p.as_posix(), "name": p.name} for p in paths]
+        for json_attr, entries in cache_entries.items():
             setattr(state, json_attr, json.dumps(entries))
             count_attr = json_attr.replace("_json", "_count")
             setattr(state, count_attr, len(entries))
@@ -329,8 +342,8 @@ class LimeAIRenderState(PropertyGroup):
         default=True,
     )
     llm_use_style_reference: BoolProperty(
-        name="Use Style Reference in LLM",
-        description="Send the style reference image to the LLM to describe its look and context",
+        name="Use Style Reference Continuity",
+        description="Include a continuity instruction that preserves the style reference sketch and key objects",
         default=False,
     )
     detail_text_optimized: StringProperty(default="", options={"HIDDEN"})
@@ -404,6 +417,20 @@ class LimeAIRenderState(PropertyGroup):
             ("VERSION", "Version", "Write a new versioned file"),
         ],
         default="VERSION",
+    )
+    source_strength: FloatProperty(
+        name="Source Strength",
+        description="Influence strength for the source render (range -2 to 2)",
+        default=1.6,
+        min=-2.0,
+        max=2.0,
+    )
+    style_strength: FloatProperty(
+        name="Style Strength",
+        description="Influence strength for the style reference (range -2 to 2)",
+        default=0.6,
+        min=-2.0,
+        max=2.0,
     )
 
     cached_frame: IntProperty(name="Cached Frame", default=-1, options={"HIDDEN"})
