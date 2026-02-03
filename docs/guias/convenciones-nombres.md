@@ -1,182 +1,164 @@
----
+﻿---
 title: Convenciones de nombres
 ---
 
-# Convenciones de Nombres en Lime Pipeline
+# Convenciones de nombres en Lime Pipeline
 
-Esta guía detalla las convenciones de nomenclatura utilizadas en Lime Pipeline para mantener consistencia en proyectos, archivos y elementos de escena.
+Esta guia resume las convenciones de nombres vigentes en el codigo para proyectos, archivos, SHOTs, materiales y outputs.
 
-## Estructura General de Proyectos
+## Estructura general de proyectos
 
-### Nombres de Proyecto
-- **Formato**: `^[A-Z]{2}-\d{5}\s+(.+)$`
-- **Ejemplos**:
-  - `AB-00001 Mi Proyecto`
-  - `CD-12345 Animación Corporativa`
-  - `EF-99999 Video Publicitario`
+### Raiz de proyecto
+- Formato de carpeta: `^[A-Z]{2}-\d{5}\s+(.+)$`
+- Ejemplos: `AB-00001 Mi Proyecto`, `CD-12345 Animacion Corporativa`
+
+### ProjectName normalizado (para nombres de archivo)
+- Se elimina el prefijo `XX-#####`.
+- Se quitan diacriticos y caracteres reservados de Windows.
+- Se colapsan espacios y se concatena en CamelCase.
+- Ejemplo: carpeta `AB-00001 Mi Proyecto` -> `MiProyecto`.
 
 ### Revisiones
-- **Formato**: Una sola letra mayúscula `A–Z`
-- **Propósito**: Control de versiones del proyecto
-- **Ejemplos**:
-  - `Rev A`: Versión inicial
-  - `Rev B`: Primera revisión
-  - `Rev Z`: Última revisión posible
+- Formato: una sola letra mayuscula `A-Z`.
 
-## Nombres de Archivo
+## Nombres de archivo
 
-### Archivos de Blender
-- **Formato**: `{ProjectName}_{Type}_SC{###}_Rev_{Letter}.blend`
-- **Componentes**:
-  - `ProjectName`: Nombre del proyecto (ej: `AB-00001 Mi Proyecto`)
-  - `Type`: Tipo de archivo (PV, SB, TMP, RAW, ANIM, etc.)
-  - `SC{###}`: Número de escena (001-999)
-  - `Rev_{Letter}`: Letra de revisión
+### Archivos .blend
+- Con SC: `{ProjectName}_{Token}_SC{###}_Rev_{Letter}.blend`
+- Sin SC (solo BASE y TMP): `{ProjectName}_{Token}_Rev_{Letter}.blend`
 
-#### Ejemplos de Nombres de Archivo
+### Tokens por tipo
+| Tipo | Token en filename | Requiere SC |
+|------|-------------------|-------------|
+| BASE | BaseModel         | No          |
+| PV   | PV                | Si          |
+| REND | Render            | Si          |
+| SB   | SB                | Si          |
+| ANIM | Anim              | Si          |
+| TMP  | Tmp               | No          |
+
+### Ejemplos .blend
 ```
-AB-00001 Mi Proyecto_PV_SC001_Rev_A.blend
-AB-00001 Mi Proyecto_SB_SC001_Rev_A.blend
-AB-00001 Mi Proyecto_TMP_SC015_Rev_B.blend
-AB-00001 Mi Proyecto_RAW_SC030_Rev_C.blend
-AB-00001 Mi Proyecto_ANIM_SC045_Rev_A.blend
-```
-
-### Tipos de Archivo Comunes
-
-| Tipo | Descripción | Uso |
-|------|-------------|-----|
-| **PV** | Previsualización | Renders rápidos para revisión |
-| **SB** |Storyboard | Bocetos y planificación visual |
-| **TMP** | Temporal | Archivos temporales de trabajo |
-| **RAW** | Crudo | Archivos sin post-producción |
-| **ANIM** | Animación | Archivos con animación completa |
-| **REND** | Render Final | Archivos renderizados finales |
-
-## Estructura de Escenas
-
-### Numeración de Escenas
-- **Formato**: `SC{###}` donde `###` es 001-999
-- **Regla**: Los números de escena deben ser múltiplos de `scene_step` (configurable)
-- **Excepción**: Se puede desactivar con `free_scene_numbering`
-
-### Ejemplos de Escenas
-```
-SC001 - Introducción
-SC005 - Desarrollo
-SC010 - Clímax
-SC015 - Conclusión
+MiProyecto_PV_SC001_Rev_A.blend
+MiProyecto_Render_SC010_Rev_B.blend
+MiProyecto_Anim_SC020_Rev_A.blend
+MiProyecto_BaseModel_Rev_A.blend
+MiProyecto_Tmp_Rev_C.blend
 ```
 
-## Nombres de Materiales
+## Estructura de escenas
 
-### Sistema MAT (Materiales)
-- **Formato**: `MAT_{TagEscena}_{Familia}_{Acabado}_{Version}`
-- **Componentes**:
-  - `TagEscena`: Identificador de escena (ej: SC001, INTRO)
-  - `Familia`: Tipo de material (METAL, PLASTIC, WOOD, etc.)
-  - `Acabado`: Acabado específico (MATTE, GLOSSY, RUSTY, etc.)
-  - `Version`: Número de versión (V01, V02, etc.)
+### Numeracion de escenas
+- Formato: `SC{###}` donde `###` es 001-999.
+- Regla: si `free_scene_numbering` es false, SC debe ser multiplo de `scene_step`.
 
-#### Ejemplos de Materiales
+## Nombres de materiales
+
+### Sistema MAT
+- Formato: `MAT_{SceneTag?}_{MaterialType}_{Finish}_{V##}`
+- `SceneTag` es opcional.
+- `MaterialType` permitido:
+  `Plastic, Metal, Glass, Rubber, Silicone, Background, Paint, Wood, Fabric, Ceramic, Emissive, Stone, Concrete, Paper, Leather, Liquid, Organic, Tissue, Tooth, Text`
+- `Finish` es alfanumerico CamelCase (sin espacios ni caracteres especiales).
+- Maximo 64 caracteres y sin sufijos `.001`.
+
+### Ejemplos
 ```
-MAT_SC001_METAL_RUSTY_V01
-MAT_INTRO_PLASTIC_MATTE_V02
-MAT_CLIMAX_WOOD_POLISHED_V01
-MAT_SC010_FABRIC_DENIM_V03
+MAT_SC001_Metal_Rusty_V01
+MAT_Intro_Plastic_Matte_V02
+MAT_Wood_Polished_V01
 ```
 
-## Estructura de Colecciones (SHOT System)
+## Estructura de colecciones (SHOT system)
 
-### SHOT Collections
-- **Formato**: `SHOT ###` donde `###` es 001-999
-- **Propósito**: Organizar elementos por escena/shot
-- **Jerarquía**:
-  ```
-  SHOT 001
-  ├── CAMERAS
-  ├── LIGHTS
-  ├── PROPS
-  └── CHARACTERS
-  ```
+### SHOT root
+- Formato: `SHOT 01` o `SHOT 001` (2-3 digitos).
 
-### Colecciones de Sistema
-- **CAMERAS**: Todas las cámaras del shot
-- **LIGHTS**: Iluminación específica del shot
-- **PROPS**: Objetos y elementos decorativos
-- **CHARACTERS**: Personajes y elementos animados
+### Arbol estandar
+```
+SHOT 01
+|-- SH01_00_CAM
+|-- SH01_00_LIGHTS
+|-- SH01_01_{ProjectName}_MAIN
+|-- SH01_02_PROPS
+`-- SH01_90_BG
+```
 
-## Nombres de Objetos y Assets
+## Camaras y rigs
 
-### Cámaras
-- **Formato**: `{ShotName}_CAM_{Purpose}_{Index}`
-- **Ejemplos**:
-  - `SHOT001_CAM_MAIN_01`
-  - `SHOT001_CAM_CLOSEUP_01`
-  - `SHOT001_CAM_WIDE_02`
+- Camara: `SHOT_##_CAMERA_{N}`
+- Camera Data: `SHOT_##_CAMERA_{N}.Data`
+- Rig Armature: `CAM_RIG_SH##_{N}` (o `CAM_RIG_SH###_{N}` si SHOT >= 100)
 
-### Luces
-- **Formato**: `{ShotName}_LIGHT_{Type}_{Purpose}_{Index}`
-- **Ejemplos**:
-  - `SHOT001_LIGHT_KEY_MAIN_01`
-  - `SHOT001_LIGHT_FILL_CHARACTER_01`
-  - `SHOT001_LIGHT_RIM_BACKGROUND_02`
+## Outputs de render
 
-### Objetos
-- **Formato**: `{AssetName}_{Variant}_{Purpose}_{Index}`
-- **Ejemplos**:
-  - `Chair_Wood_Dining_01`
-  - `Table_Glass_Modern_02`
-  - `Character_Hero_Idle_01`
+### Save Templates (imagenes)
+- REND: `Project_Render_SC###_SH##C{cam}_Rev_{rev}.png`
+- PV: `Project_PV_SC###_SH##C{cam}_Rev_{rev}.png`
+- SB: `Project_SB_SC###_Rev_{rev}.png`
+- TMP: `Project_TMP_SC###_Rev_{rev}.png`
+- Sufijos opcionales antes de `Rev`: `V##` y/o `{Descriptor}` (descriptor normalizado).
 
-## Convenciones de Render
+Ejemplo con sufijos:
+```
+MiProyecto_Render_SC005_SH02C1_V02_Test_Rev_B.png
+```
 
-### Nombres de Output
-- **Formato**: `{Project}_{Type}_{SC###}_{Camera}_{Frame}_{Rev}`
-- **Ejemplos**:
-  - `AB-00001_PV_SC001_Cam01_0001_A.exr`
-  - `AB-00001_SB_SC005_Cam02_0120_B.png`
-  - `AB-00001_REND_SC010_CamMain_0500_A.exr`
+### RAW
+- Prefijo `RAW_` y carpeta `editables/RAW/`.
+- Ejemplos:
+```
+RAW_MiProyecto_Render_SC005_SH02C1_Rev_B.png
+RAW_MiProyecto_PV_SC005_SH02C1_Rev_B.png
+RAW_MiProyecto_SB_SC005_Rev_B.png
+```
+- Render RAW desde marcadores usa este orden:
+  `RAW_{Project}_Render_SH##C{cam}_SC{sc}_Rev_{rev}.png`
 
-### Layers de Render
-- **Base**: Capa principal con iluminación completa
-- **Shadow**: Solo sombras
-- **AO**: Ambient Occlusion
-- **Normal**: Normal map para compositing
-- **Depth**: Z-depth para efectos de profundidad
+### AI Render Converter
+- Source: `Project_Render_SC###_SH##C{cam}_F####_Rev_{rev}.png`
+- Output stem: `Project_SB_SC###_SH##C{cam}_F####_{ModeToken}`
+- Output file: `..._Rev_{rev}.png` o `..._V##_Rev_{rev}.png`
+- Si hay multiples outputs: `..._Rev_{rev}_NN.png`
+- Manifest: `..._AI_manifest.json`
 
-## Configuración y Personalización
+### Animacion
+- Carpeta RAMV: `Animation/Rev X/SC###_SH##/`
+- Si el contenedor es REND: `Renders/Rev X/SC###_SH##/`
+- Test: subcarpeta `test/`
+- Prefijo de salida: `SC###_SH##_` o `SC###_SH##_test_` (Blender agrega `####`)
+- Local: `Desktop/<ProjectName>/SC###_SH##/` (mismo esquema)
 
-### Variables de Configuración
-- `scene_step`: Incremento entre números de escena (default: 5)
-- `free_scene_numbering`: Permitir numeración libre de escenas
-- `project_root_detection`: Detección automática de raíz de proyecto
+## Backups
 
-### Validación Automática
-Lime Pipeline valida automáticamente:
-- ✅ Formato de nombres de proyecto
-- ✅ Numeración de escenas (si no es free)
-- ✅ Existencia de directorios requeridos
-- ✅ Consistencia de revisiones
+- Nombre: `Backup_XX_{filename}` en la carpeta `backups/` del tipo y revision.
 
-## Casos de Uso Comunes
+## Validacion automatica
 
-### 1. Nuevo Proyecto
+Lime Pipeline valida:
+- Raiz de proyecto con el formato `XX-##### Nombre`.
+- Revision con una letra `A-Z`.
+- SC en rango 001-999 y multiplo de `scene_step` cuando aplica.
+- Existencia de directorios criticos y colisiones de nombre.
+- Longitud maxima de ruta segun preferencias.
+
+## Casos de uso comunes
+
+### 1. Nuevo proyecto
 ```
 1. Crear directorio: AB-00001 Mi Proyecto/
-2. Archivo inicial: AB-00001 Mi Proyecto_SB_SC001_Rev_A.blend
-3. Primera escena: SHOT 001
-4. Material inicial: MAT_SC001_BASIC_DEFAULT_V01
+2. Archivo inicial: MiProyecto_SB_SC001_Rev_A.blend
+3. Primera escena: SHOT 01
+4. Material inicial: MAT_SC001_Plastic_Generic_V01
 ```
 
-### 2. Iteración de Revisión
+### 2. Iteracion de revision
 ```
-Archivo anterior: Project_SB_SC001_Rev_A.blend
-Nueva revisión: Project_SB_SC001_Rev_B.blend
-(Incrementar letra de revisión)
+Archivo anterior: MiProyecto_SB_SC001_Rev_A.blend
+Nueva revision:    MiProyecto_SB_SC001_Rev_B.blend
 ```
 
-### 3. Multiples Escenas
+### 3. Multiples escenas
 ```
 SC001 - Opening
 SC005 - Dialogue Scene A
@@ -184,13 +166,14 @@ SC010 - Action Sequence
 SC015 - Closing
 ```
 
-## Troubleshooting de Nombres
+## Troubleshooting de nombres
 
-### Errores Comunes
-- **Proyecto sin formato válido**: Asegurarse de formato `XX-##### Nombre`
-- **Escena no múltiplo**: Verificar configuración de `scene_step`
-- **Revisión inválida**: Solo letras A-Z mayúsculas
-- **Material mal formado**: Seguir esquema `MAT_{Tag}_{Familia}_{Acabado}_{V##}`
+### Errores comunes
+- Proyecto sin formato valido: usar `XX-##### Nombre`.
+- SC no multiplo: revisar `scene_step` o activar `free_scene_numbering`.
+- Revision invalida: una sola letra `A-Z`.
+- Material mal formado: `MAT_{SceneTag?}_{MaterialType}_{Finish}_{V##}`.
+- ProjectName distinto a la carpeta: es normal por la normalizacion.
 
-### Validación Manual
-Usar las herramientas de validación en el panel de **Stage Setup** para verificar conformidad con las convenciones.
+### Validacion manual
+Usa el panel de Project Organization / Stage Setup para ejecutar validaciones antes de guardar o renderizar.
