@@ -12,7 +12,10 @@ from typing import Dict, Optional
 import urllib.request
 import urllib.error
 
-from ..prefs import LimePipelinePrefs
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ..prefs import LimePipelinePrefs
 
 
 @dataclass
@@ -22,7 +25,11 @@ class HttpResponse:
     error: Optional[str]
 
 
-def openrouter_headers(prefs: LimePipelinePrefs) -> Dict[str, str]:
+OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+
+def openrouter_headers(prefs: "LimePipelinePrefs | Any") -> Dict[str, str]:
     key = (getattr(prefs, "openrouter_api_key", "") or "").strip()
     headers = {
         "Content-Type": "application/json",
@@ -47,7 +54,7 @@ def openrouter_headers(prefs: LimePipelinePrefs) -> Dict[str, str]:
     return headers
 
 
-def krea_headers(prefs: LimePipelinePrefs, *, content_type: Optional[str] = "application/json") -> Dict[str, str]:
+def krea_headers(prefs: "LimePipelinePrefs | Any", *, content_type: Optional[str] = "application/json") -> Dict[str, str]:
     key = (getattr(prefs, "krea_api_key", "") or "").strip()
     headers = {
         "Accept": "application/json",
@@ -177,3 +184,63 @@ def _read_http_error(err: urllib.error.HTTPError) -> str:
         return err.read().decode("utf-8", errors="replace")
     except Exception:
         return str(err)
+
+
+def extract_message_content(result: Dict[str, object]) -> Optional[str]:
+    """Extract the assistant message content from an OpenAI-compatible response."""
+    try:
+        choices = result.get("choices") or []
+        if not choices:
+            return None
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, dict):
+            try:
+                return json.dumps(content)
+            except Exception:
+                return None
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, dict):
+                    if isinstance(part.get("json"), dict):
+                        try:
+                            return json.dumps(part.get("json"))
+                        except Exception:
+                            return None
+                    text = part.get("text") or part.get("content")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "\n".join(parts) if parts else None
+        return None
+    except Exception:
+        return None
+
+
+def parse_json_from_text(text: str) -> Optional[Dict[str, object]]:
+    """Best-effort JSON object extraction from an AI text response."""
+    if not text:
+        return None
+    s = text.strip()
+    if s.startswith("```"):
+        try:
+            s = s.split("\n", 1)[1]
+            if s.endswith("```"):
+                s = s[: -3]
+        except Exception:
+            pass
+    try:
+        parsed = json.loads(s)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        try:
+            i = s.find("{")
+            j = s.rfind("}")
+            if i != -1 and j != -1 and j > i:
+                parsed = json.loads(s[i : j + 1])
+                return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+    return None

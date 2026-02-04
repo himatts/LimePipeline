@@ -11,6 +11,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Asiste en el primer guardado y crea backups numerados.
 - Facilita la creación/duplicado/instanciado de “shots” con reglas claras.
 - Ayuda a mantener materiales bajo una nomenclatura consistente (manual y, opcionalmente, asistido por IA).
+- Incluye un AI Asset Organizer para sugerir nombres de objetos seleccionados y sus materiales (OpenRouter), con contexto opcional por imagen.
 - Incluye un AI Render Converter para convertir renders a storyboard/sketch con Krea y OpenRouter.
 - Mejora la gestión visual del AI Render Converter con miniaturas, vista grande y filtros por sección.
 - Incluye opciones de limpieza de imágenes generadas (eliminación individual y batch con confirmación).

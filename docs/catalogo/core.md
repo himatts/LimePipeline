@@ -6,6 +6,14 @@ Core utilities for Lime Pipeline.
 
 This package centralizes naming and scene validation helpers used across UI and ops.
 
+## lime_pipeline/core/asset_naming.py
+
+Asset naming helpers for Lime Pipeline.
+
+This module provides small, Blender-agnostic helpers used by tools that rename
+scene assets (objects/materials). It intentionally avoids `bpy` imports so it
+can be unit-tested outside Blender.
+
 ## lime_pipeline/core/material_naming.py
 
 Material naming utilities for Lime Pipeline.

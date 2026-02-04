@@ -28,6 +28,7 @@ nav:
       - DATA: catalogo/data.md
       - PROPS: catalogo/props.py.md
       - PROPS AI: catalogo/props_ai_materials.py.md
+      - PROPS AI Assets: catalogo/props_ai_assets.py.md
       - PREFS: catalogo/prefs.py.md
       - INIT: catalogo/__init__.py.md
   - Referencia API:

@@ -80,6 +80,20 @@ Clases Blender detectadas:
 - LIME_TB_OT_ai_toggle_review (Operator): bl_idname=lime_tb.ai_toggle_review, bl_label=AI: Toggle Manual Review
 - LIME_TB_OT_open_ai_material_manager (Operator): bl_idname=lime_tb.open_ai_material_manager, bl_label=Open AI Material Manager
 
+## lime_pipeline/ops/ops_ai_asset_organizer.py
+
+AI Asset Organizer Operators.
+
+Suggests clear names for selected objects and their materials using OpenRouter.
+The workflow is intentionally user-controlled: suggestions are reviewed in a panel
+and only applied when the user confirms.
+
+Clases Blender detectadas:
+
+- LIME_TB_OT_ai_asset_suggest_names (Operator): bl_idname=lime_tb.ai_asset_suggest_names, bl_label=AI: Suggest Names
+- LIME_TB_OT_ai_asset_apply_names (Operator): bl_idname=lime_tb.ai_asset_apply_names, bl_label=AI: Apply Names
+- LIME_TB_OT_ai_asset_clear (Operator): bl_idname=lime_tb.ai_asset_clear, bl_label=AI: Clear
+
 ## lime_pipeline/ops/ops_alpha_manager.py
 
 Alpha Events Manager Operators

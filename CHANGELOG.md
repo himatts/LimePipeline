@@ -3,6 +3,8 @@
 ## [Unreleased] - 2025-09-30
 ### Added
 - AI Render Converter panel for storyboard sketch conversion (Krea + OpenRouter), with manifested outputs.
+- AI Asset Organizer panel to suggest names for selected objects and their materials (OpenRouter).
+- AI Asset Organizer: optional image context for multimodal models.
 
 ### Changed (LP-00003)
 - Simplified Shots UI panel by removing subpanels and leveraging native Blender list controls

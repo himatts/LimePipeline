@@ -83,17 +83,22 @@ class LimePipelinePrefs(AddonPreferences):
         description="Automatically scan and rename materials after duplicating a scene.",
         default=False,
     )
-    # --- AI Material Renamer (OpenRouter) ---
+    # --- OpenRouter (AI features) ---
     openrouter_api_key: StringProperty(
         name="OpenRouter API Key",
         subtype='PASSWORD',
         default="",
-        description="API key for OpenRouter (used by AI Material Renamer)",
+        description="API key for OpenRouter (used by Lime AI tools)",
     )
     openrouter_model: StringProperty(
         name="OpenRouter Model",
         default="google/gemini-2.0-flash-lite-001",
-        description="Default model slug for AI Material Renamer",
+        description="Default model slug for OpenRouter AI tools",
+    )
+    openrouter_debug: BoolProperty(
+        name="Debug OpenRouter Requests",
+        default=False,
+        description="Log OpenRouter request/response details to the system console",
     )
     http_referer: StringProperty(
         name="HTTP-Referer (optional)",
@@ -148,9 +153,10 @@ class LimePipelinePrefs(AddonPreferences):
         col.prop(self, "libraries_override_dir")
         col.separator()
         box = col.box()
-        box.label(text="AI Material Renamer (OpenRouter)")
+        box.label(text="OpenRouter (AI Tools)")
         box.prop(self, "openrouter_api_key")
         box.prop(self, "openrouter_model")
+        box.prop(self, "openrouter_debug")
         row = box.row()
         row.prop(self, "http_referer")
         row.prop(self, "x_title")

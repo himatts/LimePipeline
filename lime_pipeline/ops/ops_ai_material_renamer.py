@@ -34,7 +34,15 @@ from bpy.types import Material, Operator, Scene
 
 from ..prefs import LimePipelinePrefs
 from ..props_ai_materials import LimeAIMatRow
-from .ai_http import openrouter_headers, http_get_json, http_post_json
+from .ai_http import (
+    OPENROUTER_CHAT_URL,
+    OPENROUTER_MODELS_URL,
+    extract_message_content,
+    openrouter_headers,
+    http_get_json,
+    http_post_json,
+    parse_json_from_text,
+)
 from ..core.material_naming import (
     ALLOWED_MATERIAL_TYPES,
     PREFIX,
@@ -780,9 +788,6 @@ def _is_row_visible(row: LimeAIMatRow, view_filter: str) -> bool:
 # OpenRouter helpers
 # -----------------------------------------------------------------------------
 
-OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
-
 
 def _truncate_context(context: str, max_chars: int = 500) -> str:
     """Truncate scene context to max length, preserving key material keywords."""
@@ -971,55 +976,6 @@ def _schema_json_object() -> Dict[str, object]:
     return {"type": "json_object"}
 
 
-def _extract_message_content(result: Dict[str, object]) -> Optional[str]:
-    try:
-        choices = result.get("choices") or []
-        if not choices:
-            return None
-        message = choices[0].get("message") or {}
-        content = message.get("content")
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts = []
-            for part in content:
-                if isinstance(part, dict):
-                    text = part.get("text") or part.get("content")
-                    if isinstance(text, str):
-                        parts.append(text)
-            return "\n".join(parts) if parts else None
-        return None
-    except Exception:
-        return None
-
-
-def _parse_json_from_text(text: str) -> Optional[Dict[str, object]]:
-    if not text:
-        return None
-    s = text.strip()
-    # Strip fences if present
-    if s.startswith("```"):
-        # remove first line and last fence
-        try:
-            s = s.split("\n", 1)[1]
-            if s.endswith("```"):
-                s = s[: -3]
-        except Exception:
-            pass
-    # Try direct parse
-    try:
-        return json.loads(s)
-    except Exception:
-        # Best-effort: find the first '{' and last '}'
-        try:
-            i = s.find('{')
-            j = s.rfind('}')
-            if i != -1 and j != -1 and j > i:
-                return json.loads(s[i:j+1])
-        except Exception:
-            return None
-    return None
-
 
 class LIME_TB_OT_ai_test_connection(Operator):
     bl_idname = "lime_tb.ai_test_connection"
@@ -1051,7 +1007,7 @@ class LIME_TB_OT_ai_test_connection(Operator):
                 "response_format": _schema_json_object(),
             }
             r = http_post_json(OPENROUTER_CHAT_URL, payload, headers=headers, timeout=20)
-            ok = bool(_extract_message_content(r or {}))
+            ok = bool(extract_message_content(r or {}))
             self.report({'INFO'}, f"Chat endpoint: {'OK' if ok else 'UNKNOWN'}")
             return {'FINISHED'}
         # If listing succeeded but slug not found, still confirm connectivity
@@ -1187,8 +1143,8 @@ class LIME_TB_OT_ai_rename_single(Operator):
             payload_fallback = dict(payload)
             payload_fallback["response_format"] = _schema_json_object()
             result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=openrouter_headers(prefs), timeout=60)
-            text = _extract_message_content(result2 or {}) if result2 else None
-            parsed_text = _parse_json_from_text(text or "") if text else None
+            text = extract_message_content(result2 or {}) if result2 else None
+            parsed_text = parse_json_from_text(text or "") if text else None
             if isinstance(parsed_text, dict):
                 item = parsed_text.get("item")
                 used_ai = item is not None
@@ -1576,8 +1532,8 @@ class LIME_TB_OT_ai_scan_materials(Operator):
             payload_fallback = dict(payload)
             payload_fallback["response_format"] = _schema_json_object()
             result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=openrouter_headers(prefs), timeout=120)
-            text = _extract_message_content(result2 or {}) if result2 else None
-            parsed_text = _parse_json_from_text(text or "") if text else None
+            text = extract_message_content(result2 or {}) if result2 else None
+            parsed_text = parse_json_from_text(text or "") if text else None
             if isinstance(parsed_text, dict):
                 items = list(parsed_text.get("items") or [])
                 used_ai = len(items) > 0

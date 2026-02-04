@@ -15,6 +15,18 @@ Clases Blender detectadas:
 - LIME_TB_UL_ai_mat_rows (UIList): bl_idname=LIME_TB_UL_ai_mat_rows
 - LIME_TB_PT_ai_material_renamer (Panel): bl_idname=LIME_TB_PT_ai_material_renamer, bl_label=AI Material Renamer, bl_space_type=VIEW_3D, bl_region_type=UI, bl_category=Lime Toolbox
 
+## lime_pipeline/ui/ui_ai_asset_organizer.py
+
+UI panel for AI-assisted object/material naming in Lime Toolbox.
+
+This panel is lightweight; network calls and rename logic live in operators.
+Supports optional image context for multimodal models.
+
+Clases Blender detectadas:
+
+- LIME_TB_UL_ai_asset_items (UIList): bl_idname=LIME_TB_UL_ai_asset_items
+- LIME_TB_PT_ai_asset_organizer (Panel): bl_idname=LIME_TB_PT_ai_asset_organizer, bl_label=AI Asset Organizer, bl_space_type=VIEW_3D, bl_region_type=UI, bl_category=Lime Toolbox
+
 ## lime_pipeline/ui/ui_alpha_manager.py
 
 UI to manage alpha fade events using Driver or Keyframe modes.

@@ -28,6 +28,7 @@ from ..prefs import LimePipelinePrefs
 from ..props_ai_renders import update_ai_render_asset_cache
 from .ai_http import (
     openrouter_headers,
+    OPENROUTER_CHAT_URL,
     http_post_json,
     http_get_json_with_status,
     http_post_json_with_status,
@@ -36,8 +37,6 @@ from .ai_http import (
     krea_headers,
 )
 
-
-OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 KREA_GENERATE_PATH = "/generate/image"
 KREA_ASSETS_PATH = "/assets"
