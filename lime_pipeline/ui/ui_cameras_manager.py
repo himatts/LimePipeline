@@ -27,6 +27,20 @@ CAT = "Lime Pipeline"
 _CAM_LIST_HANDLER = None
 
 
+def _camera_has_rig(cam_obj) -> bool:
+    if cam_obj is None or getattr(cam_obj, 'type', None) != 'CAMERA':
+        return False
+    cur = getattr(cam_obj, 'parent', None)
+    while cur is not None:
+        try:
+            if getattr(cur, 'type', None) == 'ARMATURE':
+                return True
+            cur = getattr(cur, 'parent', None)
+        except Exception:
+            break
+    return False
+
+
 class LIME_PT_render_cameras(Panel):
     """Cameras manager panel in 3D Viewport > UI > Lime Pipeline."""
     bl_space_type = 'VIEW_3D'
@@ -45,7 +59,8 @@ class LIME_PT_render_cameras(Panel):
         row.template_list("LIME_UL_render_cameras", "", scene, "lime_render_cameras", scene, "lime_render_cameras_index", rows=6)
 
         col = row.column(align=True)
-        col.operator("lime.add_camera_rig", text='', icon='ADD')
+        col.operator("lime.add_camera_rig", text='', icon='OUTLINER_OB_ARMATURE')
+        col.operator("lime.add_simple_camera", text='', icon='OUTLINER_OB_CAMERA')
         del_op = col.operator("lime.delete_camera_rig_and_sync", text='', icon='REMOVE')
         try:
             idx = getattr(scene, 'lime_render_cameras_index', -1)
@@ -150,6 +165,8 @@ class LIME_UL_render_cameras(UIList):
         controls = split.row(align=True)
         controls.alignment = 'RIGHT'
         controls.scale_x = 0.9
+        cam_obj = bpy.data.objects.get(item.name) if item else None
+        controls.enabled = _camera_has_rig(cam_obj)
         btn2 = controls.operator('lime.pose_camera_rig', text='', icon='POSE_HLT')
         btn2.camera_name = item.name
 

@@ -10,6 +10,7 @@
 - Adopt/Fix naming updated to preserve original filename stems (optional AI stem filter via OpenRouter; optional low-res preview).
 - Adopt/Fix naming now enforces a shared structure: `<Project>_<Descriptor>_<MapType>_<NN>.<ext>` regardless of AI output (keeps names consistent inside `rsc/Textures`).
 - Added a texture manifest cleanup button to delete `rsc/Textures/_manifests`.
+- Cameras panel supports adding Simple Cameras inside the active SHOT camera collection.
 
 ### Changed (LP-00003)
 - Simplified Shots UI panel by removing subpanels and leveraging native Blender list controls

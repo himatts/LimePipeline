@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 6, 2),  # AI Asset Organizer naming format update
+    "version": (0, 6, 3),  # Simple camera creation in Cameras panel
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -199,6 +199,7 @@ from .ops.ops_cameras import (
     LIME_OT_rename_shot_cameras,
     LIME_OT_sync_camera_list,
     LIME_OT_add_camera_rig,
+    LIME_OT_add_simple_camera,
     LIME_OT_delete_camera_rig,
     LIME_OT_delete_camera_rig_and_sync,
     LIME_OT_pose_camera_rig,
@@ -270,6 +271,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_clean_step,
     LIME_OT_dimension_envelope,
     LIME_OT_add_camera_rig,
+    LIME_OT_add_simple_camera,
     LIME_OT_import_layout,
     LIME_OT_duplicate_scene_sequential,
     LIME_OT_stage_create_next_scene_file,

@@ -19,6 +19,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Incluye opciones de limpieza de imágenes generadas (eliminación individual y batch con confirmación).
 - Permite abrir la carpeta de outputs de la IA y limpiar manifests generados.
 - Añade utilidades prácticas de escena (por ejemplo, checks de dimensiones y ayudas de cámara).
+- El panel de Cameras permite agregar Camera Rigs o Simple Cameras dentro del SHOT activo.
 - El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (convertir a local manteniendo meshes linkeados).
 
 ## Requisitos

@@ -29,6 +29,7 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Dimension Checker overlay units are user-configurable (mm/cm/m/in/ft)
 - Dimension Checker helpers parent to the active object and update live on scale
 - Dimension Checker overlay warns about unapplied scale (yellow labels)
+- Cameras panel supports adding Camera Rigs or Simple Cameras inside the active SHOT
 
 ## Repository layout (high level)
 - `lime_pipeline/core`: naming, paths, validation, parsing (no hard `bpy` dependency)

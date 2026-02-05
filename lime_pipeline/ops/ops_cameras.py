@@ -536,6 +536,7 @@ __all__ = [
     "LIME_OT_reset_margin_alpha",
     "LIME_OT_retry_camera_margin_backgrounds",
     "LIME_OT_add_camera_rig",
+    "LIME_OT_add_simple_camera",
 ]
 
 
@@ -639,8 +640,8 @@ class LIME_OT_rename_shot_cameras(Operator):
 
 class LIME_OT_delete_camera_rig(Operator):
     bl_idname = "lime.delete_camera_rig"
-    bl_label = "Delete Camera (Rig)"
-    bl_description = "Delete this camera and its rig, then rename remaining cameras in the SHOT"
+    bl_label = "Delete Camera"
+    bl_description = "Delete the selected camera (and rig if present), then rename remaining cameras in the SHOT"
     bl_options = {'REGISTER', 'UNDO'}
 
     camera_name: StringProperty(name="Camera Name", default="")
@@ -938,8 +939,8 @@ class LIME_OT_sync_camera_list(Operator):
 
 class LIME_OT_delete_camera_rig_and_sync(Operator):
     bl_idname = 'lime.delete_camera_rig_and_sync'
-    bl_label = 'Delete Camera (Rig) and Refresh'
-    bl_description = 'Delete the selected camera rig and refresh the list'
+    bl_label = 'Delete Camera and Refresh'
+    bl_description = 'Delete the selected camera and refresh the list'
     bl_options = {'REGISTER', 'UNDO'}
 
     camera_name: StringProperty(name='Camera Name', default='')
@@ -1055,6 +1056,95 @@ class LIME_OT_retry_camera_margin_backgrounds(Operator):
         except Exception as ex:
             self.report({'ERROR'}, f"Error retrying margins: {ex}")
             return {'CANCELLED'}
+
+
+class LIME_OT_add_simple_camera(Operator):
+    bl_idname = "lime.add_simple_camera"
+    bl_label = "Create Camera (Simple)"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Add a simple camera to the SHOT's 00_CAM collection"
+
+    @classmethod
+    def poll(cls, ctx):
+        shot = validate_scene.active_shot_context(ctx)
+        return shot is not None
+
+    def execute(self, context):
+        shot = validate_scene.active_shot_context(context)
+        if shot is None:
+            self.report({'ERROR'}, "No active SHOT")
+            return {'CANCELLED'}
+
+        cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
+        if cam_coll is None:
+            self.report({'ERROR'}, "Active SHOT has no camera collection")
+            return {'CANCELLED'}
+
+        try:
+            cams_before = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
+            existing_cam_count = len(cams_before)
+        except Exception:
+            existing_cam_count = 0
+
+        try:
+            shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+        except Exception:
+            shot_idx = 0
+
+        # Make the shot camera collection active (best-effort).
+        try:
+            def _find_layer(layer, wanted):
+                if layer.collection == wanted:
+                    return layer
+                for ch in layer.children:
+                    found = _find_layer(ch, wanted)
+                    if found:
+                        return found
+                return None
+
+            root_layer = context.view_layer.layer_collection
+            target_layer = _find_layer(root_layer, cam_coll)
+            if target_layer is not None:
+                context.view_layer.active_layer_collection = target_layer
+        except Exception:
+            pass
+
+        # Create camera data + object directly to avoid UI context dependencies.
+        try:
+            cam_data = bpy.data.cameras.new("Camera")
+            new_cam = bpy.data.objects.new(cam_data.name, cam_data)
+            cam_coll.objects.link(new_cam)
+        except Exception as ex:
+            self.report({'ERROR'}, f"Could not create camera: {ex}")
+            return {'CANCELLED'}
+
+        # Ensure camera is the active scene camera.
+        try:
+            context.scene.camera = new_cam
+        except Exception:
+            pass
+
+        # Apply Lime naming and uniqueness.
+        try:
+            next_idx = existing_cam_count + 1
+            target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
+            while target_name in bpy.data.objects.keys() and bpy.data.objects[target_name] is not new_cam:
+                next_idx += 1
+                target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
+            new_cam.name = target_name
+            if getattr(new_cam, "data", None) is not None:
+                new_cam.data.name = target_name + ".Data"
+        except Exception:
+            pass
+
+        # Attach/update camera background margin guides for the new camera.
+        try:
+            ensure_camera_margin_backgrounds(new_cam, set_visible=True, defaults_alpha=0.5)
+        except Exception:
+            pass
+
+        self.report({'INFO'}, f"Simple camera created in {shot.name}/{C_CAM}")
+        return {'FINISHED'}
 
 
 class LIME_OT_add_camera_rig(Operator):

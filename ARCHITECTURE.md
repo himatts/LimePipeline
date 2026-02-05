@@ -48,10 +48,10 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Responsibilities:
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
-  - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
-  - `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections with preview counters and optional safe collection reorganization
-  - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
-  - Camera operations (`ops_cameras.py`): automatic margin background setup on camera creation/duplication
+- `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
+- `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections with preview counters and optional safe collection reorganization
+- `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
+- Camera operations (`ops_cameras.py`): rig and simple camera creation in SHOT camera collections, automatic margin background setup on camera creation/duplication
 - Rules:
   - UI feedback via `self.report`
   - Delegate naming/validation/paths to `core`; do not duplicate
