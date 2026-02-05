@@ -90,7 +90,6 @@ and only applied when the user confirms.
 
 Includes optional post-apply automation:
 - safe collection organization (Lights/Cameras/group key) from generic/root collections
-- texture copy + relink for affected renamed materials
 - preview counters before apply
 
 Clases Blender detectadas:

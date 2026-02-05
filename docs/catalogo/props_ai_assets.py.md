@@ -8,7 +8,6 @@ Stores AI-generated rename proposals for selected objects, materials and collect
 Also stores preview counters and opt-in automation toggles:
 - include collections in AI suggestions
 - organize collections on apply
-- organize textures on apply
 This module is intentionally UI-agnostic; panels and operators consume the state.
 
 Clases Blender detectadas:

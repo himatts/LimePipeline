@@ -1,7 +1,7 @@
 """AI Asset Organizer operators.
 
 Suggests and applies names for selected objects/materials/collections with AI,
-plus optional safe collection reorganization and texture relinking.
+plus optional safe collection reorganization.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ import base64
 import json
 import os
 import re
-import shutil
 import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -30,8 +29,6 @@ from ..core.asset_naming import (
 )
 from ..core.ai_asset_response import parse_items_from_response as parse_ai_asset_items
 from ..core.material_naming import ALLOWED_MATERIAL_TYPES, parse_name as parse_material_name
-from ..core.naming import find_project_root
-from ..core.paths import get_ramv_dir
 from ..props_ai_assets import LimeAIAssetItem
 from .ai_http import (
     OPENROUTER_CHAT_URL,
@@ -48,11 +45,8 @@ _MAX_IMAGE_BYTES = 3 * 1024 * 1024
 _SHOT_ROOT_RE = re.compile(r"^SHOT \d{2,3}$")
 _SHOT_CHILD_RE = re.compile(r"^SH\d{2,3}_")
 _GENERIC_COLLECTION_RE = re.compile(r"^Collection(?:\.\d{3})?$")
-_MAT_VERSION_SUFFIX_RE = re.compile(r"_V\d{2}$", flags=re.IGNORECASE)
-_NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]+")
 
 _RESERVED_GROUP_NAMES = {"Asset", "Object", "Collection", "Material"}
-_TEXTURE_SRC_SUPPORTED = {"FILE"}
 
 
 def _image_mime_for_path(path: str) -> Optional[str]:
@@ -625,183 +619,6 @@ def _apply_collection_reorganization(scene, reorg_plan: Dict[str, object], repor
     return created_count, moved_count
 
 
-def _material_stem_for_texture(name: str) -> str:
-    value = (name or "").strip()
-    if value.upper().startswith("MAT_"):
-        value = value[4:]
-    value = _MAT_VERSION_SUFFIX_RE.sub("", value)
-    tokens = [t for t in _NON_ALNUM_RE.split(value) if t]
-    if not tokens:
-        return "Material"
-    return "_".join(tokens)
-
-
-def _map_type_from_text(text: str) -> str:
-    lower = (text or "").lower()
-    if any(k in lower for k in ("normal", "_nrm", "_nor", "bump")):
-        return "Normal"
-    if any(k in lower for k in ("rough", "gloss")):
-        return "Roughness"
-    if any(k in lower for k in ("metal", "metallic")):
-        return "Metallic"
-    if any(k in lower for k in ("ao", "ambient occlusion", "occlusion")):
-        return "AO"
-    if any(k in lower for k in ("alpha", "opacity", "mask")):
-        return "Alpha"
-    if any(k in lower for k in ("height", "displace", "disp")):
-        return "Height"
-    if any(k in lower for k in ("emit", "emission")):
-        return "Emission"
-    if any(k in lower for k in ("color", "albedo", "diffuse", "base")):
-        return "BaseColor"
-    return "Generic"
-
-
-def _infer_map_type(material: Material, node, image) -> str:
-    parts = [
-        getattr(material, "name", "") or "",
-        getattr(node, "name", "") or "",
-        getattr(node, "label", "") or "",
-        getattr(image, "name", "") or "",
-        getattr(image, "filepath", "") or "",
-    ]
-    try:
-        for output in list(getattr(node, "outputs", []) or []):
-            parts.append(getattr(output, "name", "") or "")
-            for link in list(getattr(output, "links", []) or []):
-                parts.append(getattr(getattr(link, "to_socket", None), "name", "") or "")
-                parts.append(getattr(getattr(link, "to_node", None), "type", "") or "")
-                parts.append(getattr(getattr(link, "to_node", None), "name", "") or "")
-    except Exception:
-        pass
-    return _map_type_from_text(" ".join(parts))
-
-
-def _resolve_texture_destination_dir() -> Path:
-    raw_blend_path = (getattr(bpy.data, "filepath", "") or "").strip()
-    if raw_blend_path:
-        blend_path = Path(raw_blend_path)
-        root = find_project_root(str(blend_path))
-        if root is not None:
-            return get_ramv_dir(root) / "Assets" / "Textures"
-        return blend_path.parent / "Textures"
-
-    fallback_root = Path(bpy.path.abspath("//")) if hasattr(bpy, "path") else Path.cwd()
-    return fallback_root / "Textures"
-
-
-def _collect_material_image_usages(materials: Iterable[Material]) -> List[Tuple[Material, Any, Any, str]]:
-    usages: List[Tuple[Material, Any, Any, str]] = []
-    seen_rows: set[Tuple[int, int]] = set()
-    for mat in list(materials or []):
-        node_tree = getattr(mat, "node_tree", None)
-        if node_tree is None:
-            continue
-        for node in list(getattr(node_tree, "nodes", []) or []):
-            if getattr(node, "type", "") != "TEX_IMAGE":
-                continue
-            image = getattr(node, "image", None)
-            if image is None:
-                continue
-            key = (mat.as_pointer(), image.as_pointer())
-            if key in seen_rows:
-                continue
-            seen_rows.add(key)
-            map_type = _infer_map_type(mat, node, image)
-            usages.append((mat, node, image, map_type))
-    return usages
-
-
-def _sanitize_texture_token(value: str, fallback: str) -> str:
-    tokens = [t for t in _NON_ALNUM_RE.split(value or "") if t]
-    if not tokens:
-        return fallback
-    return "".join(t[0].upper() + t[1:] for t in tokens)
-
-
-def _organize_textures_for_materials(
-    materials: Iterable[Material],
-    *,
-    report,
-) -> int:
-    usage_rows = _collect_material_image_usages(materials)
-    if not usage_rows:
-        return 0
-
-    target_dir = _resolve_texture_destination_dir()
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-    except Exception as ex:
-        report({"WARNING"}, f"Cannot create texture destination folder: {ex}")
-        return 0
-
-    source_to_dest: Dict[str, Path] = {}
-    base_counter: Dict[str, int] = {}
-    warned_images: set[int] = set()
-    relinked_images: set[int] = set()
-
-    for mat, _node, image, map_type in usage_rows:
-        image_id = int(image.as_pointer())
-        source_kind = (getattr(image, "source", "") or "").upper()
-        if source_kind not in _TEXTURE_SRC_SUPPORTED:
-            if image_id not in warned_images:
-                warned_images.add(image_id)
-                report({"WARNING"}, f"Unsupported image source skipped: '{image.name}' ({source_kind})")
-            continue
-
-        if getattr(image, "packed_file", None) is not None:
-            if image_id not in warned_images:
-                warned_images.add(image_id)
-                report({"WARNING"}, f"Packed image skipped (no unpack in this tool): '{image.name}'")
-            continue
-
-        source_path = bpy.path.abspath(getattr(image, "filepath", "") or "")
-        if not source_path or not os.path.isfile(source_path):
-            if image_id not in warned_images:
-                warned_images.add(image_id)
-                report({"WARNING"}, f"Missing image file skipped: '{image.name}'")
-            continue
-        source_path = str(Path(source_path).resolve())
-
-        if source_path in source_to_dest:
-            dest_path = source_to_dest[source_path]
-        else:
-            ext = (Path(source_path).suffix or ".png").lower()
-            material_stem = _sanitize_texture_token(_material_stem_for_texture(mat.name), "Material")
-            map_stem = _sanitize_texture_token(map_type, "Generic")
-            base = f"TX_{material_stem}_{map_stem}"
-            index = base_counter.get(base, 0)
-            while True:
-                index += 1
-                candidate = target_dir / f"{base}_{index:02d}{ext}"
-                if not candidate.exists():
-                    break
-            base_counter[base] = index
-            try:
-                shutil.copy2(source_path, candidate)
-            except Exception as ex:
-                report({"WARNING"}, f"Failed copying texture '{image.name}': {ex}")
-                continue
-            dest_path = candidate
-            source_to_dest[source_path] = dest_path
-
-        if image_id in relinked_images:
-            continue
-
-        try:
-            if (getattr(bpy.data, "filepath", "") or "").strip():
-                new_path = bpy.path.relpath(str(dest_path))
-            else:
-                new_path = str(dest_path)
-            image.filepath = new_path
-            image.name = dest_path.stem
-            image.reload()
-            relinked_images.add(image_id)
-        except Exception as ex:
-            report({"WARNING"}, f"Failed relinking image '{image.name}': {ex}")
-
-    return len(relinked_images)
-
 class LIME_TB_OT_ai_asset_suggest_names(Operator):
     bl_idname = "lime_tb.ai_asset_suggest_names"
     bl_label = "AI: Suggest Names"
@@ -1210,10 +1027,6 @@ class LIME_TB_OT_ai_asset_apply_names(Operator):
             reorg_plan = _build_collection_reorg_plan(scene, rename_plan.get("org_objects", []))
             created_collections, moved_objects = _apply_collection_reorganization(scene, reorg_plan, self.report)
 
-        relinked_textures = 0
-        if bool(getattr(state, "organize_textures", False)) and successful_materials:
-            relinked_textures = _organize_textures_for_materials(successful_materials, report=self.report)
-
         _update_preview_state(context, state)
         self.report(
             {"INFO"},
@@ -1221,7 +1034,7 @@ class LIME_TB_OT_ai_asset_apply_names(Operator):
                 f"Applied: {renamed_objects} object(s), {renamed_materials} material(s), "
                 f"{renamed_collections} collection(s). "
                 f"Collections created: {created_collections}. Objects moved: {moved_objects}. "
-                f"Textures relinked: {relinked_textures}. Skipped: {skipped}."
+                f"Skipped: {skipped}."
             ),
         )
         return {"FINISHED"}

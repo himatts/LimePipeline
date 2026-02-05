@@ -68,11 +68,6 @@ class LimeAIAssetState(PropertyGroup):
         description="Move selected objects to safer category/group collections after applying names",
         default=False,
     )
-    organize_textures: BoolProperty(
-        name="Organize Textures on Apply",
-        description="Copy and relink textures used by renamed materials into a project-local Textures folder",
-        default=False,
-    )
     preview_summary: StringProperty(name="Preview", default="")
     preview_dirty: BoolProperty(name="Preview Dirty", default=False)
     planned_renames_objects: IntProperty(name="Planned Object Renames", default=0)

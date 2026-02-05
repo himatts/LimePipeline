@@ -49,7 +49,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
   - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
-  - `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections with preview counters, optional safe collection reorganization and optional texture copy+relink for affected materials
+  - `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections with preview counters and optional safe collection reorganization
   - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
   - Camera operations (`ops_cameras.py`): automatic margin background setup on camera creation/duplication
 - Rules:
@@ -64,6 +64,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - `ui_ai_material_renamer.py`: Lime Toolbox / AI Material Renamer panel with simplified UI (2-column editable list, local detection, filtering/ordering)
   - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, thumbnail grids, large previews, generate/retry, cleanup, output access)
   - `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel
+  - `ui_ai_asset_organizer.py`: Lime Toolbox panel hosts a separate Textures block (Scan/Adopt/Manifests)
 - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI, overlay unit visibility toggles, and measurement unit presets (mm/cm/m/in/ft); each run creates a new helper, which remains until manually removed and updates live when its active parent is scaled; overlay text turns yellow when targets have unapplied scale
 - Rules:
   - Prefer Blender native subpanels for sections (parent/child panels) instead of manual collapsible boxes
@@ -99,7 +100,6 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
    - Collections: strict CamelCase + deterministic uniqueness.
 7. Optional post-apply automation:
    - Safe collection organization (`Lights`, `Cameras`, grouped asset keys) only from generic/root collections.
-   - Texture organization for affected materials (copy + relink to project/fallback `Textures` folder).
 
 ### AI Render Converter (Storyboard)
 1. Resolve current frame and expected source render path under Storyboard/editables/AI/sources.
