@@ -1,4 +1,4 @@
-"""
+﻿"""
 UI to configure project naming (type, revision, scene) and saving helpers.
 
 Purpose: Centralize project root selection, enforce naming invariants, preview filename,
@@ -203,3 +203,38 @@ class LIME_PT_project_org(Panel):
         secondary_row = box3.row(align=True)
         secondary_row.operator("lime.ensure_folders", text="Create Folders", icon='FILE_NEW')
         secondary_row.operator("lime.open_folder", text="Open Folder", icon='FILE_FOLDER')
+
+        box_textures = layout.box()
+        box_textures.label(text="Textures")
+        box_textures.prop(st, "texture_adopt_use_ai", text="Use AI naming")
+        row_ai = box_textures.row(align=True)
+        row_ai.enabled = bool(getattr(st, "texture_adopt_use_ai", False))
+        row_ai.prop(st, "texture_adopt_ai_include_preview", text="AI include preview (low-res)")
+        row_tex = box_textures.row(align=True)
+        if hasattr(bpy.types, "LIME_OT_texture_scan_report"):
+            row_tex.operator("lime.texture_scan_report", text="Scan / Report", icon='IMAGE_DATA')
+        else:
+            row_tex.alert = True
+            row_tex.label(text="Texture Scan operator not registered", icon='ERROR')
+        row_fix = box_textures.row(align=True)
+        if hasattr(bpy.types, "LIME_OT_texture_adopt"):
+            op = row_fix.operator("lime.texture_adopt", text="Adopt / Fix", icon='IMPORT')
+            try:
+                op.use_ai = bool(getattr(st, "texture_adopt_use_ai", False))
+            except Exception:
+                pass
+            try:
+                op.include_ai_preview = bool(getattr(st, "texture_adopt_ai_include_preview", False))
+            except Exception:
+                pass
+        else:
+            row_fix.alert = True
+            row_fix.label(text="Texture Adopt operator not registered", icon='ERROR')
+
+        row_clean = box_textures.row(align=True)
+        if hasattr(bpy.types, "LIME_OT_texture_manifest_cleanup"):
+            row_clean.operator("lime.texture_manifest_cleanup", text="Delete Manifests", icon='TRASH')
+        else:
+            row_clean.alert = True
+            row_clean.label(text="Manifest cleanup operator not registered", icon='ERROR')
+

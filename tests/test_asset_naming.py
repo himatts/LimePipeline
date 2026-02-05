@@ -35,6 +35,10 @@ SPEC.loader.exec_module(asset_naming)  # type: ignore[arg-type]
 normalize_object_name = asset_naming.normalize_object_name
 ensure_unique_object_name = asset_naming.ensure_unique_object_name
 is_valid_object_name = asset_naming.is_valid_object_name
+normalize_collection_name = asset_naming.normalize_collection_name
+is_valid_collection_name = asset_naming.is_valid_collection_name
+ensure_unique_collection_name = asset_naming.ensure_unique_collection_name
+asset_group_key_from_name = asset_naming.asset_group_key_from_name
 build_material_name_with_scene_tag = asset_naming.build_material_name_with_scene_tag
 bump_material_version_until_unique = asset_naming.bump_material_version_until_unique
 
@@ -56,6 +60,19 @@ class AssetNamingTests(unittest.TestCase):
         existing = {"WheelMount", "WheelMount2"}
         self.assertEqual(ensure_unique_object_name("WheelMount", existing), "WheelMount3")
 
+    def test_collection_name_helpers(self):
+        self.assertEqual(normalize_collection_name("props group"), "PropsGroup")
+        self.assertTrue(is_valid_collection_name("PropsGroup01"))
+        self.assertFalse(is_valid_collection_name("Props_Group"))
+        self.assertEqual(
+            ensure_unique_collection_name("PropsGroup", {"PropsGroup", "PropsGroup2"}),
+            "PropsGroup3",
+        )
+
+    def test_asset_group_key_from_name(self):
+        self.assertEqual(asset_group_key_from_name("CarWheelFront"), "Car")
+        self.assertEqual(asset_group_key_from_name("UVLightProxy"), "UV")
+
     def test_material_name_build_and_bump_version(self):
         name = build_material_name_with_scene_tag("Wheelchair", "Metal", "Glossy", 1)
         self.assertTrue(name.startswith("MAT_Wheelchair_Metal_Glossy_V"))
@@ -65,4 +82,3 @@ class AssetNamingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

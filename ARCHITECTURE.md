@@ -28,7 +28,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - No imperative code; only data structures
 
 ### props
-- Files: `props.py` (WindowManager state), `props_ai_materials.py` (Scene-scoped AI material proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
+- Files: `props.py` (WindowManager state), `props_ai_materials.py` (Scene-scoped AI material proposals), `props_ai_assets.py` (Scene-scoped AI asset organizer proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
 - Responsibilities:
   - Centralize PropertyGroup definitions for persistent add-on state
   - Expose editable collections (`Scene.lime_ai_mat` for AI Material Renamer)
@@ -49,6 +49,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
   - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
+  - `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections with preview counters, optional safe collection reorganization and optional texture copy+relink for affected materials
   - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
   - Camera operations (`ops_cameras.py`): automatic margin background setup on camera creation/duplication
 - Rules:
@@ -85,6 +86,20 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 6. Selection helpers consider rename needs and review toggles; applying without a custom proposal leaves the original name intact.
 7. The summary counts in both panel and dialog highlight rename vs review workload and overall quality distribution.
 8. **Clear** removes proposals and resets review toggles without renaming anything.
+
+### AI Asset Organizer v2 (AI-assisted)
+1. User clicks **Suggest Names (AI)** from Lime Toolbox.
+2. Operator collects selected objects/materials and optional non-SHOT collections from selection ownership.
+3. Prompt includes hierarchy/context metadata (`parent_id`, `children_count`, `shared_data_users`, usage hints) and enforces strict JSON output.
+4. Suggestions are written to `Scene.lime_ai_assets.items` with row status (`NORMALIZED`, `INVALID`, read-only).
+5. Preview counters are computed before apply (`planned_renames_*`, collections to create, objects to move).
+6. **Apply Selected** renames selected rows with uniqueness guarantees:
+   - Objects: strict CamelCase + deterministic uniqueness.
+   - Materials: `MAT_*` validation + version bump when needed.
+   - Collections: strict CamelCase + deterministic uniqueness.
+7. Optional post-apply automation:
+   - Safe collection organization (`Lights`, `Cameras`, grouped asset keys) only from generic/root collections.
+   - Texture organization for affected materials (copy + relink to project/fallback `Textures` folder).
 
 ### AI Render Converter (Storyboard)
 1. Resolve current frame and expected source render path under Storyboard/editables/AI/sources.

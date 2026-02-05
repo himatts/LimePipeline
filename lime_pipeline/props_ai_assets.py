@@ -24,11 +24,13 @@ class LimeAIAssetItem(PropertyGroup):
         items=[
             ("OBJECT", "Object", "Rename an object"),
             ("MATERIAL", "Material", "Rename a material"),
+            ("COLLECTION", "Collection", "Rename a collection"),
         ],
         default="OBJECT",
     )
     object_ref: PointerProperty(type=bpy.types.Object)
     material_ref: PointerProperty(type=bpy.types.Material)
+    collection_ref: PointerProperty(type=bpy.types.Collection)
     original_name: StringProperty(name="Original", default="")
     suggested_name: StringProperty(name="Suggested", default="")
     selected_for_apply: BoolProperty(name="Apply", default=True)
@@ -56,6 +58,28 @@ class LimeAIAssetState(PropertyGroup):
         subtype="FILE_PATH",
         default="",
     )
+    include_collections: BoolProperty(
+        name="Include Collections",
+        description="Include relevant non-SHOT collections used by the current object selection",
+        default=True,
+    )
+    organize_collections: BoolProperty(
+        name="Organize Collections on Apply",
+        description="Move selected objects to safer category/group collections after applying names",
+        default=False,
+    )
+    organize_textures: BoolProperty(
+        name="Organize Textures on Apply",
+        description="Copy and relink textures used by renamed materials into a project-local Textures folder",
+        default=False,
+    )
+    preview_summary: StringProperty(name="Preview", default="")
+    preview_dirty: BoolProperty(name="Preview Dirty", default=False)
+    planned_renames_objects: IntProperty(name="Planned Object Renames", default=0)
+    planned_renames_materials: IntProperty(name="Planned Material Renames", default=0)
+    planned_renames_collections: IntProperty(name="Planned Collection Renames", default=0)
+    planned_collections_created: IntProperty(name="Planned Collections Created", default=0)
+    planned_objects_moved: IntProperty(name="Planned Objects Moved", default=0)
     is_busy: BoolProperty(name="Busy", default=False)
     last_error: StringProperty(name="Last Error", default="")
 

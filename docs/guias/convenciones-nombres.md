@@ -84,11 +84,27 @@ SHOT 01
 `-- SH01_90_BG
 ```
 
+### Colecciones de assets (AI Asset Organizer v2)
+- Formato recomendado: CamelCase alfanumerico (sin espacios, guiones, puntos ni guion bajo).
+- Evitar prefijos de SHOT para colecciones de assets reutilizables.
+- Nombres de categoria sugeridos por reglas seguras:
+  - `Lights`
+  - `Cameras`
+- Agrupaciones automaticas de assets usan la clave inicial CamelCase del nombre de objeto (ejemplo: `CarBody`, `CarWheel` -> `Car`).
+
 ## Camaras y rigs
 
 - Camara: `SHOT_##_CAMERA_{N}`
 - Camera Data: `SHOT_##_CAMERA_{N}.Data`
 - Rig Armature: `CAM_RIG_SH##_{N}` (o `CAM_RIG_SH###_{N}` si SHOT >= 100)
+
+## Nombres de texturas (AI Asset Organizer v2)
+
+- Formato objetivo al copiar/relinkear texturas afectadas:
+  - `TX_{MaterialStem}_{MapType}_{NN}.{ext}`
+- `MaterialStem`: nombre de material final sin prefijo `MAT_` ni sufijo `_V##`.
+- `MapType`: inferido por nodos/sockets (por ejemplo `BaseColor`, `Normal`, `Roughness`, `Metallic`, `Alpha`, `Height`, `Emission`, `AO`, `Generic`).
+- El sistema evita duplicar copias para el mismo archivo origen y relinkea rutas relativas cuando es posible.
 
 ## Outputs de render
 

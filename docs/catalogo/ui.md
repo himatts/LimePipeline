@@ -17,10 +17,11 @@ Clases Blender detectadas:
 
 ## lime_pipeline/ui/ui_ai_asset_organizer.py
 
-UI panel for AI-assisted object/material naming in Lime Toolbox.
+UI panel for AI-assisted object/material/collection naming in Lime Toolbox.
 
 This panel is lightweight; network calls and rename logic live in operators.
-Supports optional image context for multimodal models.
+Supports optional image context for multimodal models, preview counters,
+and opt-in toggles for collection/textures organization on apply.
 
 Clases Blender detectadas:
 

@@ -84,9 +84,14 @@ Clases Blender detectadas:
 
 AI Asset Organizer Operators.
 
-Suggests clear names for selected objects and their materials using OpenRouter.
+Suggests clear names for selected objects, materials and optional collections using OpenRouter.
 The workflow is intentionally user-controlled: suggestions are reviewed in a panel
 and only applied when the user confirms.
+
+Includes optional post-apply automation:
+- safe collection organization (Lights/Cameras/group key) from generic/root collections
+- texture copy + relink for affected renamed materials
+- preview counters before apply
 
 Clases Blender detectadas:
 

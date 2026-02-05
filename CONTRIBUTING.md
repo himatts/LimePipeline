@@ -20,6 +20,7 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Blender minimum version: 4.5.0
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
+- AI Asset Organizer v2: object/material/collection naming, preview counters, optional collection organization, optional texture copy+relink for affected materials
 - AI Render Converter UI includes thumbnail grids per section, large previews, cleanup tools, and output access
 - Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox)
 - Dimension Checker behavior: each run creates a new helper; manual cleanup is expected
@@ -81,6 +82,13 @@ See ARCHITECTURE.md for details.
 
 ## Existing tests (optional)
 The repo may contain a small number of unit tests for `core/` logic. Run them only when asked or when it helps validate a change.
+
+## AI Asset Organizer smoke checklist
+- Select objects with materials and run **Suggest Names (AI)**; verify editable rows and read-only handling.
+- In SHOT-structured scenes, verify SHOT collections are not renamed/reorganized by the organizer.
+- Apply selected rows and verify uniqueness handling for objects/materials/collections.
+- Enable **Organize Collections on Apply** and verify only generic/root memberships are moved.
+- Enable **Organize Textures on Apply** and verify affected material textures are copied/relinked with relative paths when possible.
 
 ## Commit style
 - Conventional summary preferred: feat:, fix:, chore:, refactor:, docs:

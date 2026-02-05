@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 4, 4),  # AI Asset Organizer image context
+    "version": (0, 6, 0),  # AI Asset Organizer v2 (collections, preview, texture relink)
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -228,6 +228,15 @@ from .ops.ops_comp_view_layer_outputs import (
 from .ops.ops_linked_collections import (
     LIME_OT_localize_linked_collection,
 )
+from .ops.ops_texture_scan import (
+    LIME_OT_texture_scan_report,
+)
+from .ops.ops_texture_adopt import (
+    LIME_OT_texture_adopt,
+)
+from .ops.ops_texture_manifest_cleanup import (
+    LIME_OT_texture_manifest_cleanup,
+)
 
 
 # Class collections for organized registration
@@ -239,6 +248,9 @@ NON_PANEL_CLASSES = (
     LIME_OT_ensure_folders,
     LIME_OT_open_folder,
     LIME_OT_open_output_folder,
+    LIME_OT_texture_scan_report,
+    LIME_OT_texture_adopt,
+    LIME_OT_texture_manifest_cleanup,
     LIME_OT_set_anim_output_test,
     LIME_OT_set_anim_output_final,
     LIME_OT_set_anim_output_test_local,
@@ -427,6 +439,18 @@ def _panel_sort_tuple(cls):
 # Global list to track registered classes for proper cleanup
 REGISTERED_CLASSES = []
 
+def _safe_register_class(cls) -> bool:
+    """Register a Blender class without aborting addon registration on failure."""
+    try:
+        bpy.utils.register_class(cls)
+        return True
+    except Exception as ex:
+        try:
+            print(f"[Lime Pipeline] Failed registering {getattr(cls, '__name__', cls)}: {ex}")
+        except Exception:
+            pass
+        return False
+
 def register():
     """Register all Lime Pipeline classes, properties, and handlers.
 
@@ -491,29 +515,57 @@ def register():
 
     REGISTERED_CLASSES = []
     for cls in NON_PANEL_CLASSES:
-        bpy.utils.register_class(cls)
-        REGISTERED_CLASSES.append(cls)
+        if _safe_register_class(cls):
+            REGISTERED_CLASSES.append(cls)
 
     for parent_cls in sorted(pipeline_root_panels, key=_panel_sort_tuple):
-        bpy.utils.register_class(parent_cls)
-        REGISTERED_CLASSES.append(parent_cls)
+        if _safe_register_class(parent_cls):
+            REGISTERED_CLASSES.append(parent_cls)
         parent_id = getattr(parent_cls, 'bl_idname', '') or parent_cls.__name__
         for child_cls in sorted(pipeline_children.get(parent_id, ()), key=_panel_sort_tuple):
-            bpy.utils.register_class(child_cls)
-            REGISTERED_CLASSES.append(child_cls)
+            if _safe_register_class(child_cls):
+                REGISTERED_CLASSES.append(child_cls)
 
     remaining = [cls for cls in PIPELINE_PANEL_CLASSES if cls not in REGISTERED_CLASSES]
     for cls in sorted(remaining, key=_panel_sort_tuple):
-        bpy.utils.register_class(cls)
-        REGISTERED_CLASSES.append(cls)
+        if _safe_register_class(cls):
+            REGISTERED_CLASSES.append(cls)
 
     for cls in OTHER_PANEL_CLASSES:
-        bpy.utils.register_class(cls)
-        REGISTERED_CLASSES.append(cls)
+        if _safe_register_class(cls):
+            REGISTERED_CLASSES.append(cls)
 
     for cls in TOOLBOX_PANEL_CLASSES:
-        bpy.utils.register_class(cls)
-        REGISTERED_CLASSES.append(cls)
+        if _safe_register_class(cls):
+            REGISTERED_CLASSES.append(cls)
+
+    # Self-heal: ensure texture operators exist even if registration ordering changes.
+    try:
+        if not hasattr(bpy.types, "LIME_OT_texture_scan_report"):
+            from .ops.ops_texture_scan import LIME_OT_texture_scan_report as _LIME_OT_texture_scan_report
+            if _safe_register_class(_LIME_OT_texture_scan_report):
+                REGISTERED_CLASSES.append(_LIME_OT_texture_scan_report)
+        if not hasattr(bpy.types, "LIME_OT_texture_adopt"):
+            from .ops.ops_texture_adopt import LIME_OT_texture_adopt as _LIME_OT_texture_adopt
+            if _safe_register_class(_LIME_OT_texture_adopt):
+                REGISTERED_CLASSES.append(_LIME_OT_texture_adopt)
+    except Exception:
+        pass
+
+    # Self-check: ensure key texture operators are registered (helps diagnose stale installs).
+    try:
+        lime_ops = getattr(bpy.ops, "lime", None)
+        scan_ok = bool(lime_ops and getattr(lime_ops, "texture_scan_report", None))
+        adopt_ok = bool(lime_ops and getattr(lime_ops, "texture_adopt", None))
+        type_scan_ok = bool(hasattr(bpy.types, "LIME_OT_texture_scan_report"))
+        type_adopt_ok = bool(hasattr(bpy.types, "LIME_OT_texture_adopt"))
+        print(
+            "[Lime Pipeline] Operator registry:",
+            f"scan ops={scan_ok} types={type_scan_ok};",
+            f"adopt ops={adopt_ok} types={type_adopt_ok}",
+        )
+    except Exception:
+        pass
 
     # Register load handler to hydrate state on file load
     if _on_load_post not in bpy.app.handlers.load_post:

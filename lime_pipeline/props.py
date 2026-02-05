@@ -332,6 +332,18 @@ class LimePipelineState(PropertyGroup):
         update=_on_auto_select_hierarchy_update,
     )
 
+    texture_adopt_use_ai: BoolProperty(
+        name="Use AI texture naming",
+        description="Use OpenRouter to suggest texture filename stems when adopting textures into rsc/Textures.",
+        default=False,
+    )
+
+    texture_adopt_ai_include_preview: BoolProperty(
+        name="AI include preview",
+        description="Send a tiny low-res preview of each texture to OpenRouter for better naming. This sends image content to a third party.",
+        default=False,
+    )
+
     def _on_solo_shot_activo_update(self, context):
         try:
             if getattr(self, 'solo_shot_activo', False):

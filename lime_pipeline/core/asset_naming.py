@@ -22,6 +22,8 @@ from .material_naming import (
 
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]+")
 _OBJECT_VALID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+_COLLECTION_VALID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+_CAMEL_TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z][a-z0-9]*")
 
 
 def normalize_object_name(raw: str, *, fallback: str = "Asset", max_len: int = 63) -> str:
@@ -86,6 +88,47 @@ def ensure_unique_object_name(name: str, existing: Iterable[str], *, max_len: in
         suffix += 1
 
 
+def normalize_collection_name(raw: str, *, fallback: str = "CollectionAsset", max_len: int = 63) -> str:
+    """Normalize a collection name with the same strict policy as objects."""
+    return normalize_object_name(raw, fallback=fallback, max_len=max_len)
+
+
+def is_valid_collection_name(name: str) -> bool:
+    """Return True if collection name matches the strict collection convention."""
+    if not name:
+        return False
+    return _COLLECTION_VALID_RE.match(name) is not None
+
+
+def ensure_unique_collection_name(name: str, existing: Iterable[str], *, max_len: int = 63) -> str:
+    """Return a unique collection name by appending numeric suffixes when needed."""
+    used = set(existing or [])
+    base = normalize_collection_name(name, max_len=max_len)
+    if base not in used:
+        return base
+
+    suffix = 2
+    while True:
+        suffix_str = str(suffix)
+        trimmed = base[: max(1, max_len - len(suffix_str))]
+        candidate = f"{trimmed}{suffix_str}"
+        if candidate not in used:
+            return candidate
+        suffix += 1
+
+
+def asset_group_key_from_name(name: str) -> str:
+    """Derive a stable grouping token from a CamelCase-style asset name."""
+    normalized = normalize_object_name(name or "", fallback="Asset")
+    match = _CAMEL_TOKEN_RE.match(normalized)
+    if not match:
+        return normalized
+    token = match.group(0) or normalized
+    if token.isdigit():
+        return normalized
+    return token
+
+
 def build_material_name_with_scene_tag(
     scene_tag: str,
     material_type: str,
@@ -146,4 +189,3 @@ def bump_material_version_until_unique(universe: Iterable[str], proposed_name: s
             return candidate
 
     return proposed_name
-

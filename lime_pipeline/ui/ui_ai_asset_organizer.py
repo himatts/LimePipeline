@@ -1,12 +1,15 @@
-"""UI panel for AI-assisted object/material naming in Lime Toolbox.
-
-This panel is lightweight; network calls and rename logic live in operators.
-"""
+"""UI panel for AI-assisted asset naming in Lime Toolbox."""
 
 from __future__ import annotations
 
+import re
+
 import bpy
 from bpy.types import Panel, UIList
+
+
+_SHOT_ROOT_RE = re.compile(r"^SHOT \d{2,3}$")
+_SHOT_CHILD_RE = re.compile(r"^SH\d{2,3}_")
 
 
 class LIME_TB_UL_ai_asset_items(UIList):
@@ -24,7 +27,12 @@ class LIME_TB_UL_ai_asset_items(UIList):
         item_type = (getattr(item, "item_type", "OBJECT") or "OBJECT").upper()
         status = (getattr(item, "status", "") or "").upper()
 
-        type_icon = "OBJECT_DATA" if item_type == "OBJECT" else "MATERIAL"
+        if item_type == "OBJECT":
+            type_icon = "OBJECT_DATA"
+        elif item_type == "COLLECTION":
+            type_icon = "OUTLINER_COLLECTION"
+        else:
+            type_icon = "MATERIAL"
         if read_only:
             type_icon = "LIBRARY_DATA_DIRECT"
 
@@ -50,7 +58,7 @@ class LIME_TB_UL_ai_asset_items(UIList):
         proposal_col = row_layout.column(align=True)
         proposal_col.ui_units_x = 10.0
         if read_only:
-            proposal_col.label(text=getattr(item, "suggested_name", "") or "—")
+            proposal_col.label(text=getattr(item, "suggested_name", "") or "-")
         else:
             proposal_col.prop(item, "suggested_name", text="")
 
@@ -74,19 +82,35 @@ class LIME_TB_PT_ai_asset_organizer(Panel):
 
         selected_objects = list(getattr(context, "selected_objects", None) or [])
         selected_mats = set()
+        selected_cols = set()
+        scene_root = getattr(scene, "collection", None)
         for obj in selected_objects:
             for slot in getattr(obj, "material_slots", []) or []:
                 mat = getattr(slot, "material", None)
                 if mat is not None:
                     selected_mats.add(mat)
+            for coll in list(getattr(obj, "users_collection", []) or []):
+                if coll is None:
+                    continue
+                if scene_root is not None and coll == scene_root:
+                    continue
+                name = getattr(coll, "name", "") or ""
+                if _SHOT_ROOT_RE.match(name) or _SHOT_CHILD_RE.match(name):
+                    continue
+                selected_cols.add(coll)
 
         summary = f"Selection: {len(selected_objects)} object(s), {len(selected_mats)} material(s)"
+        if getattr(state, "include_collections", True):
+            summary += f", {len(selected_cols)} collection(s)"
         layout.label(text=summary, icon="RESTRICT_SELECT_OFF")
 
         layout.prop(state, "context", text="Context")
         layout.prop(state, "use_image_context", text="Use Image Context")
         if getattr(state, "use_image_context", False):
             layout.prop(state, "image_path", text="Image")
+        layout.prop(state, "include_collections", text="Include Collections")
+        layout.prop(state, "organize_collections", text="Organize Collections on Apply")
+        layout.prop(state, "organize_textures", text="Organize Textures on Apply")
         layout.label(text="Note: names and context are sent to OpenRouter.", icon="INFO")
 
         if getattr(state, "last_error", ""):
@@ -95,7 +119,7 @@ class LIME_TB_PT_ai_asset_organizer(Panel):
             box.label(text=str(state.last_error), icon="ERROR")
 
         if getattr(state, "is_busy", False):
-            layout.label(text="Working…", icon="TIME")
+            layout.label(text="Working...", icon="TIME")
 
         row = layout.row(align=True)
         row.enabled = not getattr(state, "is_busy", False)
@@ -107,6 +131,22 @@ class LIME_TB_PT_ai_asset_organizer(Panel):
         apply_row.operator("lime_tb.ai_asset_apply_names", text="Apply Selected", icon="CHECKMARK")
 
         if getattr(state, "items", None):
+            preview_box = layout.box()
+            preview_box.label(
+                text=(
+                    f"Will rename {getattr(state, 'planned_renames_objects', 0)} objects, "
+                    f"{getattr(state, 'planned_renames_materials', 0)} materials, "
+                    f"{getattr(state, 'planned_renames_collections', 0)} collections"
+                ),
+                icon="INFO",
+            )
+            preview_box.label(
+                text=(
+                    f"Will create {getattr(state, 'planned_collections_created', 0)} collections, "
+                    f"move {getattr(state, 'planned_objects_moved', 0)} objects"
+                ),
+                icon="OUTLINER_COLLECTION",
+            )
             layout.separator()
             layout.template_list(
                 "LIME_TB_UL_ai_asset_items",
@@ -123,3 +163,4 @@ __all__ = [
     "LIME_TB_PT_ai_asset_organizer",
     "LIME_TB_UL_ai_asset_items",
 ]
+

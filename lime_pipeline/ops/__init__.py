@@ -41,6 +41,15 @@ from .ops_ai_asset_organizer import (
     LIME_TB_OT_ai_asset_apply_names,
     LIME_TB_OT_ai_asset_clear,
 )
+from .ops_texture_scan import (
+    LIME_OT_texture_scan_report,
+)
+from .ops_texture_adopt import (
+    LIME_OT_texture_adopt,
+)
+from .ops_texture_manifest_cleanup import (
+    LIME_OT_texture_manifest_cleanup,
+)
 
 __all__ = [
     "LIME_OT_new_shot",
@@ -53,6 +62,9 @@ __all__ = [
     "LIME_TB_OT_ai_asset_suggest_names",
     "LIME_TB_OT_ai_asset_apply_names",
     "LIME_TB_OT_ai_asset_clear",
+    "LIME_OT_texture_scan_report",
+    "LIME_OT_texture_adopt",
+    "LIME_OT_texture_manifest_cleanup",
 ]
 
 

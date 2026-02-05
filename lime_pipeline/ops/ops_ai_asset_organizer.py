@@ -1,8 +1,7 @@
-"""AI Asset Organizer Operators.
+"""AI Asset Organizer operators.
 
-Suggests clear names for selected objects and their materials using OpenRouter.
-The workflow is intentionally user-controlled: suggestions are reviewed in a panel
-and only applied when the user confirms.
+Suggests and applies names for selected objects/materials/collections with AI,
+plus optional safe collection reorganization and texture relinking.
 """
 
 from __future__ import annotations
@@ -10,19 +9,29 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
+import shutil
 import threading
-from typing import Dict, List, Optional, Tuple, Any
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import bpy
-from bpy.types import Material, Object, Operator
+from bpy.types import Collection, Material, Object, Operator
 
 from ..core.asset_naming import (
+    asset_group_key_from_name,
     bump_material_version_until_unique,
+    ensure_unique_collection_name,
     ensure_unique_object_name,
+    is_valid_collection_name,
     is_valid_object_name,
+    normalize_collection_name,
     normalize_object_name,
 )
+from ..core.ai_asset_response import parse_items_from_response as parse_ai_asset_items
 from ..core.material_naming import ALLOWED_MATERIAL_TYPES, parse_name as parse_material_name
+from ..core.naming import find_project_root
+from ..core.paths import get_ramv_dir
 from ..props_ai_assets import LimeAIAssetItem
 from .ai_http import (
     OPENROUTER_CHAT_URL,
@@ -35,6 +44,15 @@ from .ai_http import (
 
 _DEFAULT_MODEL = "google/gemini-2.0-flash-lite-001"
 _MAX_IMAGE_BYTES = 3 * 1024 * 1024
+
+_SHOT_ROOT_RE = re.compile(r"^SHOT \d{2,3}$")
+_SHOT_CHILD_RE = re.compile(r"^SH\d{2,3}_")
+_GENERIC_COLLECTION_RE = re.compile(r"^Collection(?:\.\d{3})?$")
+_MAT_VERSION_SUFFIX_RE = re.compile(r"_V\d{2}$", flags=re.IGNORECASE)
+_NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]+")
+
+_RESERVED_GROUP_NAMES = {"Asset", "Object", "Collection", "Material"}
+_TEXTURE_SRC_SUPPORTED = {"FILE"}
 
 
 def _image_mime_for_path(path: str) -> Optional[str]:
@@ -81,7 +99,6 @@ def _addon_prefs(context) -> Optional[Any]:
 
 
 def _schema_json_object() -> Dict[str, object]:
-    # Fallback for providers that don't support json_schema structured outputs
     return {"type": "json_object"}
 
 
@@ -122,65 +139,140 @@ def _is_material_read_only(mat: Material) -> bool:
     return bool(getattr(mat, "library", None) or getattr(mat, "override_library", None))
 
 
-def _collect_selection(context) -> Tuple[List[Object], List[Material]]:
+def _is_collection_read_only(coll: Collection) -> bool:
+    return bool(getattr(coll, "library", None) or getattr(coll, "override_library", None))
+
+
+def _is_shot_collection_name(name: str) -> bool:
+    value = (name or "").strip()
+    return bool(_SHOT_ROOT_RE.match(value) or _SHOT_CHILD_RE.match(value))
+
+
+def _is_generic_collection_name(name: str) -> bool:
+    return bool(_GENERIC_COLLECTION_RE.match((name or "").strip()))
+
+
+def _is_generic_collection(coll: Optional[Collection], scene) -> bool:
+    if coll is None:
+        return True
+    if coll == getattr(scene, "collection", None):
+        return True
+    return _is_generic_collection_name(getattr(coll, "name", "") or "")
+
+
+def _object_uses_shot_structure(obj: Object) -> bool:
+    for coll in list(getattr(obj, "users_collection", []) or []):
+        if _is_shot_collection_name(getattr(coll, "name", "") or ""):
+            return True
+    return False
+
+
+def _find_root_child(scene, name: str) -> Optional[Collection]:
+    root = getattr(scene, "collection", None)
+    if root is None:
+        return None
+    for child in list(getattr(root, "children", []) or []):
+        if (getattr(child, "name", "") or "") == name:
+            return child
+    return None
+
+
+def _collect_selection(
+    context,
+    *,
+    include_collections: bool,
+) -> Tuple[List[Object], List[Material], List[Collection]]:
     objects = list(getattr(context, "selected_objects", None) or [])
     materials: List[Material] = []
-    seen = set()
+    collections: List[Collection] = []
+
+    seen_mats: set[int] = set()
+    seen_cols: set[int] = set()
+    scene_root = getattr(getattr(context, "scene", None), "collection", None)
+
     for obj in objects:
         for slot in getattr(obj, "material_slots", []) or []:
             mat = getattr(slot, "material", None)
             if mat is None:
                 continue
-            if mat.as_pointer() in seen:
+            key = mat.as_pointer()
+            if key in seen_mats:
                 continue
-            seen.add(mat.as_pointer())
+            seen_mats.add(key)
             materials.append(mat)
-    return objects, materials
+
+        if not include_collections:
+            continue
+        for coll in list(getattr(obj, "users_collection", []) or []):
+            if coll is None:
+                continue
+            if scene_root is not None and coll == scene_root:
+                continue
+            if _is_shot_collection_name(getattr(coll, "name", "") or ""):
+                continue
+            key = coll.as_pointer()
+            if key in seen_cols:
+                continue
+            seen_cols.add(key)
+            collections.append(coll)
+
+    return objects, materials, collections
 
 
-def _build_prompt(context_text: str, objects: List[Dict[str, object]], materials: List[Dict[str, object]]) -> str:
+def _build_scene_summary(
+    objects: List[Dict[str, object]],
+    materials: List[Dict[str, object]],
+    collections: List[Dict[str, object]],
+) -> str:
+    type_counts: Dict[str, int] = {}
+    for entry in objects:
+        t = str(entry.get("type") or "UNKNOWN")
+        type_counts[t] = type_counts.get(t, 0) + 1
+    type_part = ", ".join(f"{k}:{v}" for k, v in sorted(type_counts.items()))
+    if not type_part:
+        type_part = "none"
+    return (
+        f"Selected assets -> Objects: {len(objects)} ({type_part}); "
+        f"Materials: {len(materials)}; Collections: {len(collections)}."
+    )
+
+
+def _build_prompt(
+    context_text: str,
+    scene_summary: str,
+    objects: List[Dict[str, object]],
+    materials: List[Dict[str, object]],
+    collections: List[Dict[str, object]],
+) -> str:
     allowed_types = ", ".join(ALLOWED_MATERIAL_TYPES)
-    context_block = (context_text or "").strip()
-    if context_block:
-        context_block = f"Context: {context_block}\n"
+    context_block = (context_text or "").strip() or scene_summary
+    context_line = f"Context: {context_block}\n" if context_block else ""
 
     payload = {
+        "scene_summary": scene_summary,
         "objects": objects,
         "materials": materials,
+        "collections": collections,
     }
-
     compact_json = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
     return (
         "Return ONLY JSON per schema.\n"
-        f"{context_block}"
+        f"{context_line}"
         "Rules:\n"
         "- Objects: CamelCase ASCII alphanumeric, no spaces/underscores/dots/dashes, no shot/scene prefixes.\n"
         "- Materials: MAT_{SceneTag?}_{MaterialType}_{Finish}_{V##}. SceneTag optional.\n"
         f"- MaterialType must be one of: {allowed_types}.\n"
-        "- Finish CamelCase alphanumeric; Version V01..V99.\n"
-        "- Names must be unique per category.\n"
+        "- Collections: CamelCase ASCII alphanumeric, no spaces/underscores/dots/dashes, avoid shot prefixes.\n"
+        "- Use hierarchy/context hints (parent_id, children_count, shared_data_users, collection_hints, used_on).\n"
+        "- Names must be unique per category (object/material/collection).\n"
         "Items JSON:\n"
         f"{compact_json}\n"
     )
 
 
 def _parse_items_from_response(parsed: Optional[Dict[str, object]]) -> Optional[List[Dict[str, object]]]:
-    if not isinstance(parsed, dict):
-        return None
-    items = parsed.get("items")
-    if isinstance(items, list):
-        return items
-    objects = parsed.get("objects")
-    materials = parsed.get("materials")
-    if isinstance(objects, list) or isinstance(materials, list):
-        combined: List[Dict[str, object]] = []
-        if isinstance(objects, list):
-            combined.extend(objects)
-        if isinstance(materials, list):
-            combined.extend(materials)
-        return combined if combined else None
-    return None
+    return parse_ai_asset_items(parsed)
 
 
 def _openrouter_suggest(
@@ -212,7 +304,7 @@ def _openrouter_suggest(
         "model": model or _DEFAULT_MODEL,
         "messages": messages,
         "temperature": 0.2,
-        "max_tokens": 800,
+        "max_tokens": 900,
         "response_format": _schema_assets(),
     }
 
@@ -223,7 +315,6 @@ def _openrouter_suggest(
             if image_data_url:
                 print("[AI Asset Organizer] Image attached (data URL length):", len(image_data_url))
             print("[AI Asset Organizer] Prompt preview:\n", (prompt or "")[:2000])
-            print("[AI Asset Organizer] Response format:", payload.get("response_format"))
         except Exception:
             pass
 
@@ -233,19 +324,18 @@ def _openrouter_suggest(
         finish_reason = (result or {}).get("choices", [{}])[0].get("finish_reason")
     except Exception:
         finish_reason = None
-    if debug:
-        try:
-            print("[AI Asset Organizer] Raw response keys:", list((result or {}).keys()))
-            print("[AI Asset Organizer] Raw response:", result)
-        except Exception:
-            pass
     text = extract_message_content(result or {}) if result else None
     if not text:
         try:
             choice = (result or {}).get("choices", [{}])[0]
             finish_reason = choice.get("finish_reason")
             if finish_reason:
-                return None, f"Model returned no content (finish_reason={finish_reason}). Try a model that supports JSON output or reduce selection size."
+                return (
+                    None,
+                    f"Model returned no content (finish_reason={finish_reason}). "
+                    "Try a model that supports JSON output or reduce selection size.",
+                    finish_reason,
+                )
         except Exception:
             pass
     parsed = parse_json_from_text(text or "") if text else None
@@ -253,7 +343,6 @@ def _openrouter_suggest(
     if items:
         return items, None, finish_reason
 
-    # Fallback: request json_object and parse message text
     payload_fallback = dict(payload)
     payload_fallback["response_format"] = _schema_json_object()
     result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=headers, timeout=timeout)
@@ -262,12 +351,6 @@ def _openrouter_suggest(
         finish_reason2 = (result2 or {}).get("choices", [{}])[0].get("finish_reason")
     except Exception:
         finish_reason2 = None
-    if debug:
-        try:
-            print("[AI Asset Organizer] Raw fallback response keys:", list((result2 or {}).keys()))
-            print("[AI Asset Organizer] Raw fallback response:", result2)
-        except Exception:
-            pass
     text2 = extract_message_content(result2 or {}) if result2 else None
     parsed2 = parse_json_from_text(text2 or "") if text2 else None
     items2 = _parse_items_from_response(parsed2) if parsed2 else None
@@ -276,11 +359,453 @@ def _openrouter_suggest(
 
     return None, "AI response was not valid JSON for the expected schema", finish_reason2 or finish_reason
 
+def _status_invalid(status: str) -> bool:
+    return (status or "").strip().upper().startswith("INVALID")
+
+
+def _row_can_apply(row: LimeAIAssetItem) -> bool:
+    if not getattr(row, "selected_for_apply", False):
+        return False
+    if getattr(row, "read_only", False):
+        return False
+    suggested = (getattr(row, "suggested_name", "") or "").strip()
+    if not suggested:
+        return False
+    if _status_invalid(getattr(row, "status", "")):
+        return False
+    return True
+
+
+def _build_rename_plan(state) -> Dict[str, object]:
+    obj_existing = {o.name for o in bpy.data.objects}
+    mat_existing = {m.name for m in bpy.data.materials}
+    coll_existing = {c.name for c in bpy.data.collections}
+
+    object_ops: List[Tuple[Object, str]] = []
+    material_ops: List[Tuple[Material, str]] = []
+    collection_ops: List[Tuple[Collection, str]] = []
+    future_object_names: Dict[int, str] = {}
+    org_objects: List[Object] = []
+    org_seen: set[int] = set()
+
+    for row in list(getattr(state, "items", []) or []):
+        if getattr(row, "item_type", "OBJECT") == "OBJECT":
+            obj = getattr(row, "object_ref", None)
+            if obj is None:
+                continue
+            key = obj.as_pointer()
+            if _row_can_apply(row) and key not in org_seen:
+                org_seen.add(key)
+                org_objects.append(obj)
+            if not _row_can_apply(row):
+                continue
+            old = obj.name
+            obj_existing.discard(old)
+            normalized = normalize_object_name(getattr(row, "suggested_name", ""))
+            if not is_valid_object_name(normalized):
+                obj_existing.add(old)
+                continue
+            unique = ensure_unique_object_name(normalized, obj_existing)
+            obj_existing.add(unique)
+            future_object_names[key] = unique
+            if unique != old:
+                object_ops.append((obj, unique))
+            continue
+
+        if getattr(row, "item_type", "") == "MATERIAL":
+            mat = getattr(row, "material_ref", None)
+            if mat is None or not _row_can_apply(row):
+                continue
+            old = mat.name
+            mat_existing.discard(old)
+            suggested = (getattr(row, "suggested_name", "") or "").strip()
+            if not parse_material_name(suggested):
+                mat_existing.add(old)
+                continue
+            unique = bump_material_version_until_unique(mat_existing, suggested)
+            mat_existing.add(unique)
+            if unique != old:
+                material_ops.append((mat, unique))
+            continue
+
+        if getattr(row, "item_type", "") == "COLLECTION":
+            coll = getattr(row, "collection_ref", None)
+            if coll is None or not _row_can_apply(row):
+                continue
+            old = coll.name
+            coll_existing.discard(old)
+            normalized = normalize_collection_name(getattr(row, "suggested_name", ""))
+            if not is_valid_collection_name(normalized):
+                coll_existing.add(old)
+                continue
+            unique = ensure_unique_collection_name(normalized, coll_existing)
+            coll_existing.add(unique)
+            if unique != old:
+                collection_ops.append((coll, unique))
+
+    return {
+        "object_ops": object_ops,
+        "material_ops": material_ops,
+        "collection_ops": collection_ops,
+        "future_object_names": future_object_names,
+        "org_objects": org_objects,
+    }
+
+
+def _build_collection_reorg_plan(
+    scene,
+    objects: Iterable[Object],
+    *,
+    future_object_names: Optional[Dict[int, str]] = None,
+) -> Dict[str, object]:
+    future_object_names = future_object_names or {}
+    unique_objects: List[Object] = []
+    seen: set[int] = set()
+    for obj in list(objects or []):
+        if obj is None:
+            continue
+        key = obj.as_pointer()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_objects.append(obj)
+
+    group_key_by_obj: Dict[int, str] = {}
+    group_counts: Dict[str, int] = {}
+    for obj in unique_objects:
+        if _is_object_read_only(obj) or _object_uses_shot_structure(obj):
+            continue
+        if getattr(obj, "type", "") in {"LIGHT", "CAMERA"}:
+            continue
+        name_hint = future_object_names.get(obj.as_pointer(), obj.name)
+        key = asset_group_key_from_name(name_hint)
+        if not key or key in _RESERVED_GROUP_NAMES:
+            continue
+        group_key_by_obj[obj.as_pointer()] = key
+        group_counts[key] = group_counts.get(key, 0) + 1
+
+    create_names: set[str] = set()
+    move_plan: List[Tuple[Object, str]] = []
+    root_names = {c.name for c in list(getattr(scene.collection, "children", []) or [])}
+
+    for obj in unique_objects:
+        if _is_object_read_only(obj) or _object_uses_shot_structure(obj):
+            continue
+
+        target_name = ""
+        obj_type = getattr(obj, "type", "")
+        if obj_type == "LIGHT":
+            target_name = "Lights"
+        elif obj_type == "CAMERA":
+            target_name = "Cameras"
+        else:
+            key = group_key_by_obj.get(obj.as_pointer(), "")
+            if key and group_counts.get(key, 0) >= 2:
+                target_name = key
+
+        if not target_name:
+            continue
+
+        users_collection = list(getattr(obj, "users_collection", []) or [])
+        has_generic_source = (not users_collection) or any(_is_generic_collection(c, scene) for c in users_collection)
+        if not has_generic_source:
+            continue
+
+        target_coll = _find_root_child(scene, target_name)
+        linked_to_target = bool(target_coll is not None and obj in list(getattr(target_coll, "objects", []) or []))
+        generic_to_unlink = [c for c in users_collection if _is_generic_collection(c, scene) and c != target_coll]
+
+        if linked_to_target and not generic_to_unlink:
+            continue
+
+        move_plan.append((obj, target_name))
+        if target_coll is None and target_name not in root_names:
+            create_names.add(target_name)
+            root_names.add(target_name)
+
+    return {"create_names": create_names, "moves": move_plan}
+
+
+def _update_preview_state(context, state) -> None:
+    rename_plan = _build_rename_plan(state)
+    obj_count = len(rename_plan.get("object_ops", []))
+    mat_count = len(rename_plan.get("material_ops", []))
+    col_count = len(rename_plan.get("collection_ops", []))
+
+    create_count = 0
+    move_count = 0
+    if bool(getattr(state, "organize_collections", False)):
+        reorg_plan = _build_collection_reorg_plan(
+            context.scene,
+            rename_plan.get("org_objects", []),
+            future_object_names=rename_plan.get("future_object_names", {}),
+        )
+        create_count = len(reorg_plan.get("create_names", []))
+        move_count = len(reorg_plan.get("moves", []))
+
+    state.planned_renames_objects = obj_count
+    state.planned_renames_materials = mat_count
+    state.planned_renames_collections = col_count
+    state.planned_collections_created = create_count
+    state.planned_objects_moved = move_count
+    state.preview_summary = (
+        f"Will rename {obj_count} objects, {mat_count} materials, {col_count} collections.\n"
+        f"Will create {create_count} collections and move {move_count} objects."
+    )
+    state.preview_dirty = False
+
+
+def _ensure_root_collection(scene, desired_name: str, root_names: set[str]) -> Tuple[Optional[Collection], bool]:
+    existing = _find_root_child(scene, desired_name)
+    if existing is not None:
+        return existing, False
+    unique = ensure_unique_collection_name(desired_name, root_names)
+    try:
+        coll = bpy.data.collections.new(unique)
+        scene.collection.children.link(coll)
+        root_names.add(unique)
+        return coll, True
+    except Exception:
+        return None, False
+
+
+def _apply_collection_reorganization(scene, reorg_plan: Dict[str, object], report) -> Tuple[int, int]:
+    created_count = 0
+    moved_count = 0
+
+    root_names = {c.name for c in list(getattr(scene.collection, "children", []) or [])}
+    target_by_request: Dict[str, Collection] = {}
+
+    create_names = sorted(list(reorg_plan.get("create_names", set()) or []))
+    for requested in create_names:
+        coll, created = _ensure_root_collection(scene, requested, root_names)
+        if coll is None:
+            report({"WARNING"}, f"Failed to create collection '{requested}'")
+            continue
+        target_by_request[requested] = coll
+        if created:
+            created_count += 1
+
+    for obj, requested in list(reorg_plan.get("moves", []) or []):
+        if obj is None:
+            continue
+        target = target_by_request.get(requested) or _find_root_child(scene, requested)
+        if target is None:
+            target, created = _ensure_root_collection(scene, requested, root_names)
+            if target is None:
+                report({"WARNING"}, f"Missing target collection for object '{obj.name}'")
+                continue
+            if created:
+                created_count += 1
+            target_by_request[requested] = target
+
+        changed = False
+        try:
+            if obj not in list(getattr(target, "objects", []) or []):
+                target.objects.link(obj)
+                changed = True
+        except Exception as ex:
+            report({"WARNING"}, f"Failed linking '{obj.name}' to '{target.name}': {ex}")
+            continue
+
+        for source in list(getattr(obj, "users_collection", []) or []):
+            if source == target:
+                continue
+            if not _is_generic_collection(source, scene):
+                continue
+            try:
+                source.objects.unlink(obj)
+                changed = True
+            except Exception:
+                pass
+
+        if changed:
+            moved_count += 1
+
+    return created_count, moved_count
+
+
+def _material_stem_for_texture(name: str) -> str:
+    value = (name or "").strip()
+    if value.upper().startswith("MAT_"):
+        value = value[4:]
+    value = _MAT_VERSION_SUFFIX_RE.sub("", value)
+    tokens = [t for t in _NON_ALNUM_RE.split(value) if t]
+    if not tokens:
+        return "Material"
+    return "_".join(tokens)
+
+
+def _map_type_from_text(text: str) -> str:
+    lower = (text or "").lower()
+    if any(k in lower for k in ("normal", "_nrm", "_nor", "bump")):
+        return "Normal"
+    if any(k in lower for k in ("rough", "gloss")):
+        return "Roughness"
+    if any(k in lower for k in ("metal", "metallic")):
+        return "Metallic"
+    if any(k in lower for k in ("ao", "ambient occlusion", "occlusion")):
+        return "AO"
+    if any(k in lower for k in ("alpha", "opacity", "mask")):
+        return "Alpha"
+    if any(k in lower for k in ("height", "displace", "disp")):
+        return "Height"
+    if any(k in lower for k in ("emit", "emission")):
+        return "Emission"
+    if any(k in lower for k in ("color", "albedo", "diffuse", "base")):
+        return "BaseColor"
+    return "Generic"
+
+
+def _infer_map_type(material: Material, node, image) -> str:
+    parts = [
+        getattr(material, "name", "") or "",
+        getattr(node, "name", "") or "",
+        getattr(node, "label", "") or "",
+        getattr(image, "name", "") or "",
+        getattr(image, "filepath", "") or "",
+    ]
+    try:
+        for output in list(getattr(node, "outputs", []) or []):
+            parts.append(getattr(output, "name", "") or "")
+            for link in list(getattr(output, "links", []) or []):
+                parts.append(getattr(getattr(link, "to_socket", None), "name", "") or "")
+                parts.append(getattr(getattr(link, "to_node", None), "type", "") or "")
+                parts.append(getattr(getattr(link, "to_node", None), "name", "") or "")
+    except Exception:
+        pass
+    return _map_type_from_text(" ".join(parts))
+
+
+def _resolve_texture_destination_dir() -> Path:
+    raw_blend_path = (getattr(bpy.data, "filepath", "") or "").strip()
+    if raw_blend_path:
+        blend_path = Path(raw_blend_path)
+        root = find_project_root(str(blend_path))
+        if root is not None:
+            return get_ramv_dir(root) / "Assets" / "Textures"
+        return blend_path.parent / "Textures"
+
+    fallback_root = Path(bpy.path.abspath("//")) if hasattr(bpy, "path") else Path.cwd()
+    return fallback_root / "Textures"
+
+
+def _collect_material_image_usages(materials: Iterable[Material]) -> List[Tuple[Material, Any, Any, str]]:
+    usages: List[Tuple[Material, Any, Any, str]] = []
+    seen_rows: set[Tuple[int, int]] = set()
+    for mat in list(materials or []):
+        node_tree = getattr(mat, "node_tree", None)
+        if node_tree is None:
+            continue
+        for node in list(getattr(node_tree, "nodes", []) or []):
+            if getattr(node, "type", "") != "TEX_IMAGE":
+                continue
+            image = getattr(node, "image", None)
+            if image is None:
+                continue
+            key = (mat.as_pointer(), image.as_pointer())
+            if key in seen_rows:
+                continue
+            seen_rows.add(key)
+            map_type = _infer_map_type(mat, node, image)
+            usages.append((mat, node, image, map_type))
+    return usages
+
+
+def _sanitize_texture_token(value: str, fallback: str) -> str:
+    tokens = [t for t in _NON_ALNUM_RE.split(value or "") if t]
+    if not tokens:
+        return fallback
+    return "".join(t[0].upper() + t[1:] for t in tokens)
+
+
+def _organize_textures_for_materials(
+    materials: Iterable[Material],
+    *,
+    report,
+) -> int:
+    usage_rows = _collect_material_image_usages(materials)
+    if not usage_rows:
+        return 0
+
+    target_dir = _resolve_texture_destination_dir()
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as ex:
+        report({"WARNING"}, f"Cannot create texture destination folder: {ex}")
+        return 0
+
+    source_to_dest: Dict[str, Path] = {}
+    base_counter: Dict[str, int] = {}
+    warned_images: set[int] = set()
+    relinked_images: set[int] = set()
+
+    for mat, _node, image, map_type in usage_rows:
+        image_id = int(image.as_pointer())
+        source_kind = (getattr(image, "source", "") or "").upper()
+        if source_kind not in _TEXTURE_SRC_SUPPORTED:
+            if image_id not in warned_images:
+                warned_images.add(image_id)
+                report({"WARNING"}, f"Unsupported image source skipped: '{image.name}' ({source_kind})")
+            continue
+
+        if getattr(image, "packed_file", None) is not None:
+            if image_id not in warned_images:
+                warned_images.add(image_id)
+                report({"WARNING"}, f"Packed image skipped (no unpack in this tool): '{image.name}'")
+            continue
+
+        source_path = bpy.path.abspath(getattr(image, "filepath", "") or "")
+        if not source_path or not os.path.isfile(source_path):
+            if image_id not in warned_images:
+                warned_images.add(image_id)
+                report({"WARNING"}, f"Missing image file skipped: '{image.name}'")
+            continue
+        source_path = str(Path(source_path).resolve())
+
+        if source_path in source_to_dest:
+            dest_path = source_to_dest[source_path]
+        else:
+            ext = (Path(source_path).suffix or ".png").lower()
+            material_stem = _sanitize_texture_token(_material_stem_for_texture(mat.name), "Material")
+            map_stem = _sanitize_texture_token(map_type, "Generic")
+            base = f"TX_{material_stem}_{map_stem}"
+            index = base_counter.get(base, 0)
+            while True:
+                index += 1
+                candidate = target_dir / f"{base}_{index:02d}{ext}"
+                if not candidate.exists():
+                    break
+            base_counter[base] = index
+            try:
+                shutil.copy2(source_path, candidate)
+            except Exception as ex:
+                report({"WARNING"}, f"Failed copying texture '{image.name}': {ex}")
+                continue
+            dest_path = candidate
+            source_to_dest[source_path] = dest_path
+
+        if image_id in relinked_images:
+            continue
+
+        try:
+            if (getattr(bpy.data, "filepath", "") or "").strip():
+                new_path = bpy.path.relpath(str(dest_path))
+            else:
+                new_path = str(dest_path)
+            image.filepath = new_path
+            image.name = dest_path.stem
+            image.reload()
+            relinked_images.add(image_id)
+        except Exception as ex:
+            report({"WARNING"}, f"Failed relinking image '{image.name}': {ex}")
+
+    return len(relinked_images)
 
 class LIME_TB_OT_ai_asset_suggest_names(Operator):
     bl_idname = "lime_tb.ai_asset_suggest_names"
     bl_label = "AI: Suggest Names"
-    bl_description = "Suggest clearer names for selected objects and their materials using OpenRouter"
+    bl_description = "Suggest clearer names for selected objects, materials, and collections using OpenRouter"
     bl_options = {"REGISTER"}
 
     _thread: Optional[threading.Thread] = None
@@ -309,74 +834,118 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
         if prefs is None:
             self.report({"ERROR"}, "Addon preferences unavailable")
             return {"CANCELLED"}
-
         if not (getattr(prefs, "openrouter_api_key", "") or "").strip():
             self.report({"ERROR"}, "OpenRouter API key not set in Preferences")
             return {"CANCELLED"}
 
-        objects, materials = _collect_selection(context)
+        include_collections = bool(getattr(state, "include_collections", True))
+        objects, materials, collections = _collect_selection(context, include_collections=include_collections)
         if not objects:
             self.report({"ERROR"}, "No objects selected")
             return {"CANCELLED"}
 
-        # Build request payload and ID mapping (no Blender API usage in the worker thread)
         obj_items: List[Dict[str, object]] = []
         mat_items: List[Dict[str, object]] = []
+        col_items: List[Dict[str, object]] = []
         self._id_map = {}
 
-        for idx, obj in enumerate(objects[:60]):
-            token = f"obj_{idx}"
-            obj_items.append(
-                {
-                    "id": token,
-                    "name": obj.name,
-                    "type": getattr(obj, "type", ""),
-                }
-            )
+        object_pointer_to_token: Dict[int, str] = {}
+        limited_objects = list(objects[:60])
+        for idx, obj in enumerate(limited_objects):
+            object_pointer_to_token[obj.as_pointer()] = f"obj_{idx}"
+
+        for idx, obj in enumerate(limited_objects):
+            token = object_pointer_to_token.get(obj.as_pointer(), f"obj_{idx}")
+            parent = getattr(obj, "parent", None)
+            parent_token = object_pointer_to_token.get(parent.as_pointer()) if parent is not None else None
+            coll_hints = [
+                c.name
+                for c in list(getattr(obj, "users_collection", []) or [])
+                if c is not None and not _is_shot_collection_name(c.name or "")
+            ][:3]
+            shared_data_users = 1
+            data_block = getattr(obj, "data", None)
+            if data_block is not None:
+                try:
+                    shared_data_users = int(getattr(data_block, "users", 1) or 1)
+                except Exception:
+                    shared_data_users = 1
+            item = {
+                "id": token,
+                "name": obj.name,
+                "type": getattr(obj, "type", ""),
+                "parent_id": parent_token,
+                "children_count": len(list(getattr(obj, "children", []) or [])),
+                "shared_data_users": shared_data_users,
+                "collection_hints": coll_hints,
+            }
+            obj_items.append(item)
             self._id_map[token] = {
                 "item_type": "OBJECT",
                 "object_ref": obj,
                 "material_ref": None,
+                "collection_ref": None,
                 "original_name": obj.name,
                 "read_only": _is_object_read_only(obj),
             }
 
-        mat_usage: Dict[int, List[str]] = {}
+        mat_usage_names: Dict[int, List[str]] = {}
+        mat_usage_ids: Dict[int, List[str]] = {}
         for obj in objects:
-            for slot in getattr(obj, "material_slots", []) or []:
+            obj_token = object_pointer_to_token.get(obj.as_pointer(), "")
+            for slot in list(getattr(obj, "material_slots", []) or []):
                 mat = getattr(slot, "material", None)
                 if mat is None:
                     continue
                 key = mat.as_pointer()
-                mat_usage.setdefault(key, [])
-                if obj.name not in mat_usage[key]:
-                    mat_usage[key].append(obj.name)
+                mat_usage_names.setdefault(key, [])
+                mat_usage_ids.setdefault(key, [])
+                if obj.name not in mat_usage_names[key]:
+                    mat_usage_names[key].append(obj.name)
+                if obj_token and obj_token not in mat_usage_ids[key]:
+                    mat_usage_ids[key].append(obj_token)
 
         for idx, mat in enumerate(materials[:60]):
             token = f"mat_{idx}"
-            used_on = mat_usage.get(mat.as_pointer(), [])
-            entry = {
-                "id": token,
-                "name": mat.name,
-            }
+            entry = {"id": token, "name": mat.name}
+            used_on = mat_usage_names.get(mat.as_pointer(), [])
+            used_on_ids = mat_usage_ids.get(mat.as_pointer(), [])
             if used_on:
-                entry["used_on"] = used_on[:3]
+                entry["used_on"] = used_on[:5]
+            if used_on_ids:
+                entry["used_on_ids"] = used_on_ids[:5]
             mat_items.append(entry)
             self._id_map[token] = {
                 "item_type": "MATERIAL",
                 "object_ref": None,
                 "material_ref": mat,
+                "collection_ref": None,
                 "original_name": mat.name,
                 "read_only": _is_material_read_only(mat),
             }
 
-        if len(objects) > 60 or len(materials) > 60:
-            self.report({"WARNING"}, "Selection is large; only the first 60 objects/materials are sent to AI")
+        for idx, coll in enumerate(collections[:60]):
+            token = f"col_{idx}"
+            member_count = len(list(getattr(coll, "objects", []) or []))
+            col_items.append({"id": token, "name": coll.name, "member_count": member_count})
+            self._id_map[token] = {
+                "item_type": "COLLECTION",
+                "object_ref": None,
+                "material_ref": None,
+                "collection_ref": coll,
+                "original_name": coll.name,
+                "read_only": _is_collection_read_only(coll),
+            }
 
-        prompt = _build_prompt(getattr(state, "context", ""), obj_items, mat_items)
+        if len(objects) > 60 or len(materials) > 60 or len(collections) > 60:
+            self.report({"WARNING"}, "Selection is large; only first 60 items per category are sent to AI")
+
+        scene_summary = _build_scene_summary(obj_items, mat_items, col_items)
+        prompt = _build_prompt(getattr(state, "context", ""), scene_summary, obj_items, mat_items, col_items)
         headers = openrouter_headers(prefs)
         model = (getattr(prefs, "openrouter_model", "") or "").strip() or _DEFAULT_MODEL
         debug = bool(getattr(prefs, "openrouter_debug", False))
+
         image_data_url = None
         if getattr(state, "use_image_context", False):
             raw_path = (getattr(state, "image_path", "") or "").strip()
@@ -387,21 +956,24 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                     self.report({"WARNING"}, image_err)
                     if debug:
                         print("[AI Asset Organizer] Image skipped:", image_err)
-            else:
-                if debug:
-                    print("[AI Asset Organizer] Image context enabled but no image path set")
 
-        # Reset state (UI can show busy status)
         state.is_busy = True
         state.last_error = ""
         state.items.clear()
+        state.preview_summary = ""
+        state.preview_dirty = False
+        state.planned_renames_objects = 0
+        state.planned_renames_materials = 0
+        state.planned_renames_collections = 0
+        state.planned_collections_created = 0
+        state.planned_objects_moved = 0
 
         self._result = None
         self._error = None
 
         def worker():
             try:
-                total_items = len(obj_items) + len(mat_items)
+                total_items = len(obj_items) + len(mat_items) + len(col_items)
                 items, err, finish_reason = _openrouter_suggest(
                     headers,
                     model,
@@ -428,6 +1000,8 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                         combined.append(("objects", obj))
                     for mat in mat_items:
                         combined.append(("materials", mat))
+                    for coll in col_items:
+                        combined.append(("collections", coll))
 
                     chunk_size = 15
                     by_id: Dict[str, str] = {}
@@ -436,7 +1010,15 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                         chunk = combined[i : i + chunk_size]
                         chunk_objects = [item for kind, item in chunk if kind == "objects"]
                         chunk_materials = [item for kind, item in chunk if kind == "materials"]
-                        chunk_prompt = _build_prompt(getattr(state, "context", ""), chunk_objects, chunk_materials)
+                        chunk_collections = [item for kind, item in chunk if kind == "collections"]
+                        chunk_summary = _build_scene_summary(chunk_objects, chunk_materials, chunk_collections)
+                        chunk_prompt = _build_prompt(
+                            getattr(state, "context", ""),
+                            chunk_summary,
+                            chunk_objects,
+                            chunk_materials,
+                            chunk_collections,
+                        )
                         chunk_items, chunk_err, _ = _openrouter_suggest(
                             headers,
                             model,
@@ -496,14 +1078,11 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             state.last_error = "Cancelled by user"
             self._finish(context)
             return {"CANCELLED"}
-
         if event.type != "TIMER":
             return {"PASS_THROUGH"}
-
         if self._thread and self._thread.is_alive():
             return {"PASS_THROUGH"}
 
-        # Thread completed
         self._finish(context)
         state.is_busy = False
 
@@ -528,12 +1107,12 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             if isinstance(item_id, str) and isinstance(name, str):
                 by_id[item_id] = name
 
-        # Write rows in stable order
         for item_id, info in self._id_map.items():
             row: LimeAIAssetItem = state.items.add()
             row.item_type = str(info.get("item_type") or "OBJECT")
             row.object_ref = info.get("object_ref")
             row.material_ref = info.get("material_ref")
+            row.collection_ref = info.get("collection_ref")
             row.original_name = str(info.get("original_name") or "")
             row.read_only = bool(info.get("read_only") or False)
 
@@ -547,12 +1126,24 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                     row.status = "INVALID"
                 else:
                     row.status = ""
-            else:
+            elif row.item_type == "MATERIAL":
                 row.suggested_name = suggested_raw
                 row.status = "" if (not suggested_raw or parse_material_name(suggested_raw)) else "INVALID"
+            else:
+                suggested_norm = normalize_collection_name(suggested_raw) if suggested_raw else ""
+                row.suggested_name = suggested_norm
+                if suggested_raw and suggested_norm != suggested_raw:
+                    row.status = "NORMALIZED"
+                elif suggested_norm and not is_valid_collection_name(suggested_norm):
+                    row.status = "INVALID"
+                else:
+                    row.status = ""
 
-            row.selected_for_apply = bool(not row.read_only and bool(row.suggested_name))
+            row.selected_for_apply = bool(
+                not row.read_only and bool(row.suggested_name) and not _status_invalid(row.status)
+            )
 
+        _update_preview_state(context, state)
         self.report({"INFO"}, f"AI suggestions created: {len(state.items)} item(s)")
         return {"FINISHED"}
 
@@ -560,7 +1151,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
 class LIME_TB_OT_ai_asset_apply_names(Operator):
     bl_idname = "lime_tb.ai_asset_apply_names"
     bl_label = "AI: Apply Names"
-    bl_description = "Apply selected AI rename suggestions to objects and materials"
+    bl_description = "Apply selected AI rename suggestions to objects, materials, and collections"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -569,72 +1160,69 @@ class LIME_TB_OT_ai_asset_apply_names(Operator):
         if state is None:
             self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
             return {"CANCELLED"}
-
         if getattr(state, "is_busy", False):
             self.report({"WARNING"}, "AI request in progress")
             return {"CANCELLED"}
 
-        obj_existing = {o.name for o in bpy.data.objects}
-        mat_existing = {m.name for m in bpy.data.materials}
+        _update_preview_state(context, state)
+        rename_plan = _build_rename_plan(state)
+        object_ops = list(rename_plan.get("object_ops", []))
+        material_ops = list(rename_plan.get("material_ops", []))
+        collection_ops = list(rename_plan.get("collection_ops", []))
 
         renamed_objects = 0
         renamed_materials = 0
+        renamed_collections = 0
         skipped = 0
 
-        for row in list(getattr(state, "items", []) or []):
-            if not getattr(row, "selected_for_apply", False):
-                continue
-            if getattr(row, "read_only", False):
+        successful_materials: List[Material] = []
+        for obj, new_name in object_ops:
+            old = obj.name
+            try:
+                obj.name = new_name
+                renamed_objects += 1
+            except Exception as ex:
                 skipped += 1
-                continue
+                self.report({"WARNING"}, f"Failed to rename object '{old}': {ex}")
 
-            suggested = (getattr(row, "suggested_name", "") or "").strip()
-            if not suggested:
+        for mat, new_name in material_ops:
+            old = mat.name
+            try:
+                mat.name = new_name
+                renamed_materials += 1
+                successful_materials.append(mat)
+            except Exception as ex:
                 skipped += 1
-                continue
+                self.report({"WARNING"}, f"Failed to rename material '{old}': {ex}")
 
-            if getattr(row, "item_type", "OBJECT") == "OBJECT":
-                obj = getattr(row, "object_ref", None)
-                if obj is None:
-                    skipped += 1
-                    continue
-                old = obj.name
-                obj_existing.discard(old)
-                normalized = normalize_object_name(suggested)
-                unique = ensure_unique_object_name(normalized, obj_existing)
-                try:
-                    obj.name = unique
-                    obj_existing.add(unique)
-                    renamed_objects += 1
-                except Exception as ex:
-                    obj_existing.add(old)
-                    skipped += 1
-                    self.report({"WARNING"}, f"Failed to rename object '{old}': {ex}")
-            else:
-                mat = getattr(row, "material_ref", None)
-                if mat is None:
-                    skipped += 1
-                    continue
-                old = mat.name
-                mat_existing.discard(old)
-                if not parse_material_name(suggested):
-                    mat_existing.add(old)
-                    skipped += 1
-                    self.report({"WARNING"}, f"Invalid material name: '{suggested}'")
-                    continue
-                unique = bump_material_version_until_unique(mat_existing, suggested)
-                try:
-                    mat.name = unique
-                    mat_existing.add(unique)
-                    renamed_materials += 1
-                except Exception as ex:
-                    mat_existing.add(old)
-                    skipped += 1
-                    self.report({"WARNING"}, f"Failed to rename material '{old}': {ex}")
+        for coll, new_name in collection_ops:
+            old = coll.name
+            try:
+                coll.name = new_name
+                renamed_collections += 1
+            except Exception as ex:
+                skipped += 1
+                self.report({"WARNING"}, f"Failed to rename collection '{old}': {ex}")
 
+        created_collections = 0
+        moved_objects = 0
+        if bool(getattr(state, "organize_collections", False)):
+            reorg_plan = _build_collection_reorg_plan(scene, rename_plan.get("org_objects", []))
+            created_collections, moved_objects = _apply_collection_reorganization(scene, reorg_plan, self.report)
+
+        relinked_textures = 0
+        if bool(getattr(state, "organize_textures", False)) and successful_materials:
+            relinked_textures = _organize_textures_for_materials(successful_materials, report=self.report)
+
+        _update_preview_state(context, state)
         self.report(
             {"INFO"},
-            f"Applied: {renamed_objects} object(s), {renamed_materials} material(s). Skipped: {skipped}.",
+            (
+                f"Applied: {renamed_objects} object(s), {renamed_materials} material(s), "
+                f"{renamed_collections} collection(s). "
+                f"Collections created: {created_collections}. Objects moved: {moved_objects}. "
+                f"Textures relinked: {relinked_textures}. Skipped: {skipped}."
+            ),
         )
         return {"FINISHED"}
 
@@ -654,8 +1242,16 @@ class LIME_TB_OT_ai_asset_clear(Operator):
         if getattr(state, "is_busy", False):
             self.report({"WARNING"}, "AI request in progress")
             return {"CANCELLED"}
+
         state.items.clear()
         state.last_error = ""
+        state.preview_summary = ""
+        state.preview_dirty = False
+        state.planned_renames_objects = 0
+        state.planned_renames_materials = 0
+        state.planned_renames_collections = 0
+        state.planned_collections_created = 0
+        state.planned_objects_moved = 0
         self.report({"INFO"}, "AI suggestions cleared")
         return {"FINISHED"}
 

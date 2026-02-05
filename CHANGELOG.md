@@ -5,6 +5,11 @@
 - AI Render Converter panel for storyboard sketch conversion (Krea + OpenRouter), with manifested outputs.
 - AI Asset Organizer panel to suggest names for selected objects and their materials (OpenRouter).
 - AI Asset Organizer: optional image context for multimodal models.
+- Texture Scan/Report and Adopt/Fix tools to copy external textures into project `RSC/Textures`, relink images, and write JSON manifests.
+- Adopt/Fix also centralizes eligible in-project textures that are outside `RSC/Textures` (skips linked/asset-library textures).
+- Adopt/Fix naming updated to preserve original filename stems (optional AI stem filter via OpenRouter; optional low-res preview).
+- Adopt/Fix naming now enforces a shared structure: `<Project>_<Descriptor>_<MapType>_<NN>.<ext>` regardless of AI output (keeps names consistent inside `rsc/Textures`).
+- Added a texture manifest cleanup button to delete `rsc/Textures/_manifests`.
 
 ### Changed (LP-00003)
 - Simplified Shots UI panel by removing subpanels and leveraging native Blender list controls

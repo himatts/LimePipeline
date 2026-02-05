@@ -4,7 +4,11 @@
 
 AI Asset Organizer properties and state.
 
-Stores AI-generated rename proposals for selected objects and their materials, including optional image context.
+Stores AI-generated rename proposals for selected objects, materials and collections, including optional image context.
+Also stores preview counters and opt-in automation toggles:
+- include collections in AI suggestions
+- organize collections on apply
+- organize textures on apply
 This module is intentionally UI-agnostic; panels and operators consume the state.
 
 Clases Blender detectadas:
