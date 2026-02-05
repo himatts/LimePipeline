@@ -21,47 +21,123 @@ from .material_naming import (
 
 
 _NON_ALNUM = re.compile(r"[^A-Za-z0-9]+")
-_OBJECT_VALID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
-_COLLECTION_VALID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+_NAME_TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+|[0-9]+")
+_OBJECT_VALID_RE = re.compile(r"^[A-Z][A-Za-z0-9]*(?:_(?:[A-Z][A-Za-z0-9]*|[0-9]+))*$")
+_COLLECTION_VALID_RE = re.compile(r"^[A-Z][A-Za-z0-9]*(?:_(?:[A-Z][A-Za-z0-9]*|[0-9]+))*$")
 _CAMEL_TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z][a-z0-9]*")
+_NUM_SUFFIX_RE = re.compile(r"^(?P<head>.+?)(?:_(?P<num>\d+))?$")
+_VARIANT_TOKENS = {
+    "small",
+    "medium",
+    "large",
+    "xs",
+    "s",
+    "m",
+    "l",
+    "xl",
+    "xxl",
+    "xxxl",
+    "short",
+    "long",
+    "tall",
+    "wide",
+    "high",
+    "low",
+    "left",
+    "right",
+    "front",
+    "back",
+    "top",
+    "bottom",
+    "upper",
+    "lower",
+    "inner",
+    "outer",
+    "near",
+    "far",
+}
+
+
+def _pascalize_tokens(tokens: Iterable[str]) -> str:
+    parts: list[str] = []
+    for token in tokens:
+        token = token.strip()
+        if not token:
+            continue
+        if len(token) <= 3 and token.isupper():
+            parts.append(token)
+            continue
+        if any(ch.isupper() for ch in token[1:]):
+            parts.append(token[0].upper() + token[1:])
+        else:
+            parts.append(token[0].upper() + token[1:].lower())
+    return "".join(parts)
+
+
+def _alpha_tokens_to_segments(tokens: list[str]) -> list[str]:
+    if not tokens:
+        return []
+
+    split_index = len(tokens)
+    while split_index > 0 and tokens[split_index - 1].lower() in _VARIANT_TOKENS:
+        split_index -= 1
+
+    segments: list[str] = []
+    if split_index > 0:
+        segments.append(_pascalize_tokens(tokens[:split_index]))
+    for token in tokens[split_index:]:
+        segments.append(_pascalize_tokens([token]))
+    return segments
+
+
+def _tokenize_block(block: str) -> list[str]:
+    return [t for t in _NAME_TOKEN_RE.findall(block or "") if t]
 
 
 def normalize_object_name(raw: str, *, fallback: str = "Asset", max_len: int = 63) -> str:
-    """Normalize a string to a CamelCase alphanumeric identifier.
+    """Normalize a string to PascalCase segments separated by underscores.
 
     Rules:
     - Removes diacritics and non-ASCII compatible characters.
-    - Splits on non-alphanumerics and joins tokens in CamelCase.
+    - Splits on non-alphanumerics to define segment boundaries.
+    - Each segment is PascalCase; numeric suffixes are isolated as `_NN`.
     - Ensures the name starts with a letter (prefixes fallback if needed).
     """
     s = strip_diacritics(str(raw or "")).strip()
     if not s:
         return fallback[:max_len]
 
-    tokens = [t for t in _NON_ALNUM.split(s) if t]
-    if not tokens:
+    blocks = [t for t in _NON_ALNUM.split(s) if t]
+    if not blocks:
         return fallback[:max_len]
 
-    out: list[str] = []
-    for token in tokens:
-        if not token:
+    segments: list[str] = []
+    for block in blocks:
+        tokens = _tokenize_block(block)
+        if not tokens:
             continue
-        # Preserve short acronyms (e.g., UV, HDR).
-        if len(token) <= 3 and token.isupper():
-            out.append(token)
-            continue
-        # Preserve internal CamelCase when detected.
-        if any(ch.isupper() for ch in token[1:]):
-            out.append(token[0].upper() + token[1:])
-        else:
-            out.append(token[0].upper() + token[1:].lower())
+        current_alpha: list[str] = []
+        for token in tokens:
+            if token.isdigit():
+                segments.extend(_alpha_tokens_to_segments(current_alpha))
+                current_alpha = []
+                segments.append(token)
+            else:
+                current_alpha.append(token)
+        segments.extend(_alpha_tokens_to_segments(current_alpha))
 
-    name = "".join(out)
+    if not segments:
+        return fallback[:max_len]
+
+    if not segments[0] or not segments[0][0].isalpha():
+        segments.insert(0, _pascalize_tokens([fallback]))
+
+    name = "_".join(segments)
+    if len(name) > max_len:
+        name = name[:max_len].rstrip("_")
     if not name:
-        name = fallback
-    if not name[0].isalpha():
-        name = f"{fallback}{name}"
-    return name[:max_len]
+        name = fallback[:max_len]
+    return name
 
 
 def is_valid_object_name(name: str) -> bool:
@@ -78,14 +154,24 @@ def ensure_unique_object_name(name: str, existing: Iterable[str], *, max_len: in
     if base not in used:
         return base
 
-    suffix = 2
+    match = _NUM_SUFFIX_RE.match(base)
+    if match:
+        head = match.group("head") or base
+        num_str = match.group("num")
+    else:
+        head = base
+        num_str = None
+
+    width = len(num_str) if num_str else 2
+    counter = int(num_str) if num_str else 1
+
     while True:
-        suffix_str = str(suffix)
-        trimmed = base[: max(1, max_len - len(suffix_str))]
-        candidate = f"{trimmed}{suffix_str}"
+        counter += 1
+        suffix = f"{counter:0{width}d}"
+        trimmed_head = head[: max(1, max_len - (len(suffix) + 1))].rstrip("_")
+        candidate = f"{trimmed_head}_{suffix}"
         if candidate not in used:
             return candidate
-        suffix += 1
 
 
 def normalize_collection_name(raw: str, *, fallback: str = "CollectionAsset", max_len: int = 63) -> str:
@@ -107,25 +193,36 @@ def ensure_unique_collection_name(name: str, existing: Iterable[str], *, max_len
     if base not in used:
         return base
 
-    suffix = 2
+    match = _NUM_SUFFIX_RE.match(base)
+    if match:
+        head = match.group("head") or base
+        num_str = match.group("num")
+    else:
+        head = base
+        num_str = None
+
+    width = len(num_str) if num_str else 2
+    counter = int(num_str) if num_str else 1
+
     while True:
-        suffix_str = str(suffix)
-        trimmed = base[: max(1, max_len - len(suffix_str))]
-        candidate = f"{trimmed}{suffix_str}"
+        counter += 1
+        suffix = f"{counter:0{width}d}"
+        trimmed_head = head[: max(1, max_len - (len(suffix) + 1))].rstrip("_")
+        candidate = f"{trimmed_head}_{suffix}"
         if candidate not in used:
             return candidate
-        suffix += 1
 
 
 def asset_group_key_from_name(name: str) -> str:
-    """Derive a stable grouping token from a CamelCase-style asset name."""
+    """Derive a stable grouping token from a PascalCase/underscore asset name."""
     normalized = normalize_object_name(name or "", fallback="Asset")
-    match = _CAMEL_TOKEN_RE.match(normalized)
+    head = normalized.split("_", 1)[0]
+    match = _CAMEL_TOKEN_RE.match(head)
     if not match:
-        return normalized
-    token = match.group(0) or normalized
+        return head or normalized
+    token = match.group(0) or head or normalized
     if token.isdigit():
-        return normalized
+        return head or normalized
     return token
 
 

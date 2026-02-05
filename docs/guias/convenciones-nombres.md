@@ -85,12 +85,14 @@ SHOT 01
 ```
 
 ### Colecciones de assets (AI Asset Organizer v2)
-- Formato recomendado: CamelCase alfanumerico (sin espacios, guiones, puntos ni guion bajo).
+- Formato recomendado: PascalCase por segmentos separados con guion bajo (sin espacios, guiones ni puntos).
+- La numeracion/identificador va como bloque separado: `_01`, `_02`, etc.
+- Ejemplos: `WoodenChair_01`, `SciFiCrate_Large_02`.
 - Evitar prefijos de SHOT para colecciones de assets reutilizables.
 - Nombres de categoria sugeridos por reglas seguras:
   - `Lights`
   - `Cameras`
-- Agrupaciones automaticas de assets usan la clave inicial CamelCase del nombre de objeto (ejemplo: `CarBody`, `CarWheel` -> `Car`).
+- Agrupaciones automaticas de assets usan la clave inicial del primer segmento PascalCase (ejemplo: `CarBody_01`, `CarWheel_02` -> `Car`).
 
 ## Camaras y rigs
 

@@ -44,34 +44,37 @@ bump_material_version_until_unique = asset_naming.bump_material_version_until_un
 
 
 class AssetNamingTests(unittest.TestCase):
-    def test_normalize_object_name_camel_case(self):
-        self.assertEqual(normalize_object_name("wheel mount"), "WheelMount")
-        self.assertEqual(normalize_object_name("Cube.001"), "Cube001")
+    def test_normalize_object_name_pascal_underscore(self):
+        self.assertEqual(normalize_object_name("wheel mount"), "Wheel_Mount")
+        self.assertEqual(normalize_object_name("Cube.001"), "Cube_001")
+        self.assertEqual(normalize_object_name("woodenChair01"), "WoodenChair_01")
+        self.assertEqual(normalize_object_name("SciFiCrateLarge02"), "SciFiCrate_Large_02")
 
     def test_normalize_object_name_strips_diacritics(self):
-        self.assertEqual(normalize_object_name("silla de ruedas"), "SillaDeRuedas")
+        self.assertEqual(normalize_object_name("silla de ruedas"), "Silla_De_Ruedas")
 
     def test_object_name_validation(self):
-        self.assertTrue(is_valid_object_name("WheelMount01"))
-        self.assertFalse(is_valid_object_name("Wheel_Mount"))
+        self.assertTrue(is_valid_object_name("WheelMount_01"))
+        self.assertTrue(is_valid_object_name("SciFiCrate_Large_02"))
+        self.assertFalse(is_valid_object_name("Wheel__Mount"))
         self.assertFalse(is_valid_object_name("1Wheel"))
 
     def test_ensure_unique_object_name(self):
-        existing = {"WheelMount", "WheelMount2"}
-        self.assertEqual(ensure_unique_object_name("WheelMount", existing), "WheelMount3")
+        existing = {"WheelMount", "WheelMount_02"}
+        self.assertEqual(ensure_unique_object_name("WheelMount", existing), "WheelMount_03")
 
     def test_collection_name_helpers(self):
-        self.assertEqual(normalize_collection_name("props group"), "PropsGroup")
-        self.assertTrue(is_valid_collection_name("PropsGroup01"))
-        self.assertFalse(is_valid_collection_name("Props_Group"))
+        self.assertEqual(normalize_collection_name("props group"), "Props_Group")
+        self.assertTrue(is_valid_collection_name("Props_Group_01"))
+        self.assertFalse(is_valid_collection_name("Props__Group"))
         self.assertEqual(
-            ensure_unique_collection_name("PropsGroup", {"PropsGroup", "PropsGroup2"}),
-            "PropsGroup3",
+            ensure_unique_collection_name("Props_Group", {"Props_Group", "Props_Group_02"}),
+            "Props_Group_03",
         )
 
     def test_asset_group_key_from_name(self):
-        self.assertEqual(asset_group_key_from_name("CarWheelFront"), "Car")
-        self.assertEqual(asset_group_key_from_name("UVLightProxy"), "UV")
+        self.assertEqual(asset_group_key_from_name("CarWheel_Front_01"), "Car")
+        self.assertEqual(asset_group_key_from_name("UVLight_Proxy_02"), "UV")
 
     def test_material_name_build_and_bump_version(self):
         name = build_material_name_with_scene_tag("Wheelchair", "Metal", "Glossy", 1)

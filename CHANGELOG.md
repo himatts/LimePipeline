@@ -22,6 +22,7 @@
 - AI Render Converter adds deletion controls for selected images and batch cleanup with double confirmation.
 - AI Render Converter adds output folder access and batch manifest cleanup.
 - Textures tools moved to AI Asset Organizer; removed "Organize Textures on Apply".
+- AI Asset Organizer object/collection naming now uses PascalCase segments separated by underscores with numeric suffix blocks.
 
 ## [0.2.1] - 2025-09-28
 ### Changed

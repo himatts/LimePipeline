@@ -21,6 +21,7 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
 - AI Asset Organizer v2: object/material/collection naming, preview counters, optional collection organization
+- AI Asset Organizer v2 object/collection format: PascalCase segments separated by underscores (numeric suffix as `_NN`)
 - Texture Scan/Adopt tools live in AI Asset Organizer (Lime Toolbox)
 - AI Render Converter UI includes thumbnail grids per section, large previews, cleanup tools, and output access
 - Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox)

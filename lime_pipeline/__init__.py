@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 6, 1),  # AI Asset Organizer UI/textures layout update
+    "version": (0, 6, 2),  # AI Asset Organizer naming format update
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",

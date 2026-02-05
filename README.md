@@ -12,6 +12,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Facilita la creación/duplicado/instanciado de “shots” con reglas claras.
 - Ayuda a mantener materiales bajo una nomenclatura consistente (manual y, opcionalmente, asistido por IA).
 - Incluye un AI Asset Organizer v2 para sugerir y aplicar nombres de objetos/materiales/colecciones (OpenRouter), con preview de cambios y organización opcional de colecciones.
+- AI Asset Organizer v2 usa PascalCase por segmentos separados con guion bajo para objetos y colecciones (ejemplo: `SciFiCrate_Large_02`).
 - Incluye herramientas de Textures (Scan/Adopt) dentro de AI Asset Organizer para centralizar texturas en `rsc/Textures`.
 - Incluye un AI Render Converter para convertir renders a storyboard/sketch con Krea y OpenRouter.
 - Mejora la gestión visual del AI Render Converter con miniaturas, vista grande y filtros por sección.

@@ -95,9 +95,9 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 4. Suggestions are written to `Scene.lime_ai_assets.items` with row status (`NORMALIZED`, `INVALID`, read-only).
 5. Preview counters are computed before apply (`planned_renames_*`, collections to create, objects to move).
 6. **Apply Selected** renames selected rows with uniqueness guarantees:
-   - Objects: strict CamelCase + deterministic uniqueness.
+   - Objects: PascalCase segments separated by underscores, numeric suffix as `_NN`, deterministic uniqueness.
    - Materials: `MAT_*` validation + version bump when needed.
-   - Collections: strict CamelCase + deterministic uniqueness.
+   - Collections: PascalCase segments separated by underscores, numeric suffix as `_NN`, deterministic uniqueness.
 7. Optional post-apply automation:
    - Safe collection organization (`Lights`, `Cameras`, grouped asset keys) only from generic/root collections.
 
