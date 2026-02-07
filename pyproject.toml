@@ -13,7 +13,7 @@ mkdocstrings = {version = "*", extras = ["python"]}
 
 [tool.interrogate]
 fail_under = 60
-exclude = ["dist", "docs", "openspec"]
+exclude = ["dist", "docs"]
 
 [tool.pydocstyle]
 convention = "google"

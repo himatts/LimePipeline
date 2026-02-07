@@ -6,8 +6,6 @@ Provides external taxonomy loading and inference helpers for material classifica
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 FALLBACK_TAXONOMY = {
@@ -193,25 +191,8 @@ BACKGROUND_TOKEN_HINTS: Set[str] = {
 }
 
 
-def _taxonomy_path() -> Path:
-    return (
-        Path(__file__).parent.parent.parent
-        / "openspec"
-        / "changes"
-        / "2025-10-04-add-ai-material-renamer"
-        / "taxonomy"
-        / "material_taxonomy.json"
-    )
-
-
 def load_taxonomy() -> Dict[str, object]:
-    path = _taxonomy_path()
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
-        except Exception:
-            pass
+    # OpenSpec-based external taxonomy was removed; keep stable in-code defaults.
     return FALLBACK_TAXONOMY
 
 

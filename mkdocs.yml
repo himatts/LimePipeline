@@ -29,6 +29,7 @@ nav:
       - PROPS: catalogo/props.py.md
       - PROPS AI: catalogo/props_ai_materials.py.md
       - PROPS AI Assets: catalogo/props_ai_assets.py.md
+      - PROPS AI Renders: catalogo/props_ai_renders.py.md
       - PREFS: catalogo/prefs.py.md
       - INIT: catalogo/__init__.py.md
   - Referencia API:
@@ -40,4 +41,7 @@ nav:
       - Convenciones: guias/convenciones-nombres.md
       - Flujos típicos: guias/flujos-tipicos.md
       - Troubleshooting: guias/troubleshooting.md
+  - Para IA:
+      - AI Context: para-IA/AI_CONTEXT.md
+      - Last Checkpoint: para-IA/last_checkpoint.md
   - Contribuir: contribuir.md
