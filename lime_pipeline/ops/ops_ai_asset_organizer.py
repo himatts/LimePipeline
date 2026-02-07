@@ -7,6 +7,7 @@ plus optional safe collection reorganization.
 from __future__ import annotations
 
 import base64
+import datetime
 import json
 import os
 import re
@@ -63,6 +64,7 @@ _SHOT_ROOT_RE = re.compile(r"^SHOT \d{2,3}$")
 _SHOT_CHILD_RE = re.compile(r"^SH\d{2,3}_")
 _GENERIC_COLLECTION_RE = re.compile(r"^Collection(?:\.\d{3})?$")
 _AI_ASSET_PREVIEW_SUSPENDED = False
+_AI_ASSET_NAME_EDIT_GUARD = 0
 _CAMEL_TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+|[0-9]+")
 _METAL_HINT_TOKENS = {
     "metal",
@@ -95,6 +97,49 @@ _SPECIFIC_FINISH_HINTS = {
     "rusty",
     "frosted",
 }
+_GENERIC_AI_COLLECTION_HINTS = {
+    "archive",
+    "archived",
+    "collection",
+    "collections",
+    "object",
+    "objects",
+    "misc",
+    "others",
+    "other",
+    "props",
+}
+_OBJECT_HINT_KEYWORDS: Dict[str, set[str]] = {
+    "Electronics": {
+        "controller", "screen", "lens", "sensor", "servo", "motor", "battery", "pcb", "board",
+        "switch", "cable", "wire", "display", "led", "connector",
+    },
+    "Fasteners": {
+        "screw", "screws", "bolt", "bolts", "nut", "nuts", "thread", "phillips", "washer", "fastener",
+    },
+    "Mechanical": {
+        "gear", "roller", "lever", "bracket", "shaft", "hinge", "bearing", "mech", "mechanical",
+    },
+    "Shell": {
+        "shell", "lid", "base", "tray", "bowl", "visor", "cover", "housing",
+    },
+    "Bristles": {
+        "bristle", "bristles", "sweeper", "brush",
+    },
+}
+_CONTROLLER_ROLE_TOKENS = {
+    "controller",
+    "control",
+    "ctrl",
+    "rig",
+    "master",
+    "root",
+    "driver",
+    "manager",
+}
+_CONTROLLER_LOCATOR_TOKENS = {"pivot", "origin", "locator", "null", "handle", "target"}
+_ROOT_HINT_TOKENS = {"main", "global", "system", "assembly", "root", "master"}
+_TECHNICAL_SUBPATH_TOKENS = {"electronics", "electronic", "fasteners"}
 _CONTEXT_TAG_RE = re.compile(r"(?:\btag\b|\betiqueta\b)[^\"'\n\r]{0,80}?(?:que diga|=|:)?\s*[\"']?([A-Za-z][A-Za-z0-9 _-]{0,31})[\"']?", re.IGNORECASE)
 _CONTEXT_MAT_PATTERN_TAG_RE = re.compile(r"\bMAT_([A-Za-z][A-Za-z0-9]{1,24})_[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9]+_V\d{2}\b")
 _CONTEXT_OBJECT_FILTER_RE = re.compile(
@@ -322,12 +367,48 @@ def _build_scene_collection_snapshot(scene) -> Dict[str, object]:
 
     walk(root, "", None, set())
     hierarchy_paths.sort(key=lambda p: (p.count("/"), p.lower()))
+    activity = _build_collection_activity_index(scene)
     return {
         "path_to_collection": path_to_collection,
         "collection_ptr_to_paths": collection_ptr_to_paths,
         "candidates": candidates,
         "hierarchy_paths": hierarchy_paths,
+        "collection_activity": activity,
     }
+
+
+def _walk_layer_collections(layer_collection, out: Dict[int, Dict[str, bool]]) -> None:
+    coll = getattr(layer_collection, "collection", None)
+    if coll is not None:
+        out[coll.as_pointer()] = {
+            "exclude": bool(getattr(layer_collection, "exclude", False)),
+            "hide_viewport_layer": bool(getattr(layer_collection, "hide_viewport", False)),
+        }
+    for child in list(getattr(layer_collection, "children", []) or []):
+        _walk_layer_collections(child, out)
+
+
+def _build_collection_activity_index(scene) -> Dict[int, Dict[str, bool]]:
+    index: Dict[int, Dict[str, bool]] = {}
+    view_layer = getattr(bpy.context, "view_layer", None)
+    layer_root = getattr(view_layer, "layer_collection", None)
+    if layer_root is not None:
+        _walk_layer_collections(layer_root, index)
+    return index
+
+
+def _collection_is_active_destination(coll: Optional[Collection], activity_index: Dict[int, Dict[str, bool]]) -> Tuple[bool, str]:
+    if coll is None:
+        return False, "missing collection"
+    if bool(getattr(coll, "hide_viewport", False)):
+        return False, "collection.hide_viewport"
+    ptr = coll.as_pointer()
+    layer_state = activity_index.get(ptr)
+    if layer_state and bool(layer_state.get("exclude", False)):
+        return False, "layer_collection.exclude"
+    if layer_state and bool(layer_state.get("hide_viewport_layer", False)):
+        return False, "layer_collection.hide_viewport"
+    return True, "active"
 
 
 def _object_collection_paths(obj: Object, snapshot: Dict[str, object]) -> List[str]:
@@ -384,6 +465,177 @@ def _normalize_hint_path(
     return ""
 
 
+def _is_generic_ai_hint(value: str) -> bool:
+    norm = normalize_collection_name(value or "").strip()
+    if not norm:
+        return True
+    return norm.lower() in _GENERIC_AI_COLLECTION_HINTS
+
+
+def _object_semantic_tags(name: str, obj_type: str) -> List[str]:
+    tokens = {t.lower() for t in tokenize_name(name or "")}
+    tags: List[str] = []
+    for label, keywords in _OBJECT_HINT_KEYWORDS.items():
+        if tokens.intersection(keywords):
+            tags.append(label)
+    kind = (obj_type or "").strip().upper()
+    if kind in {"LIGHT", "CAMERA"}:
+        tags.append(kind.title())
+    return tags[:4]
+
+
+def _object_root_name(obj: Optional[Object]) -> str:
+    current = obj
+    guard = 0
+    last_name = ""
+    while current is not None and guard < 128:
+        last_name = str(getattr(current, "name", "") or last_name)
+        current = getattr(current, "parent", None)
+        guard += 1
+    return last_name
+
+
+def _object_hierarchy_depth(obj: Optional[Object]) -> int:
+    current = getattr(obj, "parent", None) if obj is not None else None
+    depth = 0
+    guard = 0
+    while current is not None and guard < 128:
+        depth += 1
+        current = getattr(current, "parent", None)
+        guard += 1
+    return depth
+
+
+def _empty_role_hint(obj: Optional[Object]) -> str:
+    if obj is None or str(getattr(obj, "type", "") or "").upper() != "EMPTY":
+        return ""
+    name_tokens = {t.lower() for t in tokenize_name(str(getattr(obj, "name", "") or ""))}
+    children_count = len(list(getattr(obj, "children", []) or []))
+    if name_tokens.intersection({"ctrl", "control", "controller", "rig"}):
+        return "Controller"
+    if name_tokens.intersection({"pivot", "origin", "locator"}):
+        return "Locator"
+    if children_count >= 2:
+        return "GroupRoot"
+    return "Helper"
+
+
+def _infer_hierarchy_role(obj: Optional[Object]) -> Tuple[str, str]:
+    if obj is None:
+        return "COMPONENT", "No object reference"
+    name = str(getattr(obj, "name", "") or "")
+    tokens = {t.lower() for t in tokenize_name(name)}
+    obj_type = str(getattr(obj, "type", "") or "").upper()
+    parent = getattr(obj, "parent", None)
+    depth = _object_hierarchy_depth(obj)
+    children_count = len(list(getattr(obj, "children", []) or []))
+
+    has_controller_tokens = bool(tokens.intersection(_CONTROLLER_ROLE_TOKENS))
+    has_root_tokens = bool(tokens.intersection(_ROOT_HINT_TOKENS))
+    is_root = parent is None
+
+    if is_root and (has_controller_tokens or has_root_tokens or children_count >= 3):
+        if has_controller_tokens:
+            return "ROOT_CONTROLLER", "Root object with controller/root naming"
+        if children_count >= 3:
+            return "ROOT_CONTROLLER", "Root object controlling multiple children"
+        return "GROUP_ROOT", "Root object with structural role"
+
+    if has_controller_tokens and (children_count >= 1 or depth <= 1):
+        return "CONTROLLER", "Controller token plus hierarchical responsibility"
+
+    if obj_type == "EMPTY":
+        if tokens.intersection(_CONTROLLER_LOCATOR_TOKENS):
+            return "LOCATOR", "Empty object used as locator/pivot/origin"
+        if children_count >= 2:
+            return "GROUP_ROOT", "Empty object grouping multiple children"
+        return "HELPER", "Empty object with helper role"
+
+    if children_count >= 2 and depth <= 2:
+        return "GROUP_ROOT", "Parent object with multiple children"
+
+    return "COMPONENT", "Leaf/component role inferred from hierarchy"
+
+
+def _heuristic_collection_hint_for_object(
+    name: str,
+    obj_type: str,
+    *,
+    parent_name: str = "",
+    root_name: str = "",
+) -> str:
+    tags = _object_semantic_tags(name, obj_type)
+    if not tags and parent_name:
+        tags = _object_semantic_tags(parent_name, "")
+    if not tags and root_name:
+        tags = _object_semantic_tags(root_name, "")
+    if tags:
+        return tags[0]
+    return ""
+
+
+def _normalized_virtual_hint_path(raw_hint: str) -> str:
+    """Build a virtual collection path from raw AI hint when no active candidates exist."""
+    raw = (raw_hint or "").strip()
+    if not raw:
+        return ""
+
+    segments = [seg for seg in raw.split("/") if (seg or "").strip()]
+    if not segments:
+        segments = [raw]
+    normalized_segments: List[str] = []
+    for seg in segments:
+        norm = normalize_collection_name(seg)
+        if not norm or not is_valid_collection_name(norm):
+            return ""
+        if _is_shot_collection_name(norm):
+            return ""
+        normalized_segments.append(norm)
+    return "/".join(normalized_segments)
+
+
+def _path_has_inactive_ancestor(
+    path: str,
+    inactive_paths_norm: set[str],
+    inactive_names_norm: Optional[set[str]] = None,
+) -> bool:
+    """Return True when path references any known inactive collection segment path."""
+    raw = (path or "").strip()
+    if not raw:
+        return False
+    parts = [p for p in raw.split("/") if p]
+    if not parts:
+        return False
+    current = ""
+    for segment in parts:
+        current = segment if not current else f"{current}/{segment}"
+        if current.lower() in inactive_paths_norm:
+            return True
+        if inactive_names_norm and segment.lower() in inactive_names_norm:
+            return True
+    return False
+
+
+def _path_contains_technical_subcategory(path: str) -> bool:
+    parts = [p.strip().lower() for p in (path or "").split("/") if p.strip()]
+    if not parts:
+        return False
+    return any(part in _TECHNICAL_SUBPATH_TOKENS for part in parts)
+
+
+def _safe_controller_collection_path(obj: Optional[Object]) -> str:
+    root_name = _object_root_name(obj)
+    normalized_root = normalize_collection_name(root_name)
+    if (
+        normalized_root
+        and is_valid_collection_name(normalized_root)
+        and not _is_shot_collection_name(normalized_root)
+        and not _is_generic_ai_hint(normalized_root)
+    ):
+        return normalized_root
+    return "Controllers"
+
+
 def _serialize_ranked_candidates(candidates) -> str:
     payload: List[Dict[str, object]] = []
     for cand in list(candidates or [])[:3]:
@@ -438,10 +690,18 @@ def _resolve_object_targets_for_state(
     preserve_confirmed: bool = True,
 ) -> Dict[str, object]:
     snapshot = _build_scene_collection_snapshot(scene)
-    candidates = [c for c in list(snapshot.get("candidates", []) or []) if not getattr(c, "is_shot_root", False)]
-    if not candidates:
-        candidates = list(snapshot.get("candidates", []) or [])
+    all_candidates = [c for c in list(snapshot.get("candidates", []) or []) if not getattr(c, "is_shot_root", False)]
+    if not all_candidates:
+        all_candidates = list(snapshot.get("candidates", []) or [])
+    path_to_collection = snapshot.get("path_to_collection", {}) if isinstance(snapshot, dict) else {}
+    if not isinstance(path_to_collection, dict):
+        path_to_collection = {}
+    activity_index = snapshot.get("collection_activity", {}) if isinstance(snapshot, dict) else {}
+    if not isinstance(activity_index, dict):
+        activity_index = {}
     hints = hints_by_item_id or {}
+    active_only = bool(getattr(state, "use_active_collections_only", True))
+    debug_flow = bool(getattr(state, "debug_collection_flow", False))
 
     for row in list(getattr(state, "items", []) or []):
         if getattr(row, "item_type", "") != "OBJECT":
@@ -452,15 +712,82 @@ def _resolve_object_targets_for_state(
             row.target_status = "NONE"
             row.target_confidence = 0.0
             row.target_candidates_json = ""
+            row.target_debug_json = ""
             continue
 
         if preserve_confirmed and getattr(row, "target_status", "") == "CONFIRMED":
             continue
 
+        excluded_inactive: List[Dict[str, str]] = []
+        excluded_inactive_paths_norm: set[str] = set()
+        excluded_inactive_names_norm: set[str] = set()
+        candidates: List[CollectionCandidate] = []
+        for cand in all_candidates:
+            coll = path_to_collection.get((cand.path or "").strip())
+            is_active, reason = _collection_is_active_destination(coll, activity_index)
+            if active_only and not is_active:
+                excluded_inactive.append({"path": cand.path, "reason": reason})
+                excluded_inactive_paths_norm.add((cand.path or "").strip().lower())
+                if coll is not None:
+                    coll_name_norm = normalize_collection_name(str(getattr(coll, "name", "") or ""))
+                    if coll_name_norm:
+                        excluded_inactive_names_norm.add(coll_name_norm.lower())
+                for seg in [s for s in str(cand.path or "").split("/") if s]:
+                    seg_norm = normalize_collection_name(seg)
+                    if seg_norm:
+                        excluded_inactive_names_norm.add(seg_norm.lower())
+                continue
+            candidates.append(cand)
+
         current_paths = _object_collection_paths(obj, snapshot)
         preferred_roots = _preferred_shot_roots(current_paths)
         hint_raw = (hints.get(getattr(row, "item_id", "") or "") or "").strip()
-        hint_path = _normalize_hint_path(hint_raw, candidates, preferred_roots)
+        effective_hint_raw = hint_raw
+        heuristic_hint = _heuristic_collection_hint_for_object(
+            (getattr(row, "suggested_name", "") or "").strip() or (getattr(row, "original_name", "") or "").strip(),
+            str(getattr(obj, "type", "") or ""),
+            parent_name=str(getattr(getattr(obj, "parent", None), "name", "") or ""),
+            root_name=_object_root_name(obj),
+        )
+        heuristic_used = False
+        if heuristic_hint and (not effective_hint_raw or _is_generic_ai_hint(effective_hint_raw)):
+            effective_hint_raw = heuristic_hint
+            heuristic_used = True
+
+        hint_path = _normalize_hint_path(effective_hint_raw, candidates, preferred_roots)
+        inferred_role, inferred_role_reason = _infer_hierarchy_role(obj)
+        controller_guardrail_applied = False
+        controller_guardrail_from = ""
+        controller_guardrail_to = ""
+        if inferred_role in {"ROOT_CONTROLLER", "CONTROLLER"} and hint_path and _path_contains_technical_subcategory(hint_path):
+            controller_guardrail_from = hint_path
+            hint_path = _safe_controller_collection_path(obj)
+            controller_guardrail_to = hint_path
+            controller_guardrail_applied = True
+        hint_blocked_inactive = False
+        if active_only and hint_path and _path_has_inactive_ancestor(
+            hint_path,
+            excluded_inactive_paths_norm,
+            excluded_inactive_names_norm,
+        ):
+            hint_path = ""
+            hint_blocked_inactive = True
+        virtual_hint_path = ""
+        virtual_hint_used = False
+
+        # Explicit fallback: if no active candidates remain, allow a virtual path from AI hint.
+        # Guard rail: never re-enable an existing inactive collection via virtual fallback.
+        if not candidates and not hint_path:
+            virtual_hint_path = _normalized_virtual_hint_path(effective_hint_raw)
+            if virtual_hint_path and (
+                not _path_has_inactive_ancestor(
+                    virtual_hint_path,
+                    excluded_inactive_paths_norm,
+                    excluded_inactive_names_norm,
+                )
+            ):
+                hint_path = virtual_hint_path
+                virtual_hint_used = True
 
         name_hint = (getattr(row, "suggested_name", "") or "").strip() or (getattr(row, "original_name", "") or "").strip()
         result = resolve_collection_destination(
@@ -476,6 +803,50 @@ def _resolve_object_targets_for_state(
         row.target_status = result.status if result.selected_path else "NONE"
         row.target_confidence = float(result.confidence or 0.0)
         row.target_candidates_json = _serialize_ranked_candidates(result.candidates)
+        if virtual_hint_used and result.selected_path:
+            row.target_status = "AUTO"
+            row.target_confidence = max(float(row.target_confidence or 0.0), 0.55)
+        if debug_flow:
+            debug_payload = {
+                "object_name": getattr(row, "original_name", "") or getattr(obj, "name", ""),
+                "active_only": active_only,
+                "candidates_considered": len(candidates),
+                "excluded_inactive_count": len(excluded_inactive),
+                "excluded_inactive_samples": excluded_inactive[:8],
+                "excluded_inactive_names_sample": sorted(list(excluded_inactive_names_norm))[:12],
+                "ai_hint_raw": hint_raw,
+                "effective_hint_raw": effective_hint_raw,
+                "heuristic_hint": heuristic_hint,
+                "heuristic_hint_used": heuristic_used,
+                "inferred_role": inferred_role,
+                "inferred_role_reason": inferred_role_reason,
+                "controller_guardrail_applied": controller_guardrail_applied,
+                "controller_guardrail_from": controller_guardrail_from,
+                "controller_guardrail_to": controller_guardrail_to,
+                "hint_blocked_inactive": hint_blocked_inactive,
+                "ai_hint_normalized": hint_path,
+                "virtual_hint_path": virtual_hint_path,
+                "virtual_hint_used": virtual_hint_used,
+                "current_paths": current_paths,
+                "preferred_shot_roots": preferred_roots,
+                "resolver_status": result.status,
+                "resolver_confidence": float(result.confidence or 0.0),
+                "selected_path": result.selected_path,
+                "ranked_candidates": [
+                    {
+                        "path": str(getattr(c, "path", "") or ""),
+                        "score": float(getattr(c, "score", 0.0) or 0.0),
+                        "exists": bool(getattr(c, "exists", True)),
+                    }
+                    for c in list(result.candidates or [])
+                ],
+            }
+            try:
+                row.target_debug_json = json.dumps(debug_payload, ensure_ascii=True, separators=(",", ":"))
+            except Exception:
+                row.target_debug_json = ""
+        else:
+            row.target_debug_json = ""
     return snapshot
 
 
@@ -556,6 +927,49 @@ def _build_material_scene_context(selected_materials: Sequence[Material]) -> Dic
         "non_selected_material_names_truncated": len(non_selected_sorted) > _MATERIAL_NAME_CONTEXT_LIMIT,
         "material_version_groups": group_items[:_MATERIAL_GROUP_CONTEXT_LIMIT],
         "material_version_groups_truncated": len(group_items) > _MATERIAL_GROUP_CONTEXT_LIMIT,
+    }
+
+
+def _build_object_group_hints(objects: Sequence[Dict[str, object]]) -> Dict[str, object]:
+    semantic_counts: Dict[str, int] = {}
+    prefix_counts: Dict[str, int] = {}
+    root_counts: Dict[str, int] = {}
+    empty_roles: Dict[str, int] = {}
+    hierarchy_roles: Dict[str, int] = {}
+    for item in list(objects or []):
+        if not isinstance(item, dict):
+            continue
+        for tag in list(item.get("semantic_tags", []) or []):
+            key = str(tag or "").strip()
+            if not key:
+                continue
+            semantic_counts[key] = semantic_counts.get(key, 0) + 1
+        tokens = [str(t or "").strip() for t in list(item.get("name_tokens", []) or []) if str(t or "").strip()]
+        if tokens:
+            prefix = tokens[0]
+            if len(prefix) >= 2:
+                prefix_counts[prefix] = prefix_counts.get(prefix, 0) + 1
+        root_name = str(item.get("root_name") or "").strip()
+        if root_name:
+            root_counts[root_name] = root_counts.get(root_name, 0) + 1
+        empty_role = str(item.get("empty_role_hint") or "").strip()
+        if empty_role:
+            empty_roles[empty_role] = empty_roles.get(empty_role, 0) + 1
+        hierarchy_role = str(item.get("hierarchy_role") or "").strip()
+        if hierarchy_role:
+            hierarchy_roles[hierarchy_role] = hierarchy_roles.get(hierarchy_role, 0) + 1
+
+    semantic_sorted = sorted(semantic_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+    prefix_sorted = sorted(prefix_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+    root_sorted = sorted(root_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+    role_sorted = sorted(empty_roles.items(), key=lambda kv: (-kv[1], kv[0]))[:6]
+    hierarchy_role_sorted = sorted(hierarchy_roles.items(), key=lambda kv: (-kv[1], kv[0]))[:6]
+    return {
+        "semantic_clusters": [{"name": k, "count": v} for k, v in semantic_sorted],
+        "prefix_clusters": [{"name": k, "count": v} for k, v in prefix_sorted if v >= 2],
+        "root_clusters": [{"name": k, "count": v} for k, v in root_sorted if v >= 2],
+        "empty_role_distribution": [{"name": k, "count": v} for k, v in role_sorted],
+        "hierarchy_role_distribution": [{"name": k, "count": v} for k, v in hierarchy_role_sorted],
     }
 
 
@@ -888,8 +1302,21 @@ def _fold_text_for_match(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
 
 
-def _normalize_material_name_for_organizer(raw: str, *, mat: Optional[Material] = None) -> str:
+def _normalize_material_name_for_organizer(
+    raw: str,
+    *,
+    mat: Optional[Material] = None,
+    trace: Optional[List[str]] = None,
+) -> str:
     """Normalize to MAT_{Tag?}_{MaterialType}_{Finish}_{V##} for organizer workflows."""
+    notes = trace if trace is not None else []
+
+    def _note(message: str) -> None:
+        if trace is None:
+            return
+        text = (message or "").strip()
+        if text:
+            notes.append(text)
 
     def _split_tokens(value: str) -> List[str]:
         return [t for t in _CAMEL_TOKEN_RE.findall(value or "") if t]
@@ -915,6 +1342,7 @@ def _normalize_material_name_for_organizer(raw: str, *, mat: Optional[Material] 
         if len(finish_tokens) > 1:
             head_type = normalize_material_type(finish_tokens[0])
             if head_type == mtype:
+                _note("Removed duplicated material type token from finish")
                 finish_tokens = finish_tokens[1:]
 
         # Recover degraded AI proposals such as Plastic_MetalPolished / Plastic_GlassClear.
@@ -925,10 +1353,12 @@ def _normalize_material_name_for_organizer(raw: str, *, mat: Optional[Material] 
                 if inferred != "Plastic":
                     break
             if inferred != "Plastic":
+                _note(f"Inferred material type from finish tokens: {mtype} -> {inferred}")
                 mtype = inferred
                 if len(finish_tokens) > 1:
                     head_type = _token_mapped_type(finish_tokens[0])
                     if head_type == inferred:
+                        _note("Removed inferred type token from finish")
                         finish_tokens = finish_tokens[1:]
 
         finish_raw = "".join(finish_tokens) if finish_tokens else finish
@@ -943,22 +1373,31 @@ def _normalize_material_name_for_organizer(raw: str, *, mat: Optional[Material] 
 
     parsed = parse_material_name(text)
     if parsed:
+        _note("AI output already matches material schema")
         scene_tag = str(parsed.get("scene_tag") or "")
         material_type = str(parsed.get("material_type") or "Plastic")
         finish = str(parsed.get("finish") or "Generic")
         material_type, finish = _repair_components(material_type, finish)
         version_idx = int(parsed.get("version_index") or 1)
         normalized = build_material_name_with_scene_tag(scene_tag, material_type, finish, version_idx)
-        return _apply_material_profile_guardrails(normalized, mat)
+        guarded = _apply_material_profile_guardrails(normalized, mat)
+        if guarded != normalized:
+            _note("Applied shader-profile guardrails")
+        return guarded
 
     cleaned = re.sub(r"[^A-Za-z0-9_ ]+", "_", text)
+    if cleaned != text:
+        _note("Sanitized invalid characters")
     cleaned = re.sub(r"[\s_]+", "_", cleaned).strip("_")
+    if cleaned != text:
+        _note("Collapsed spaces/underscores")
     if not cleaned:
         return ""
     parts = [p for p in cleaned.split("_") if p]
     if not parts:
         return ""
     if parts[0].upper() == "MAT":
+        _note("Removed MAT prefix before reconstruction")
         parts = parts[1:]
     if not parts:
         return build_material_name_with_scene_tag("", "Plastic", "Generic", 1)
@@ -967,6 +1406,7 @@ def _normalize_material_name_for_organizer(raw: str, *, mat: Optional[Material] 
     tail = parts[-1].upper()
     parsed_ver = parse_material_version(tail)
     if parsed_ver is not None:
+        _note(f"Detected version token: V{parsed_ver:02d}")
         version_idx = parsed_ver
         parts = parts[:-1]
     if not parts:
@@ -978,16 +1418,43 @@ def _normalize_material_name_for_organizer(raw: str, *, mat: Optional[Material] 
         candidate_type = normalize_material_type(parts[1])
         if candidate_type in ALLOWED_MATERIAL_TYPES and candidate_type != "Plastic":
             scene_tag = parts[0]
+            _note(f"Interpreted leading token as scene tag: {scene_tag}")
             material_type = candidate_type
             finish_src = "_".join(parts[2:]) if len(parts) > 2 else "Generic"
             _, finish = _repair_components(material_type, finish_src)
             normalized = build_material_name_with_scene_tag(scene_tag, material_type, finish, version_idx)
-            return _apply_material_profile_guardrails(normalized, mat)
+            guarded = _apply_material_profile_guardrails(normalized, mat)
+            if guarded != normalized:
+                _note("Applied shader-profile guardrails")
+            return guarded
 
     finish_src = "_".join(parts[1:]) if len(parts) > 1 else "Generic"
     material_type, finish = _repair_components(material_type, finish_src)
     normalized = build_material_name_with_scene_tag(scene_tag, material_type, finish, version_idx)
-    return _apply_material_profile_guardrails(normalized, mat)
+    guarded = _apply_material_profile_guardrails(normalized, mat)
+    if guarded != normalized:
+        _note("Applied shader-profile guardrails")
+    return guarded
+
+
+def _material_status_from_trace(
+    ai_raw: str,
+    final_name: str,
+    notes: Sequence[str],
+) -> str:
+    """Classify material result quality for clearer diagnostics."""
+    raw = (ai_raw or "").strip()
+    final = (final_name or "").strip()
+    if not raw or not final:
+        return ""
+
+    changed = raw != final
+    semantic_changed = any("shader-profile guardrails" in str(note).lower() for note in list(notes or []))
+    if semantic_changed:
+        return "NORMALIZED_SEMANTIC"
+    if changed:
+        return "NORMALIZED_STRUCTURAL"
+    return "AI_EXACT"
 
 
 def _build_prompt(
@@ -999,6 +1466,7 @@ def _build_prompt(
     *,
     collection_hierarchy: Optional[List[str]] = None,
     material_scene_context: Optional[Dict[str, object]] = None,
+    object_group_hints: Optional[Dict[str, object]] = None,
 ) -> str:
     allowed_types = ", ".join(ALLOWED_MATERIAL_TYPES)
     context_block = (context_text or "").strip() or scene_summary
@@ -1014,6 +1482,8 @@ def _build_prompt(
         payload["collection_hierarchy_paths"] = collection_hierarchy[:220]
     if material_scene_context:
         payload["material_scene_context"] = material_scene_context
+    if object_group_hints:
+        payload["object_group_hints"] = object_group_hints
     compact_json = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
     return (
@@ -1033,6 +1503,9 @@ def _build_prompt(
         "- Strong constraint: if an object is type LIGHT and already belongs to a LIGHTS collection path, keep it there.\n"
         "- Strong constraint: if an object is type CAMERA and already belongs to a CAM/CAMERA collection path, keep it there.\n"
         "- Do not suggest moving LIGHT/CAMERA objects to unrelated folders like props/annotations unless explicitly requested.\n"
+        "- For object target collections, prioritize semantic clues in `name_tokens` and `semantic_tags` before generic buckets.\n"
+        "- Avoid generic hints like Archive/Props unless there is no stronger semantic signal.\n"
+        "- Use `object_group_hints` clusters to keep naming/grouping coherent across similar objects.\n"
         "- Material naming must consider all existing scene materials from material_scene_context (including non-selected).\n"
         "- Material naming must respect shader_profile cues in each material (metallic, roughness, transmission, emission).\n"
         "- Avoid Metal type when metallic is low and there is no explicit metal cue.\n"
@@ -1042,6 +1515,14 @@ def _build_prompt(
         "- Never propose a material name that already exists; if a group exists, propose the next available V##.\n"
         "- Optional for objects: include `target_collection_hint` with a full path when confident.\n"
         "- Use hierarchy/context hints (parent_id, children_count, shared_data_users, collection_hints, used_on).\n"
+        "- Use hierarchy signals to infer semantics: parent_name, parent_type, root_name, hierarchy_depth, sibling_count, children_preview.\n"
+        "- Treat EMPTY objects as meaningful semantic nodes using `empty_role_hint` (Controller, GroupRoot, Locator, Helper).\n"
+        "- Infer hierarchical role from tree + naming: ROOT_CONTROLLER / CONTROLLER / GROUP_ROOT / COMPONENT.\n"
+        "- Objects with role ROOT_CONTROLLER or CONTROLLER should prefer top-level/controller collections, not deep technical subcategories.\n"
+        "- Never classify a root controller under Electronics/Fasteners unless there is explicit strong evidence in name + hierarchy.\n"
+        "- Prefer grouping components under their controlling root_name when the hierarchy indicates a single system.\n"
+        "- Keep parent/child families coherent: siblings should generally share collection intent unless explicit signal says otherwise.\n"
+        "- For child objects with generic names (e.g., Mesh, Cube, Empty), inherit intent from parent/root semantics.\n"
         "- Names must be unique per category (object/material/collection).\n"
         "Items JSON:\n"
         f"{compact_json}\n"
@@ -1283,6 +1764,182 @@ def _build_missing_path_segments(target_paths: Iterable[str], existing_paths: It
             available.add(current)
             missing.append(current)
     return missing
+
+
+def _normalize_collection_path_value(raw: str) -> str:
+    parts = [p for p in str(raw or "").split("/") if (p or "").strip()]
+    normalized: List[str] = []
+    for segment in parts:
+        value = normalize_collection_name(segment)
+        if not value or not is_valid_collection_name(value):
+            continue
+        if _is_shot_collection_name(value):
+            continue
+        normalized.append(value)
+    return "/".join(normalized)
+
+
+def _replace_path_prefix(path: str, old_prefix: str, new_prefix: str) -> str:
+    value = (path or "").strip()
+    old = (old_prefix or "").strip()
+    new = (new_prefix or "").strip()
+    if not value or not old or not new:
+        return value
+    low_value = value.lower()
+    low_old = old.lower()
+    if low_value == low_old:
+        return new
+    marker = f"{old}/"
+    if low_value.startswith(marker.lower()):
+        return f"{new}/{value[len(old) + 1:]}"
+    return value
+
+
+def _sync_planned_collection_rows(scene, state, snapshot: Optional[Dict[str, object]] = None) -> None:
+    snapshot = snapshot or _build_scene_collection_snapshot(scene)
+    existing_paths = list((snapshot.get("path_to_collection", {}) or {}).keys()) if isinstance(snapshot, dict) else []
+
+    object_target_paths: List[str] = []
+    for row in list(getattr(state, "items", []) or []):
+        if getattr(row, "item_type", "") != "OBJECT":
+            continue
+        target_status = (getattr(row, "target_status", "") or "").upper()
+        target_path = (getattr(row, "target_collection_path", "") or "").strip()
+        if target_status not in {"AUTO", "CONFIRMED"} or not target_path:
+            continue
+        object_target_paths.append(target_path)
+
+    create_paths = _build_missing_path_segments(object_target_paths, existing_paths)
+    create_paths = [_normalize_collection_path_value(path) for path in create_paths]
+    create_paths = [path for path in create_paths if path]
+
+    keep_rows: List[Dict[str, object]] = []
+    for src in list(getattr(state, "items", []) or []):
+        if getattr(src, "item_type", "") == "PLANNED_COLLECTION":
+            continue
+        keep_rows.append(
+            {
+                "item_type": str(getattr(src, "item_type", "") or "OBJECT"),
+                "object_ref": getattr(src, "object_ref", None),
+                "material_ref": getattr(src, "material_ref", None),
+                "collection_ref": getattr(src, "collection_ref", None),
+                "item_id": str(getattr(src, "item_id", "") or ""),
+                "original_name": str(getattr(src, "original_name", "") or ""),
+                "suggested_name": str(getattr(src, "suggested_name", "") or ""),
+                "ai_raw_name": str(getattr(src, "ai_raw_name", "") or ""),
+                "normalization_notes": str(getattr(src, "normalization_notes", "") or ""),
+                "normalization_changed": bool(getattr(src, "normalization_changed", False)),
+                "selected_for_apply": bool(getattr(src, "selected_for_apply", False)),
+                "read_only": bool(getattr(src, "read_only", False)),
+                "status": str(getattr(src, "status", "") or ""),
+                "target_collection_path": str(getattr(src, "target_collection_path", "") or ""),
+                "target_status": str(getattr(src, "target_status", "") or "NONE"),
+                "target_confidence": float(getattr(src, "target_confidence", 0.0) or 0.0),
+                "target_candidates_json": str(getattr(src, "target_candidates_json", "") or ""),
+                "target_debug_json": str(getattr(src, "target_debug_json", "") or ""),
+            }
+        )
+    new_virtual_rows = [{"path": path} for path in sorted(set(create_paths), key=lambda p: (p.count("/"), p.lower()))]
+
+    global _AI_ASSET_PREVIEW_SUSPENDED
+    previous = _AI_ASSET_PREVIEW_SUSPENDED
+    _AI_ASSET_PREVIEW_SUSPENDED = True
+    try:
+        state.items.clear()
+        for src in keep_rows:
+            row = state.items.add()
+            row.item_type = str(src.get("item_type") or "OBJECT")
+            row.object_ref = src.get("object_ref")
+            row.material_ref = src.get("material_ref")
+            row.collection_ref = src.get("collection_ref")
+            row.item_id = str(src.get("item_id") or "")
+            row.original_name = str(src.get("original_name") or "")
+            row.suggested_name = str(src.get("suggested_name") or "")
+            row.ai_raw_name = str(src.get("ai_raw_name") or "")
+            row.normalization_notes = str(src.get("normalization_notes") or "")
+            row.normalization_changed = bool(src.get("normalization_changed") or False)
+            row.selected_for_apply = bool(src.get("selected_for_apply") or False)
+            row.read_only = bool(src.get("read_only") or False)
+            row.status = str(src.get("status") or "")
+            row.target_collection_path = str(src.get("target_collection_path") or "")
+            row.target_status = str(src.get("target_status") or "NONE")
+            row.target_confidence = float(src.get("target_confidence") or 0.0)
+            row.target_candidates_json = str(src.get("target_candidates_json") or "")
+            row.target_debug_json = str(src.get("target_debug_json") or "")
+
+        for idx, info in enumerate(new_virtual_rows):
+            path = str(info.get("path") or "")
+            row = state.items.add()
+            row.item_type = "PLANNED_COLLECTION"
+            row.object_ref = None
+            row.material_ref = None
+            row.collection_ref = None
+            row.item_id = f"vcol_{idx}_{path}"
+            row.original_name = path
+            row.suggested_name = path
+            row.selected_for_apply = False
+            row.read_only = False
+            row.status = "PLANNED_CREATE"
+            row.target_collection_path = path
+            row.target_status = "AUTO"
+            row.target_confidence = 1.0
+            row.target_candidates_json = ""
+            row.target_debug_json = ""
+    finally:
+        _AI_ASSET_PREVIEW_SUSPENDED = previous
+
+
+def on_ai_asset_item_suggested_name_changed(scene, item_id: str) -> None:
+    """Handle inline edits for item suggested names, including virtual planned collections."""
+    global _AI_ASSET_NAME_EDIT_GUARD
+    if _AI_ASSET_NAME_EDIT_GUARD > 0:
+        return
+    state = getattr(scene, "lime_ai_assets", None) if scene is not None else None
+    if state is None:
+        return
+    row = _find_row_by_item_id(state, item_id)
+    if row is None:
+        refresh_ai_asset_preview(scene)
+        return
+
+    if getattr(row, "item_type", "") != "PLANNED_COLLECTION":
+        refresh_ai_asset_preview(scene)
+        return
+
+    old_path = (getattr(row, "original_name", "") or "").strip()
+    new_path = _normalize_collection_path_value(getattr(row, "suggested_name", "") or "")
+    if not new_path:
+        new_path = old_path
+
+    _AI_ASSET_NAME_EDIT_GUARD += 1
+    try:
+        global _AI_ASSET_PREVIEW_SUSPENDED
+        previous = _AI_ASSET_PREVIEW_SUSPENDED
+        _AI_ASSET_PREVIEW_SUSPENDED = True
+        try:
+            row.suggested_name = new_path
+            row.original_name = new_path
+            row.target_collection_path = new_path
+            row.status = "PLANNED_CREATE" if new_path else "INVALID"
+            for obj_row in list(getattr(state, "items", []) or []):
+                if getattr(obj_row, "item_type", "") != "OBJECT":
+                    continue
+                target = (getattr(obj_row, "target_collection_path", "") or "").strip()
+                if not target:
+                    continue
+                replaced = _replace_path_prefix(target, old_path, new_path)
+                if replaced != target:
+                    obj_row.target_collection_path = replaced
+                    if (getattr(obj_row, "target_status", "") or "").upper() == "NONE":
+                        obj_row.target_status = "AUTO"
+        finally:
+            _AI_ASSET_PREVIEW_SUSPENDED = previous
+
+        snapshot = _build_scene_collection_snapshot(scene)
+        _sync_planned_collection_rows(scene, state, snapshot=snapshot)
+        refresh_ai_asset_preview(scene)
+    finally:
+        _AI_ASSET_NAME_EDIT_GUARD -= 1
 
 
 def _build_collection_reorg_plan(scene, state, snapshot: Dict[str, object]) -> Dict[str, object]:
@@ -1551,6 +2208,72 @@ def _find_row_by_item_id(state, item_id: str) -> Optional[LimeAIAssetItem]:
     return None
 
 
+def _selected_object_rows(state) -> List[LimeAIAssetItem]:
+    rows: List[LimeAIAssetItem] = []
+    for row in list(getattr(state, "items", []) or []):
+        if getattr(row, "item_type", "") != "OBJECT":
+            continue
+        if not bool(getattr(row, "selected_for_apply", False)):
+            continue
+        rows.append(row)
+    return rows
+
+
+def _target_option_items_for_rows(scene, state, rows: Sequence[LimeAIAssetItem]):
+    if state is None:
+        return []
+    if not rows:
+        return []
+
+    snapshot = _build_scene_collection_snapshot(scene)
+    path_to_collection = snapshot.get("path_to_collection", {}) if isinstance(snapshot, dict) else {}
+    if not isinstance(path_to_collection, dict):
+        path_to_collection = {}
+    activity_index = snapshot.get("collection_activity", {}) if isinstance(snapshot, dict) else {}
+    if not isinstance(activity_index, dict):
+        activity_index = {}
+
+    options: List[Tuple[str, str, str, int]] = []
+    seen: set[str] = set()
+    idx = 0
+
+    for path, coll in sorted(path_to_collection.items(), key=lambda kv: (kv[0].count("/"), kv[0].lower())):
+        if not path:
+            continue
+        is_active, _reason = _collection_is_active_destination(coll, activity_index)
+        if bool(getattr(state, "use_active_collections_only", True)) and not is_active:
+            continue
+        options.append((path, path, "Existing collection", idx))
+        seen.add(path.lower())
+        idx += 1
+
+    for row in list(getattr(state, "items", []) or []):
+        if getattr(row, "item_type", "") != "PLANNED_COLLECTION":
+            continue
+        path = _normalize_collection_path_value(getattr(row, "suggested_name", "") or getattr(row, "original_name", "") or "")
+        if not path:
+            continue
+        key = path.lower()
+        if key in seen:
+            continue
+        options.append((path, path, "Planned collection (will be created on apply)", idx))
+        seen.add(key)
+        idx += 1
+
+    for row in rows:
+        path = _normalize_collection_path_value(getattr(row, "target_collection_path", "") or "")
+        if not path:
+            continue
+        key = path.lower()
+        if key in seen:
+            continue
+        options.append((path, path, "Current selected-row target", idx))
+        seen.add(key)
+        idx += 1
+
+    return options
+
+
 class LIME_TB_OT_ai_asset_suggest_names(Operator):
     bl_idname = "lime_tb.ai_asset_suggest_names"
     bl_label = "AI: Suggest Names"
@@ -1642,6 +2365,17 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             token = object_pointer_to_token.get(obj.as_pointer(), f"obj_{idx}")
             parent = getattr(obj, "parent", None)
             parent_token = object_pointer_to_token.get(parent.as_pointer()) if parent is not None else None
+            parent_name = str(getattr(parent, "name", "") or "")
+            parent_type = str(getattr(parent, "type", "") or "")
+            root_name = _object_root_name(obj)
+            depth = _object_hierarchy_depth(obj)
+            sibling_count = 0
+            if parent is not None:
+                sibling_count = max(0, len(list(getattr(parent, "children", []) or [])) - 1)
+            children = list(getattr(obj, "children", []) or [])
+            children_preview = [str(getattr(child, "name", "") or "") for child in children[:6]]
+            empty_role = _empty_role_hint(obj)
+            hierarchy_role, hierarchy_role_reason = _infer_hierarchy_role(obj)
             collection_paths = _object_collection_paths(obj, scene_snapshot)
             coll_hints = [p.split("/")[-1] for p in collection_paths][:5]
             shared_data_users = 1
@@ -1656,10 +2390,22 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 "name": obj.name,
                 "type": getattr(obj, "type", ""),
                 "parent_id": parent_token,
-                "children_count": len(list(getattr(obj, "children", []) or [])),
+                "parent_name": parent_name,
+                "parent_type": parent_type,
+                "root_name": root_name,
+                "hierarchy_depth": depth,
+                "children_count": len(children),
+                "children_preview": children_preview,
+                "sibling_count": sibling_count,
+                "is_empty": str(getattr(obj, "type", "") or "").upper() == "EMPTY",
+                "empty_role_hint": empty_role,
+                "hierarchy_role": hierarchy_role,
+                "hierarchy_role_reason": hierarchy_role_reason,
                 "shared_data_users": shared_data_users,
                 "collection_hints": coll_hints,
                 "collection_paths": collection_paths[:5],
+                "name_tokens": list(tokenize_name(obj.name))[:10],
+                "semantic_tags": _object_semantic_tags(obj.name, str(getattr(obj, "type", "") or "")),
             }
             obj_items.append(item)
             self._id_map[token] = {
@@ -1728,6 +2474,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
 
         scene_summary = _build_scene_summary(obj_items, mat_items, col_items)
         material_scene_context = _build_material_scene_context(materials)
+        object_group_hints = _build_object_group_hints(obj_items)
         prompt = _build_prompt(
             getattr(state, "context", ""),
             scene_summary,
@@ -1736,6 +2483,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             col_items,
             collection_hierarchy=hierarchy_paths,
             material_scene_context=material_scene_context,
+            object_group_hints=object_group_hints,
         )
         headers = openrouter_headers(prefs)
         model = (getattr(prefs, "openrouter_model", "") or "").strip() or _DEFAULT_MODEL
@@ -1810,6 +2558,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                             chunk_collections,
                             collection_hierarchy=hierarchy_paths,
                             material_scene_context=material_scene_context,
+                            object_group_hints=object_group_hints,
                         )
                         chunk_items, chunk_err, _ = _openrouter_suggest(
                             headers,
@@ -1923,6 +2672,9 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 row.target_status = "NONE"
                 row.target_confidence = 0.0
                 row.target_candidates_json = ""
+                row.ai_raw_name = ""
+                row.normalization_notes = ""
+                row.normalization_changed = False
 
                 suggested_raw = (by_id_name.get(item_id) or "").strip()
                 if row.item_type == "OBJECT":
@@ -1936,31 +2688,41 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                         row.status = ""
                 elif row.item_type == "MATERIAL":
                     mat = getattr(row, "material_ref", None)
+                    debug_enabled = bool(getattr(state, "debug_material_flow", False))
+                    row.ai_raw_name = suggested_raw
+                    notes: List[str] = []
                     old_name = (getattr(mat, "name", "") or getattr(row, "original_name", "") or "").strip()
                     if old_name:
                         material_name_universe.discard(old_name)
                     suggested_norm = (
-                        _normalize_material_name_for_organizer(suggested_raw, mat=mat) if suggested_raw else ""
+                        _normalize_material_name_for_organizer(suggested_raw, mat=mat, trace=notes) if suggested_raw else ""
                     )
                     forced_tag = (getattr(self, "_forced_material_tag", "") or "").strip()
                     forced_ptrs = set(getattr(self, "_forced_material_ptrs", set()) or set())
                     if suggested_norm and forced_tag and mat is not None:
                         mat_ptr = mat.as_pointer()
                         if (not forced_ptrs) or (mat_ptr in forced_ptrs):
-                            suggested_norm = _force_material_name_tag(suggested_norm, forced_tag)
+                            forced_name = _force_material_name_tag(suggested_norm, forced_tag)
+                            if forced_name != suggested_norm:
+                                notes.append(f"Forced context tag: {forced_tag}")
+                            suggested_norm = forced_name
                     if suggested_norm and parse_material_name(suggested_norm):
                         unique = bump_material_version_until_unique(material_name_universe, suggested_norm)
+                        if unique != suggested_norm:
+                            notes.append("Bumped version to avoid name collision")
                         material_name_universe.add(unique)
                         row.suggested_name = unique
-                        if suggested_raw and unique != suggested_raw:
-                            row.status = "NORMALIZED"
-                        else:
-                            row.status = ""
+                        row.status = _material_status_from_trace(suggested_raw, row.suggested_name, notes)
                     else:
                         row.suggested_name = suggested_norm
                         row.status = "INVALID" if suggested_norm else ""
+                        if suggested_norm:
+                            notes.append("Output still invalid after normalization")
                         if old_name:
                             material_name_universe.add(old_name)
+                    row.normalization_changed = bool(suggested_raw and row.suggested_name and row.suggested_name != suggested_raw)
+                    if notes and (debug_enabled or row.normalization_changed or row.status == "INVALID"):
+                        row.normalization_notes = "; ".join(notes[:8])
                 else:
                     suggested_norm = normalize_collection_name(suggested_raw) if suggested_raw else ""
                     row.suggested_name = suggested_norm
@@ -1983,6 +2745,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             hints_by_item_id=by_id_hint,
             preserve_confirmed=False,
         )
+        _sync_planned_collection_rows(scene, state)
         sync_ai_asset_row_selection(scene)
         self.report({"INFO"}, f"AI suggestions created: {len(state.items)} item(s)")
         return {"FINISHED"}
@@ -2157,6 +2920,7 @@ class LIME_TB_OT_ai_asset_refresh_targets(Operator):
             return {"CANCELLED"}
 
         _resolve_object_targets_for_state(scene, state, preserve_confirmed=True)
+        _sync_planned_collection_rows(scene, state)
         refresh_ai_asset_preview(scene)
         self.report(
             {"INFO"},
@@ -2182,6 +2946,30 @@ def _resolve_target_candidate_items(self, context):
         suffix = "existing" if exists else "will create"
         items.append((path, path, f"Score {score:.2f} ({suffix})", idx))
     return items
+
+
+def _bulk_target_candidate_items(self, context):
+    scene = getattr(context, "scene", None) if context else None
+    state = getattr(scene, "lime_ai_assets", None) if scene is not None else None
+    if state is None:
+        return []
+
+    selected_rows = _selected_object_rows(state)
+    if not selected_rows:
+        return []
+
+    return _target_option_items_for_rows(scene, state, selected_rows)
+
+
+def _single_target_candidate_items(self, context):
+    scene = getattr(context, "scene", None) if context else None
+    state = getattr(scene, "lime_ai_assets", None) if scene is not None else None
+    if state is None:
+        return []
+    row = _find_row_by_item_id(state, getattr(self, "item_id", ""))
+    if row is None or getattr(row, "item_type", "") != "OBJECT":
+        return []
+    return _target_option_items_for_rows(scene, state, [row])
 
 
 class LIME_TB_OT_ai_asset_resolve_target(Operator):
@@ -2246,8 +3034,152 @@ class LIME_TB_OT_ai_asset_resolve_target(Operator):
         row.target_status = "CONFIRMED"
         row.target_confidence = max(float(getattr(row, "target_confidence", 0.0) or 0.0), 0.99)
         state.last_used_collection_path = target_path
+        _sync_planned_collection_rows(scene, state)
         refresh_ai_asset_preview(scene)
         self.report({"INFO"}, f"Target confirmed: {target_path}")
+        return {"FINISHED"}
+
+
+class LIME_TB_OT_ai_asset_set_target_for_item(Operator):
+    bl_idname = "lime_tb.ai_asset_set_target_for_item"
+    bl_label = "AI: Re-route Object"
+    bl_description = "Set destination collection path for one object row"
+    bl_options = {"REGISTER", "UNDO"}
+
+    item_id: StringProperty(name="Item ID", default="")
+    destination_path: EnumProperty(name="Destination", items=_single_target_candidate_items)
+
+    def invoke(self, context, event):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_assets", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
+            return {"CANCELLED"}
+        row = _find_row_by_item_id(state, self.item_id)
+        if row is None or getattr(row, "item_type", "") != "OBJECT":
+            self.report({"ERROR"}, "Target object row not found")
+            return {"CANCELLED"}
+
+        options = _single_target_candidate_items(self, context)
+        if not options:
+            self.report({"WARNING"}, "No destination options available")
+            return {"CANCELLED"}
+
+        current = _normalize_collection_path_value(getattr(row, "target_collection_path", "") or "")
+        valid_ids = {item[0] for item in options}
+        self.destination_path = current if current in valid_ids else options[0][0]
+        return context.window_manager.invoke_props_dialog(self, width=620)
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        state = getattr(scene, "lime_ai_assets", None)
+        row = _find_row_by_item_id(state, self.item_id) if state is not None else None
+        if row is not None:
+            layout.label(text=f"Object: {getattr(row, 'original_name', '') or '<unnamed>'}", icon="OBJECT_DATA")
+        layout.prop(self, "destination_path", text="Collection Path")
+
+    def execute(self, context):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_assets", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
+            return {"CANCELLED"}
+        row = _find_row_by_item_id(state, self.item_id)
+        if row is None or getattr(row, "item_type", "") != "OBJECT":
+            self.report({"ERROR"}, "Target object row not found")
+            return {"CANCELLED"}
+
+        target_path = _normalize_collection_path_value(self.destination_path or "")
+        if not target_path:
+            self.report({"WARNING"}, "Destination path is not valid")
+            return {"CANCELLED"}
+
+        row.target_collection_path = target_path
+        row.target_status = "CONFIRMED"
+        row.target_confidence = 1.0
+        state.last_used_collection_path = target_path
+        _sync_planned_collection_rows(scene, state)
+        refresh_ai_asset_preview(scene)
+        self.report({"INFO"}, f"Re-routed object to {target_path}")
+        return {"FINISHED"}
+
+
+class LIME_TB_OT_ai_asset_set_target_for_selected(Operator):
+    bl_idname = "lime_tb.ai_asset_set_target_for_selected"
+    bl_label = "AI: Re-route Selected Objects"
+    bl_description = "Set a destination collection path for all selected object rows"
+    bl_options = {"REGISTER", "UNDO"}
+
+    destination_path: EnumProperty(name="Destination", items=_bulk_target_candidate_items)
+
+    def invoke(self, context, event):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_assets", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
+            return {"CANCELLED"}
+        rows = _selected_object_rows(state)
+        if not rows:
+            self.report({"WARNING"}, "Select at least one object row first")
+            return {"CANCELLED"}
+
+        options = _bulk_target_candidate_items(self, context)
+        if not options:
+            self.report({"WARNING"}, "No destination options available")
+            return {"CANCELLED"}
+
+        current_targets = {
+            _normalize_collection_path_value(getattr(row, "target_collection_path", "") or "")
+            for row in rows
+        }
+        current_targets.discard("")
+        valid_ids = {item[0] for item in options}
+        if len(current_targets) == 1:
+            only = list(current_targets)[0]
+            if only in valid_ids:
+                self.destination_path = only
+            else:
+                self.destination_path = options[0][0]
+        else:
+            self.destination_path = options[0][0]
+        return context.window_manager.invoke_props_dialog(self, width=620)
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        state = getattr(scene, "lime_ai_assets", None)
+        selected_count = len(_selected_object_rows(state)) if state is not None else 0
+        layout.label(text=f"Selected object rows: {selected_count}", icon="OBJECT_DATA")
+        layout.prop(self, "destination_path", text="Collection Path")
+
+    def execute(self, context):
+        scene = context.scene
+        state = getattr(scene, "lime_ai_assets", None)
+        if state is None:
+            self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
+            return {"CANCELLED"}
+        rows = _selected_object_rows(state)
+        if not rows:
+            self.report({"WARNING"}, "Select at least one object row first")
+            return {"CANCELLED"}
+
+        target_path = _normalize_collection_path_value(self.destination_path or "")
+        if not target_path:
+            self.report({"WARNING"}, "Destination path is not valid")
+            return {"CANCELLED"}
+
+        updated = 0
+        for row in rows:
+            row.target_collection_path = target_path
+            row.target_status = "CONFIRMED"
+            row.target_confidence = 1.0
+            updated += 1
+
+        state.last_used_collection_path = target_path
+        _sync_planned_collection_rows(scene, state)
+        refresh_ai_asset_preview(scene)
+        self.report({"INFO"}, f"Re-routed {updated} object(s) to {target_path}")
         return {"FINISHED"}
 
 
@@ -2275,6 +3207,118 @@ class LIME_TB_OT_ai_asset_clear(Operator):
         return {"FINISHED"}
 
 
+class LIME_TB_OT_open_ai_asset_manager(Operator):
+    bl_idname = "lime_tb.open_ai_asset_manager"
+    bl_label = "Open AI Asset Manager"
+    bl_description = "Open AI Asset Organizer in a larger popup window"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=885)
+
+    def draw(self, context):
+        from ..ui.ui_ai_asset_organizer import draw_ai_asset_organizer_content
+
+        draw_ai_asset_organizer_content(self.layout, context, for_popup=True)
+
+    def execute(self, context):
+        self.report({"INFO"}, "AI Asset Manager opened")
+        return {"FINISHED"}
+
+
+class LIME_TB_OT_ai_asset_material_debug_report(Operator):
+    bl_idname = "lime_tb.ai_asset_material_debug_report"
+    bl_label = "AI: Material Debug Report"
+    bl_description = "Export a material AI/normalization debug report to a Blender text block"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scene = getattr(context, "scene", None)
+        state = getattr(scene, "lime_ai_assets", None) if scene is not None else None
+        if state is None:
+            self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
+            return {"CANCELLED"}
+
+        rows = [row for row in list(getattr(state, "items", []) or []) if getattr(row, "item_type", "") == "MATERIAL"]
+        if not rows:
+            self.report({"INFO"}, "No material rows available for debug report")
+            return {"CANCELLED"}
+
+        lines = [
+            "Lime Pipeline - AI Material Normalization Debug Report",
+            f"Generated: {datetime.datetime.now().isoformat(timespec='seconds')}",
+            f"Rows: {len(rows)}",
+            "",
+            "material_original | ai_output_raw | final_after_normalization | status | normalization_changed | notes",
+        ]
+        for row in rows:
+            lines.append(
+                " | ".join(
+                    [
+                        str(getattr(row, "original_name", "") or "").replace("\n", " ").strip(),
+                        str(getattr(row, "ai_raw_name", "") or "").replace("\n", " ").strip(),
+                        str(getattr(row, "suggested_name", "") or "").replace("\n", " ").strip(),
+                        str(getattr(row, "status", "") or "").strip(),
+                        str(bool(getattr(row, "normalization_changed", False))),
+                        str(getattr(row, "normalization_notes", "") or "").replace("\n", " ").strip(),
+                    ]
+                )
+            )
+
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        text_name = f"AI_Material_Debug_{stamp}.txt"
+        text_block = bpy.data.texts.new(text_name)
+        text_block.write("\n".join(lines) + "\n")
+        self.report({"INFO"}, f"Debug report created: {text_name}")
+        return {"FINISHED"}
+
+
+class LIME_TB_OT_ai_asset_collection_debug_report(Operator):
+    bl_idname = "lime_tb.ai_asset_collection_debug_report"
+    bl_label = "AI: Collection Debug Report"
+    bl_description = "Export a collection target resolution debug report to a Blender text block"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scene = getattr(context, "scene", None)
+        state = getattr(scene, "lime_ai_assets", None) if scene is not None else None
+        if state is None:
+            self.report({"ERROR"}, "AI Asset Organizer state is unavailable")
+            return {"CANCELLED"}
+
+        rows = [row for row in list(getattr(state, "items", []) or []) if getattr(row, "item_type", "") == "OBJECT"]
+        if not rows:
+            self.report({"INFO"}, "No object rows available for collection debug report")
+            return {"CANCELLED"}
+
+        lines = [
+            "Lime Pipeline - AI Collection Resolution Debug Report",
+            f"Generated: {datetime.datetime.now().isoformat(timespec='seconds')}",
+            f"Rows: {len(rows)}",
+            "",
+            "object | selected_path | status | confidence | debug_json",
+        ]
+        for row in rows:
+            lines.append(
+                " | ".join(
+                    [
+                        str(getattr(row, "original_name", "") or "").replace("\n", " ").strip(),
+                        str(getattr(row, "target_collection_path", "") or "").replace("\n", " ").strip(),
+                        str(getattr(row, "target_status", "") or "").strip(),
+                        f"{float(getattr(row, 'target_confidence', 0.0) or 0.0):.3f}",
+                        str(getattr(row, "target_debug_json", "") or "").replace("\n", " ").strip(),
+                    ]
+                )
+            )
+
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        text_name = f"AI_Collection_Debug_{stamp}.txt"
+        text_block = bpy.data.texts.new(text_name)
+        text_block.write("\n".join(lines) + "\n")
+        self.report({"INFO"}, f"Collection debug report created: {text_name}")
+        return {"FINISHED"}
+
+
 __all__ = [
     "refresh_ai_asset_preview",
     "LIME_TB_OT_ai_asset_suggest_names",
@@ -2282,5 +3326,10 @@ __all__ = [
     "LIME_TB_OT_ai_asset_scope_preset",
     "LIME_TB_OT_ai_asset_refresh_targets",
     "LIME_TB_OT_ai_asset_resolve_target",
+    "LIME_TB_OT_ai_asset_set_target_for_item",
+    "LIME_TB_OT_ai_asset_set_target_for_selected",
     "LIME_TB_OT_ai_asset_clear",
+    "LIME_TB_OT_open_ai_asset_manager",
+    "LIME_TB_OT_ai_asset_material_debug_report",
+    "LIME_TB_OT_ai_asset_collection_debug_report",
 ]

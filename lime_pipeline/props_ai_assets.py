@@ -6,6 +6,7 @@ This module is intentionally UI-agnostic; panels and operators consume the state
 
 from __future__ import annotations
 
+import os
 import bpy
 from importlib import import_module
 from bpy.types import PropertyGroup
@@ -45,6 +46,28 @@ def _selected_for_apply_update(self, context) -> None:
     _refresh_preview(scene)
 
 
+def _suggested_name_update(self, context) -> None:
+    scene = getattr(context, "scene", None) if context else None
+    if scene is None:
+        try:
+            scene = bpy.context.scene  # type: ignore[attr-defined]
+        except Exception:
+            scene = None
+    if scene is None:
+        return
+    try:
+        ops_module = import_module("lime_pipeline.ops.ops_ai_asset_organizer")
+    except Exception:
+        _refresh_preview(scene)
+        return
+    if getattr(ops_module, "_AI_ASSET_PREVIEW_SUSPENDED", False):
+        return
+    try:
+        ops_module.on_ai_asset_item_suggested_name_changed(scene, getattr(self, "item_id", ""))
+    except Exception:
+        _refresh_preview(scene)
+
+
 def _scope_update(self, context) -> None:
     scene = getattr(context, "scene", None) if context else None
     if scene is None:
@@ -67,6 +90,19 @@ def _scope_update(self, context) -> None:
         _refresh_preview(scene)
 
 
+def _use_image_context_update(self, context) -> None:
+    if not bool(getattr(self, "use_image_context", False)):
+        return
+    current = str(getattr(self, "image_path", "") or "").strip()
+    if current:
+        return
+    default_dir = os.path.normpath(r"C:\Users\Usuario\Pictures\Screenshots")
+    try:
+        setattr(self, "image_path", default_dir)
+    except Exception:
+        pass
+
+
 class LimeAIAssetItem(PropertyGroup):
     item_type: EnumProperty(
         name="Type",
@@ -74,6 +110,7 @@ class LimeAIAssetItem(PropertyGroup):
             ("OBJECT", "Object", "Rename an object"),
             ("MATERIAL", "Material", "Rename a material"),
             ("COLLECTION", "Collection", "Rename a collection"),
+            ("PLANNED_COLLECTION", "Planned Collection", "Virtual collection path that will be created on apply"),
         ],
         default="OBJECT",
     )
@@ -82,7 +119,10 @@ class LimeAIAssetItem(PropertyGroup):
     collection_ref: PointerProperty(type=bpy.types.Collection)
     item_id: StringProperty(name="Item ID", default="")
     original_name: StringProperty(name="Original", default="")
-    suggested_name: StringProperty(name="Suggested", default="")
+    suggested_name: StringProperty(name="Suggested", default="", update=_suggested_name_update)
+    ai_raw_name: StringProperty(name="AI Raw Name", default="")
+    normalization_notes: StringProperty(name="Normalization Notes", default="")
+    normalization_changed: BoolProperty(name="Normalization Changed", default=False)
     selected_for_apply: BoolProperty(name="Apply", default=True, update=_selected_for_apply_update)
     read_only: BoolProperty(name="Read Only", default=False)
     status: StringProperty(name="Status", default="")
@@ -100,6 +140,7 @@ class LimeAIAssetItem(PropertyGroup):
     )
     target_confidence: FloatProperty(name="Target Confidence", default=0.0, min=0.0, max=1.0)
     target_candidates_json: StringProperty(name="Target Candidates", default="")
+    target_debug_json: StringProperty(name="Target Debug", default="")
 
 
 class LimeAIAssetState(PropertyGroup):
@@ -109,12 +150,18 @@ class LimeAIAssetState(PropertyGroup):
         name="Context",
         description="Optional context to improve AI naming suggestions",
         default="",
-        maxlen=500,
+        maxlen=2000,
+    )
+    debug_material_flow: BoolProperty(
+        name="Debug Material Flow",
+        description="Capture AI raw material output and normalization trace for diagnostics",
+        default=False,
     )
     use_image_context: BoolProperty(
         name="Use Image Context",
         description="Include an image as extra context for AI suggestions",
         default=False,
+        update=_use_image_context_update,
     )
     image_path: StringProperty(
         name="Image",
@@ -126,6 +173,16 @@ class LimeAIAssetState(PropertyGroup):
         name="Include Collections",
         description="Include relevant non-SHOT collections used by the current object selection",
         default=True,
+    )
+    use_active_collections_only: BoolProperty(
+        name="Use Active Collections Only",
+        description="Only consider active collections as destination candidates",
+        default=True,
+    )
+    debug_collection_flow: BoolProperty(
+        name="Debug Collection Flow",
+        description="Capture collection candidate filtering and resolver decisions for diagnostics",
+        default=False,
     )
     organize_collections: BoolProperty(
         name="Organize Collections on Apply",

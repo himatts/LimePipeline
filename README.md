@@ -14,6 +14,14 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Incluye un AI Asset Organizer v2 para sugerir y aplicar nombres de objetos/materiales/colecciones (OpenRouter), con preview unificado, resolución jerárquica de destinos y organización opcional de colecciones.
 - AI Asset Organizer v2 usa PascalCase por segmentos separados con guion bajo para objetos y colecciones (ejemplo: `SciFiCrate_Large_02`).
 - AI Asset Organizer v2 muestra rutas completas de destino, maneja ambigüedad con confirmación por fila y permite filtros de Apply Scope (All / Only Objects / Only Materials / Only Collections).
+- Permite re-rutear manualmente en lote el destino de colección para objetos seleccionados en la lista antes de aplicar cambios.
+- Cuando una reorganización requiere crear nuevas colecciones, AI Asset Organizer v2 las muestra como filas editables de “planned collections” para ajustar nombres antes de aplicar, manteniendo sincronía con destinos de objetos.
+- AI Asset Organizer v2 puede abrirse en una ventana emergente enfocada (`Open in Window`) para revisar nombrado/organización (objetos, materiales, colecciones) sin mezclar el bloque de texturas.
+- AI Asset Organizer v2 prioriza destinos de colecciones activas por defecto y ofrece reportes de debug (materiales y colecciones) para auditar decisiones IA/heurísticas.
+- Los controles de debug y reroute masivo se mantienen como herramientas internas y no se muestran en la UI principal para reducir ruido.
+- Cuando no existen destinos activos, AI Asset Organizer puede usar un hint de IA válido como destino virtual (p. ej. `Props`) para crearlo durante `Organize collections on apply`, sin reactivar colecciones existentes desactivadas.
+- AI Asset Organizer v2 incorpora señales jerárquicas (padre/hijo/raíz y rol de empties) para mejorar sugerencias de naming y organización sin depender únicamente de contexto manual.
+- La resolución de colecciones aplica guardrails para roles jerárquicos (`ROOT_CONTROLLER`/`CONTROLLER`) y evita clasificar controladores raíz en subcategorías técnicas (como `Electronics`) salvo evidencia fuerte.
 - Incluye herramientas de Textures (Scan/Adopt) dentro de AI Asset Organizer para centralizar texturas en `rsc/Textures`.
 - Incluye un AI Render Converter para convertir renders a storyboard/sketch con Krea y OpenRouter.
 - Mejora la gestión visual del AI Render Converter con miniaturas, vista grande y filtros por sección.

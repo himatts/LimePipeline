@@ -13,7 +13,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 _SHOT_ROOT_RE = re.compile(r"^SHOT \d{2,3}$")
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-_GENERIC_LEAFS = {"collection", "asset", "object"}
+_GENERIC_LEAFS = {"collection", "asset", "object", "archive"}
 _TOKEN_ALIASES = {
     "bg": {"background", "backdrop", "environment"},
     "background": {"bg", "backdrop", "environment"},
