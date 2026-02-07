@@ -133,7 +133,7 @@ Esta guía proporciona soluciones detalladas para los problemas más comunes en 
    - Reconectar texturas manualmente
 
 2. **Renombrado manual:**
-   - Usar AI Material Renamer con selección manual
+   - Usar AI Asset Organizer con Apply Scope = Only Materials
    - Aplicar cambios uno por uno
 
 3. **Verificar taxonomía:**
@@ -310,7 +310,7 @@ Esta guía proporciona soluciones detalladas para los problemas más comunes en 
 
 ## Problemas de IA y Conectividad
 
-### AI Material Renamer No Conecta
+### AI Tools No Conectan
 **Error típico:** "Connection failed" o "API timeout"
 
 **Diagnóstico:**
@@ -320,8 +320,8 @@ Esta guía proporciona soluciones detalladas para los problemas más comunes en 
 
 **Soluciones:**
 1. **Test conexión:**
-   - Botón "Test Connection" en AI Material Renamer
-   - Verificar respuesta en console
+   - Botón "Test Connection" en preferencias del add-on
+   - Verificar respuesta en consola
 
 2. **Configurar proxy:**
    - Si hay firewall corporativo
@@ -337,7 +337,7 @@ Esta guía proporciona soluciones detalladas para los problemas más comunes en 
 |----------|-----------------|-------------|
 | Paneles faltantes | Cambiar espacio de trabajo | N/A |
 | Márgenes rotos | "Retry Camera Margin Backgrounds" | Cameras Manager |
-| Materiales mal nombrados | "AI Scan Materials" + "Apply" | AI Material Renamer |
+| Materiales mal nombrados | "Suggest Names (AI)" + "Apply Selected" (Only Materials) | AI Asset Organizer |
 | Shots desincronizados | "Sync Shot List" | Shots Manager |
 | Renders lentos | "Clean Step" + reducir resolución | Render Configs |
 | Memoria insuficiente | "Clean Step" + externalizar assets | Model Organizer |

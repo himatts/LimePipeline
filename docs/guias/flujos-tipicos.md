@@ -75,9 +75,9 @@ Esta guía describe los workflows más comunes en Lime Pipeline, organizados por
 ### Renombrado Inteligente con IA
 ```
 1. Ejecutar "AI Test Connection" para verificar conectividad
-2. Usar "AI Scan Materials" para analizar materiales existentes
-3. Revisar sugerencias de renombrado en AI Material Renamer
-4. Aplicar cambios con "AI Apply Materials"
+2. Usar "Suggest Names (AI)" en AI Asset Organizer
+3. Ajustar Apply Scope a "Only Materials"
+4. Aplicar cambios con "Apply Selected"
 5. Verificar consistencia con convenciones MAT_*
 6. Ajustar manualmente casos especiales si es necesario
 ```
@@ -180,7 +180,7 @@ Esta guía describe los workflows más comunes en Lime Pipeline, organizados por
 ### Problemas Comunes
 - **Collections faltantes**: Usar "Add Missing Collections"
 - **Cámaras sin márgenes**: Ejecutar "Auto Camera Background"
-- **Materiales inconsistentes**: Revisar con AI Material Renamer
+- **Materiales inconsistentes**: Revisar con AI Asset Organizer (scope materiales)
 - **Rendimiento lento**: Optimizar con "Clean Step"
 
 ### Recuperación de Errores

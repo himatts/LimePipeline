@@ -19,6 +19,9 @@
 - Maintained all core shot management functionality while improving UI consistency
 
 ### Changed
+- Removed the AI Material Renamer panel from Lime Toolbox.
+- Removed legacy `lime_tb.ai_*` Material Renamer compatibility operators.
+- AI Asset Organizer is now the only recommended workflow for AI material renaming.
 - AI Render Converter now uses thumbnail grids per section, includes large Image Editor previews, syncs Source Render selections to frames, and deduplicates style imports.
 - AI Render Converter adds deletion controls for selected images and batch cleanup with double confirmation.
 - AI Render Converter adds output folder access and batch manifest cleanup.

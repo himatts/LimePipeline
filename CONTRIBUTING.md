@@ -23,6 +23,7 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - AI Asset Organizer v2: object/material/collection naming, hierarchy-aware target resolution, ambiguity handling, preview counters, apply-scope filters, and optional collection organization
 - AI Asset Organizer v2 object/collection format: PascalCase segments separated by underscores (numeric suffix as `_NN`)
 - Texture Scan/Adopt tools live in AI Asset Organizer (Lime Toolbox)
+- AI Material Renamer is fully retired; use AI Asset Organizer for AI material workflows
 - AI Render Converter UI includes thumbnail grids per section, large previews, cleanup tools, and output access
 - Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox)
 - Dimension Checker behavior: each run creates a new helper; manual cleanup is expected

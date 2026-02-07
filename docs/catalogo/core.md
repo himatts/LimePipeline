@@ -6,6 +6,10 @@ Core utilities for Lime Pipeline.
 
 This package centralizes naming and scene validation helpers used across UI and ops.
 
+## lime_pipeline/core/ai_asset_response.py
+
+Helpers to parse AI response payloads for asset organizer workflows.
+
 ## lime_pipeline/core/asset_naming.py
 
 Asset naming helpers for Lime Pipeline.
@@ -18,9 +22,12 @@ can be unit-tested outside Blender.
 
 Deterministic collection destination resolver for AI Asset Organizer.
 
-Ranks full collection paths using name/path token overlap, SHOT context,
-current memberships, and optional destination hints. Returns either AUTO
-or AMBIGUOUS status with top scored candidates.
+This module is Blender-agnostic and can be unit-tested outside Blender.
+It scores collection path candidates for an object and marks ambiguous cases.
+
+## lime_pipeline/core/env_config.py
+
+Environment configuration helpers for local secrets and API credentials.
 
 ## lime_pipeline/core/material_naming.py
 
@@ -50,7 +57,7 @@ Key functions:
 
 ## lime_pipeline/core/material_taxonomy.py
 
-Material taxonomy utilities for Lime Pipeline AI Material Renamer.
+Material taxonomy utilities for Lime Pipeline AI Asset Organizer.
 
 Provides external taxonomy loading and inference helpers for material classification.
 
@@ -103,6 +110,24 @@ Key Features:
 - Backups directory management per revision
 - Integration with Lime Pipeline naming conventions
 - Path validation and error handling for missing directories
+
+## lime_pipeline/core/texture_naming.py
+
+Texture naming helpers (no Blender dependencies).
+
+This module centralizes the conventions for generating stable, collision-resistant
+texture filenames when adopting external textures into a project-local folder.
+
+Rules:
+- Do not read Blender state here (no bpy imports).
+- Keep output deterministic given the same inputs.
+
+## lime_pipeline/core/texture_paths.py
+
+Texture path helpers (no Blender dependencies).
+
+Used by operators to classify whether an image comes from inside the current
+project or from external user folders.
 
 ## lime_pipeline/core/validate.py
 

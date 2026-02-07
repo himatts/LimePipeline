@@ -46,9 +46,12 @@ from ..core.material_taxonomy import get_token_material_type_mapping
 from ..props_ai_assets import LimeAIAssetItem
 from .ai_http import (
     OPENROUTER_CHAT_URL,
+    OPENROUTER_MODELS_URL,
     extract_message_content,
     has_openrouter_api_key,
+    http_get_json_with_status,
     http_post_json,
+    http_post_json_with_status,
     openrouter_headers,
     parse_json_from_text,
 )
@@ -230,6 +233,10 @@ def _schema_assets() -> Dict[str, object]:
             },
         },
     }
+
+
+def _schema_json_object() -> Dict[str, object]:
+    return {"type": "json_object"}
 
 
 def _is_object_read_only(obj: Object) -> bool:
@@ -3226,6 +3233,58 @@ class LIME_TB_OT_open_ai_asset_manager(Operator):
         return {"FINISHED"}
 
 
+class LIME_TB_OT_ai_asset_test_connection(Operator):
+    bl_idname = "lime_tb.ai_asset_test_connection"
+    bl_label = "AI: Test Connection"
+    bl_description = "Verify OpenRouter connectivity for AI Asset Organizer"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        if not has_openrouter_api_key():
+            self.report({"ERROR"}, "OpenRouter API key not found in .env")
+            return {"CANCELLED"}
+
+        prefs = context.preferences.addons[__package__.split(".")[0]].preferences
+        headers = openrouter_headers(prefs)
+        models_resp = http_get_json_with_status(OPENROUTER_MODELS_URL, headers=headers, timeout=15)
+        data = models_resp.data if models_resp else None
+        if not data or not isinstance(data, dict):
+            detail = (models_resp.error or "No response body") if models_resp else "No response"
+            status = models_resp.status if models_resp else None
+            self.report({"ERROR"}, f"OpenRouter models check failed (status={status}): {detail[:220]}")
+            return {"CANCELLED"}
+
+        models = [m.get("id") for m in data.get("data", []) if isinstance(m, dict)] if "data" in data else []
+        slug = (getattr(prefs, "openrouter_model", "") or "").strip()
+        if slug and slug in models:
+            self.report({"INFO"}, f"OpenRouter reachable. Model available: {slug}")
+        elif slug:
+            self.report({"WARNING"}, f"OpenRouter reachable. Model not found in provider list: {slug}")
+        else:
+            self.report({"INFO"}, "OpenRouter reachable.")
+
+        payload = {
+            "model": slug or _DEFAULT_MODEL,
+            "messages": [
+                {"role": "system", "content": "Return valid JSON only."},
+                {"role": "user", "content": '{"ping": true}'},
+            ],
+            "temperature": 0,
+            "max_tokens": 128,
+            "response_format": _schema_json_object(),
+        }
+        chat_resp = http_post_json_with_status(OPENROUTER_CHAT_URL, payload, headers=headers, timeout=20)
+        result = chat_resp.data if chat_resp else None
+        content = extract_message_content(result or {}) if result else None
+        if content:
+            self.report({"INFO"}, "OpenRouter chat endpoint: OK")
+        else:
+            status = chat_resp.status if chat_resp else None
+            detail = (chat_resp.error or "No response body") if chat_resp else "No response"
+            self.report({"WARNING"}, f"OpenRouter chat endpoint incomplete (status={status}): {detail[:180]}")
+        return {"FINISHED"}
+
+
 class LIME_TB_OT_ai_asset_material_debug_report(Operator):
     bl_idname = "lime_tb.ai_asset_material_debug_report"
     bl_label = "AI: Material Debug Report"
@@ -3330,6 +3389,7 @@ __all__ = [
     "LIME_TB_OT_ai_asset_set_target_for_selected",
     "LIME_TB_OT_ai_asset_clear",
     "LIME_TB_OT_open_ai_asset_manager",
+    "LIME_TB_OT_ai_asset_test_connection",
     "LIME_TB_OT_ai_asset_material_debug_report",
     "LIME_TB_OT_ai_asset_collection_debug_report",
 ]

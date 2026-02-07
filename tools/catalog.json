@@ -11,6 +11,30 @@
     "classes": [],
     "internal_deps": []
   },
+  "lime_pipeline/core/ai_asset_response.py": {
+    "package": "core",
+    "doc": "Helpers to parse AI response payloads for asset organizer workflows.",
+    "classes": [],
+    "internal_deps": []
+  },
+  "lime_pipeline/core/asset_naming.py": {
+    "package": "core",
+    "doc": "Asset naming helpers for Lime Pipeline. This module provides small, Blender-agnostic helpers used by tools that rename scene assets (objects/materials). It intentionally avoids `bpy` imports so it",
+    "classes": [],
+    "internal_deps": []
+  },
+  "lime_pipeline/core/collection_resolver.py": {
+    "package": "core",
+    "doc": "Deterministic collection destination resolver for AI Asset Organizer. This module is Blender-agnostic and can be unit-tested outside Blender. It scores collection path candidates for an object and marks ambiguous cases.",
+    "classes": [],
+    "internal_deps": []
+  },
+  "lime_pipeline/core/env_config.py": {
+    "package": "core",
+    "doc": "Environment configuration helpers for local secrets and API credentials.",
+    "classes": [],
+    "internal_deps": []
+  },
   "lime_pipeline/core/material_naming.py": {
     "package": "core",
     "doc": "Material naming utilities for Lime Pipeline. Defines helpers for the schema `MAT_{MaterialType}_{MaterialFinish}_{Version}`.",
@@ -31,7 +55,7 @@
   },
   "lime_pipeline/core/material_taxonomy.py": {
     "package": "core",
-    "doc": "Material taxonomy utilities for Lime Pipeline AI Material Renamer. Provides external taxonomy loading and inference helpers for material classification.",
+    "doc": "Material taxonomy utilities for Lime Pipeline AI Asset Organizer. Provides external taxonomy loading and inference helpers for material classification.",
     "classes": [],
     "internal_deps": []
   },
@@ -44,6 +68,18 @@
   "lime_pipeline/core/paths.py": {
     "package": "core",
     "doc": "Project Path and Directory Structure Utilities This module defines the canonical directory structure for Lime Pipeline projects following the RAMV (Rendering-Animation-Media-Video) organizational standard.",
+    "classes": [],
+    "internal_deps": []
+  },
+  "lime_pipeline/core/texture_naming.py": {
+    "package": "core",
+    "doc": "Texture naming helpers (no Blender dependencies). This module centralizes the conventions for generating stable, collision-resistant texture filenames when adopting external textures into a project-local folder.",
+    "classes": [],
+    "internal_deps": []
+  },
+  "lime_pipeline/core/texture_paths.py": {
+    "package": "core",
+    "doc": "Texture path helpers (no Blender dependencies). Used by operators to classify whether an image comes from inside the current project or from external user folders.",
     "classes": [],
     "internal_deps": []
   },
@@ -77,6 +113,12 @@
     "classes": [],
     "internal_deps": []
   },
+  "lime_pipeline/ops/ai_http.py": {
+    "package": "ops",
+    "doc": "Shared HTTP helpers for AI integrations (OpenRouter/Krea). These helpers centralize small request utilities to avoid duplication across ops modules.",
+    "classes": [],
+    "internal_deps": []
+  },
   "lime_pipeline/ops/ops_add_missing.py": {
     "package": "ops",
     "doc": "Add Missing Collections Operator This module provides functionality to add missing collections to maintain proper scene organization according to Lime Pipeline conventions. It ensures that the",
@@ -96,16 +138,124 @@
     ],
     "internal_deps": []
   },
-  "lime_pipeline/ops/ops_ai_material_renamer.py": {
+  "lime_pipeline/ops/ops_ai_asset_organizer.py": {
     "package": "ops",
-    "doc": "AI Material Renamer Operators This module provides operators for AI-powered material renaming and management in Blender. It integrates with external AI services to analyze material properties and suggest",
+    "doc": "AI Asset Organizer operators. Suggests and applies names for selected objects/materials/collections with AI, plus optional safe collection reorganization.",
     "classes": [
       {
-        "name": "LIME_TB_OT_ai_test_connection",
+        "name": "LIME_TB_OT_ai_asset_suggest_names",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_test_connection",
+        "bl_idname": "lime_tb.ai_asset_suggest_names",
+        "bl_label": "AI: Suggest Names",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_apply_names",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_apply_names",
+        "bl_label": "AI: Apply Names",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_scope_preset",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_scope_preset",
+        "bl_label": "AI: Scope Preset",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_refresh_targets",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_refresh_targets",
+        "bl_label": "AI: Refresh Targets",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_resolve_target",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_resolve_target",
+        "bl_label": "AI: Resolve Target",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_set_target_for_item",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_set_target_for_item",
+        "bl_label": "AI: Re-route Object",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_set_target_for_selected",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_set_target_for_selected",
+        "bl_label": "AI: Re-route Selected Objects",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_clear",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_clear",
+        "bl_label": "AI: Clear",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_open_ai_asset_manager",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.open_ai_asset_manager",
+        "bl_label": "Open AI Asset Manager",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_TB_OT_ai_asset_test_connection",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime_tb.ai_asset_test_connection",
         "bl_label": "AI: Test Connection",
         "bl_space_type": null,
         "bl_region_type": null,
@@ -113,136 +263,179 @@
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_rename_single",
+        "name": "LIME_TB_OT_ai_asset_material_debug_report",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_rename_single",
-        "bl_label": "AI: Propose Single",
+        "bl_idname": "lime_tb.ai_asset_material_debug_report",
+        "bl_label": "AI: Material Debug Report",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_scan_materials",
+        "name": "LIME_TB_OT_ai_asset_collection_debug_report",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_scan_materials",
-        "bl_label": "AI: Scan Materials",
+        "bl_idname": "lime_tb.ai_asset_collection_debug_report",
+        "bl_label": "AI: Collection Debug Report",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
+  "lime_pipeline/ops/ops_ai_render_converter.py": {
+    "package": "ops",
+    "doc": "AI Render Converter Operators Implements the render-to-style conversion workflow using Krea (Nano Banana) and optional prompt rewriting via OpenRouter.",
+    "classes": [
+      {
+        "name": "LIME_OT_ai_render_refresh",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.ai_render_refresh",
+        "bl_label": "AI: Refresh Source",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_apply_materials",
+        "name": "LIME_OT_ai_render_frame",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_apply_materials",
-        "bl_label": "AI: Apply Proposals",
+        "bl_idname": "lime.ai_render_frame",
+        "bl_label": "AI: Render Current Frame",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_test_state",
+        "name": "LIME_OT_ai_render_generate",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_test_state",
-        "bl_label": "AI: Test State",
+        "bl_idname": "lime.ai_render_generate",
+        "bl_label": "AI: Generate Storyboard",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_clear_materials",
+        "name": "LIME_OT_ai_render_retry",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_clear_materials",
-        "bl_label": "AI: Clear Proposals",
+        "bl_idname": "lime.ai_render_retry",
+        "bl_label": "AI: Retry Generation",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_select_all",
+        "name": "LIME_OT_ai_render_cancel",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_select_all",
-        "bl_label": "AI: Select All",
+        "bl_idname": "lime.ai_render_cancel",
+        "bl_label": "AI: Cancel Job",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_select_none",
+        "name": "LIME_OT_ai_render_test_connection",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_select_none",
-        "bl_label": "AI: Select None",
+        "bl_idname": "lime.ai_render_test_connection",
+        "bl_label": "AI: Test Krea Connection",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_normalize_to_closest",
+        "name": "LIME_OT_ai_render_add_to_sequencer",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_normalize_to_closest",
-        "bl_label": "AI: Normalize to Closest",
+        "bl_idname": "lime.ai_render_add_to_sequencer",
+        "bl_label": "AI: Add Result to Sequencer",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_keep_proposal",
+        "name": "LIME_OT_ai_render_open_outputs_folder",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_keep_proposal",
-        "bl_label": "AI: Keep Proposal or Undo Normalize",
+        "bl_idname": "lime.ai_render_open_outputs_folder",
+        "bl_label": "AI: Open Outputs Folder",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_ai_toggle_review",
+        "name": "LIME_OT_ai_render_delete_selected",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.ai_toggle_review",
-        "bl_label": "AI: Toggle Manual Review",
+        "bl_idname": "lime.ai_render_delete_selected",
+        "bl_label": "AI: Delete Selected Image",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
       },
       {
-        "name": "LIME_TB_OT_open_ai_material_manager",
+        "name": "LIME_OT_ai_render_delete_batch",
         "bases": [
           "Operator"
         ],
-        "bl_idname": "lime_tb.open_ai_material_manager",
-        "bl_label": "Open AI Material Manager",
+        "bl_idname": "lime.ai_render_delete_batch",
+        "bl_label": "AI: Delete Image Batch",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
-        "doc": "Abre el AI Material Manager en una ventana flotante."
+        "doc": null
+      },
+      {
+        "name": "LIME_OT_ai_render_open_preview",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.ai_render_open_preview",
+        "bl_label": "AI: Open Image Preview",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
+        "name": "LIME_OT_ai_render_import_style",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.ai_render_import_style",
+        "bl_label": "AI: Import Style Image",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
       }
     ],
     "internal_deps": []
@@ -568,7 +761,7 @@
           "Operator"
         ],
         "bl_idname": "lime.delete_camera_rig",
-        "bl_label": "Delete Camera (Rig)",
+        "bl_label": "Delete Camera",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
@@ -604,7 +797,7 @@
           "Operator"
         ],
         "bl_idname": "lime.delete_camera_rig_and_sync",
-        "bl_label": "Delete Camera (Rig) and Refresh",
+        "bl_label": "Delete Camera and Refresh",
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
@@ -635,6 +828,18 @@
         "doc": null
       },
       {
+        "name": "LIME_OT_add_simple_camera",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.add_simple_camera",
+        "bl_label": "Create Camera (Simple)",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      },
+      {
         "name": "LIME_OT_add_camera_rig",
         "bases": [
           "Operator"
@@ -645,6 +850,25 @@
         "bl_region_type": null,
         "bl_category": null,
         "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
+  "lime_pipeline/ops/ops_comp_view_layer_outputs.py": {
+    "package": "ops",
+    "doc": "Compositor utilities for per-View Layer outputs.",
+    "classes": [
+      {
+        "name": "LIME_OT_setup_view_layer_outputs",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.setup_view_layer_outputs",
+        "bl_label": "Setup View Layer Outputs",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": "Create or refresh compositor outputs for each View Layer (excluding Complete)."
       }
     ],
     "internal_deps": []
@@ -1322,6 +1546,63 @@
     ],
     "internal_deps": []
   },
+  "lime_pipeline/ops/ops_texture_adopt.py": {
+    "package": "ops",
+    "doc": "Texture Fix/Adopt operator. Copies external \"loose\" textures into the project shared folder: <RAMV>/RSC/Textures",
+    "classes": [
+      {
+        "name": "LIME_OT_texture_adopt",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.texture_adopt",
+        "bl_label": "Adopt Textures (Fix)",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
+  "lime_pipeline/ops/ops_texture_manifest_cleanup.py": {
+    "package": "ops",
+    "doc": "Texture manifest cleanup operator. Deletes the _manifests folder under the project RSC/Textures directory. This removes JSON reports and hash index files generated by texture scan/adopt.",
+    "classes": [
+      {
+        "name": "LIME_OT_texture_manifest_cleanup",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.texture_manifest_cleanup",
+        "bl_label": "Delete Texture Manifests",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
+  "lime_pipeline/ops/ops_texture_scan.py": {
+    "package": "ops",
+    "doc": "Texture Scan/Report operator. First deliverable for safer texture workflows: - Detect images used by materials (Image Texture nodes, including nested groups).",
+    "classes": [
+      {
+        "name": "LIME_OT_texture_scan_report",
+        "bases": [
+          "Operator"
+        ],
+        "bl_idname": "lime.texture_scan_report",
+        "bl_label": "Scan Textures (Report)",
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
   "lime_pipeline/ops/ops_tooltips.py": {
     "package": "ops",
     "doc": "Tooltip and Information Display Operators This module provides functionality for displaying detailed information and tooltips within the Lime Pipeline interface. It handles the presentation of contextual help,",
@@ -1397,12 +1678,12 @@
     ],
     "internal_deps": []
   },
-  "lime_pipeline/props_ai_materials.py": {
-    "package": "props_ai_materials.py",
-    "doc": "AI Material Properties and State Management This module defines the property groups and state management for the AI Material Renamer feature within Lime Pipeline. It handles material scanning results,",
+  "lime_pipeline/props_ai_assets.py": {
+    "package": "props_ai_assets.py",
+    "doc": "AI Asset Organizer properties and state. Stores AI-generated rename proposals for selected objects and their materials. This module is intentionally UI-agnostic; panels and operators consume the state.",
     "classes": [
       {
-        "name": "LimeAIMatRow",
+        "name": "LimeAIAssetItem",
         "bases": [
           "PropertyGroup"
         ],
@@ -1414,7 +1695,26 @@
         "doc": null
       },
       {
-        "name": "LimeAIMatState",
+        "name": "LimeAIAssetState",
+        "bases": [
+          "PropertyGroup"
+        ],
+        "bl_idname": null,
+        "bl_label": null,
+        "bl_space_type": null,
+        "bl_region_type": null,
+        "bl_category": null,
+        "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
+  "lime_pipeline/props_ai_renders.py": {
+    "package": "props_ai_renders.py",
+    "doc": "AI Render Converter Properties State storage for the AI render conversion workflow (source render, style reference, prompt details, job status, and previews).",
+    "classes": [
+      {
+        "name": "LimeAIRenderState",
         "bases": [
           "PropertyGroup"
         ],
@@ -1446,33 +1746,52 @@
     "classes": [],
     "internal_deps": []
   },
-  "lime_pipeline/ui/ui_ai_material_renamer.py": {
+  "lime_pipeline/ui/ui_ai_asset_organizer.py": {
     "package": "ui",
-    "doc": "UI to review and apply AI-proposed material renames according to naming rules. This panel is lightweight; heavy logic resides in operators and property definitions.",
+    "doc": "UI panel for AI-assisted asset naming in Lime Toolbox.",
     "classes": [
       {
-        "name": "LIME_TB_UL_ai_mat_rows",
+        "name": "LIME_TB_UL_ai_asset_items",
         "bases": [
           "UIList"
         ],
-        "bl_idname": "LIME_TB_UL_ai_mat_rows",
+        "bl_idname": "LIME_TB_UL_ai_asset_items",
         "bl_label": null,
         "bl_space_type": null,
         "bl_region_type": null,
         "bl_category": null,
-        "doc": "Render each material entry with quality indicators and quick actions."
+        "doc": null
       },
       {
-        "name": "LIME_TB_PT_ai_material_renamer",
+        "name": "LIME_TB_PT_ai_asset_organizer",
         "bases": [
           "Panel"
         ],
-        "bl_idname": "LIME_TB_PT_ai_material_renamer",
-        "bl_label": "AI Material Renamer",
+        "bl_idname": "LIME_TB_PT_ai_asset_organizer",
+        "bl_label": "AI Asset Organizer",
         "bl_space_type": "VIEW_3D",
         "bl_region_type": "UI",
         "bl_category": "Lime Toolbox",
-        "doc": "Compact panel listing scan summary and entry point to the manager dialog."
+        "doc": null
+      }
+    ],
+    "internal_deps": []
+  },
+  "lime_pipeline/ui/ui_ai_render_converter.py": {
+    "package": "ui",
+    "doc": "UI panel for AI Render Converter.",
+    "classes": [
+      {
+        "name": "LIME_PT_ai_render_converter",
+        "bases": [
+          "Panel"
+        ],
+        "bl_idname": "LIME_PT_ai_render_converter",
+        "bl_label": "AI Render Converter",
+        "bl_space_type": "VIEW_3D",
+        "bl_region_type": "UI",
+        "bl_category": "Lime Toolbox",
+        "doc": null
       }
     ],
     "internal_deps": []

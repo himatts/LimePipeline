@@ -43,7 +43,9 @@ Scene Collection
 
 ## Materiales con IA (opcional)
 1. Configura la API key en preferencias.
-2. En **AI Material Renamer** usa “Test Connection”, luego “Scan” y “Apply”.
+2. En **AI Asset Organizer** usa `Suggest Names (AI)`.
+3. Ajusta `Apply Scope` a **Only Materials** y luego usa `Apply Selected`.
+4. Usa `Test Connection` desde preferencias para validar OpenRouter en el flujo de AI Asset Organizer.
 
 ## Próximos pasos
 - Revisa **Convenciones de nombres** para reglas de naming.

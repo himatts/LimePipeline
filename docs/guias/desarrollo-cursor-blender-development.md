@@ -35,7 +35,7 @@ Comandos típicos que vas a usar a diario:
    - Prueba en Blender y observa la salida/errores.
 4. Ciclo largo (cambios grandes):
    - Reabre el archivo `.blend` objetivo.
-   - Valida flujos principales (Project Organization, Shots, Cameras, Render Configs, AI Material Renamer).
+   - Valida flujos principales (Project Organization, Shots, Cameras, Render Configs, AI Asset Organizer).
 
 ## Buenas prácticas al iterar
 - Mantén la lógica reusable en `core/` y usa recargas para validar invariantes.

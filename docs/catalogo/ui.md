@@ -4,31 +4,22 @@
 
 (sin docstring de módulo)
 
-## lime_pipeline/ui/ui_ai_material_renamer.py
-
-UI to review and apply AI-proposed material renames according to naming rules.
-
-This panel is lightweight; heavy logic resides in operators and property definitions.
-
-Clases Blender detectadas:
-
-- LIME_TB_UL_ai_mat_rows (UIList): bl_idname=LIME_TB_UL_ai_mat_rows
-- LIME_TB_PT_ai_material_renamer (Panel): bl_idname=LIME_TB_PT_ai_material_renamer, bl_label=AI Material Renamer, bl_space_type=VIEW_3D, bl_region_type=UI, bl_category=Lime Toolbox
-
 ## lime_pipeline/ui/ui_ai_asset_organizer.py
 
-UI panel for AI-assisted object/material/collection naming in Lime Toolbox.
-
-This panel is lightweight; network calls and rename logic live in operators.
-Supports optional image context for multimodal models, preview counters,
-apply-scope filters, ambiguity indicators for collection targets, and an opt-in toggle
-for collection organization on apply. Hosts the Textures
-block (Scan/Adopt/Manifests).
+UI panel for AI-assisted asset naming in Lime Toolbox.
 
 Clases Blender detectadas:
 
 - LIME_TB_UL_ai_asset_items (UIList): bl_idname=LIME_TB_UL_ai_asset_items
 - LIME_TB_PT_ai_asset_organizer (Panel): bl_idname=LIME_TB_PT_ai_asset_organizer, bl_label=AI Asset Organizer, bl_space_type=VIEW_3D, bl_region_type=UI, bl_category=Lime Toolbox
+
+## lime_pipeline/ui/ui_ai_render_converter.py
+
+UI panel for AI Render Converter.
+
+Clases Blender detectadas:
+
+- LIME_PT_ai_render_converter (Panel): bl_idname=LIME_PT_ai_render_converter, bl_label=AI Render Converter, bl_space_type=VIEW_3D, bl_region_type=UI, bl_category=Lime Toolbox
 
 ## lime_pipeline/ui/ui_alpha_manager.py
 
@@ -84,6 +75,10 @@ measurement units (MM/CM/M/IN/FT) to the current scene.
 Key classes: LIME_PT_dimension_utilities, LIME_OT_set_unit_preset.
 Depends on: Blender unit settings; optional addon preferences.
 Notes: UI-only; unit changes are applied through a lightweight operator.
+
+NOTE(known-issue): Dimension Checker live scaling (parented helper) can be visually
+incorrect during interactive scaling without applying transforms. Do not attempt to
+address that issue unless explicitly requested; confirm scope first.
 
 Clases Blender detectadas:
 

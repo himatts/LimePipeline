@@ -19,7 +19,7 @@ Esta guía documenta todos los operadores y paneles disponibles en Lime Pipeline
 | **Alpha Manager** | `LIME_TB_PT_alpha_manager` | 3D View | Lime | Gestión de transparencias y alpha |
 | **Cameras** | `LIME_PT_render_cameras` | 3D View | Lime | Gestión de cámaras y rigs |
 | **Save As** | `LIME_PT_image_save_as` | Image Editor | Lime | Guardado avanzado de imágenes |
-| **AI Material Renamer** | `LIME_TB_PT_ai_material_renamer` | 3D View | Lime | Renombrado inteligente de materiales |
+| **AI Asset Organizer** | `LIME_TB_PT_ai_asset_organizer` | 3D View | Lime | Nombres IA para objetos/materiales/colecciones |
 | **Dimension Utilities** | `LIME_PT_dimension_utilities` | 3D View | Lime | Utilidades de dimensiones y unidades |
 | **Noisy Movement** | `LIME_TB_PT_noisy_movement` | 3D View | Lime | Movimiento procedural con ruido |
 
@@ -52,10 +52,9 @@ Esta guía documenta todos los operadores y paneles disponibles en Lime Pipeline
 ### Materiales e IA
 | Operador | ID | Archivo | Propósito |
 |----------|----|---------|-----------|
-| **AI Test Connection** | `lime_tb.ai_test_connection` | `ops_ai_material_renamer.py` | Verificar conexión con IA |
-| **AI Scan Materials** | `lime_tb.ai_scan_materials` | `ops_ai_material_renamer.py` | Escanear materiales del proyecto |
-| **AI Apply Materials** | `lime_tb.ai_apply_materials` | `ops_ai_material_renamer.py` | Aplicar renombrado inteligente |
-| **AI Rename Single** | `lime_tb.ai_rename_single` | `ops_ai_material_renamer.py` | Renombrar material individual |
+| **AI Asset Suggest Names** | `lime_tb.ai_asset_suggest_names` | `ops_ai_asset_organizer.py` | Sugerir nombres para la selección |
+| **AI Asset Apply Names** | `lime_tb.ai_asset_apply_names` | `ops_ai_asset_organizer.py` | Aplicar cambios seleccionados |
+| **AI Test Connection** | `lime_tb.ai_asset_test_connection` | `ops_ai_asset_organizer.py` | Test OpenRouter para flujos IA |
 
 ### Utilidades de Modelo
 | Operador | ID | Archivo | Propósito |
@@ -102,7 +101,7 @@ Esta guía documenta todos los operadores y paneles disponibles en Lime Pipeline
 | **Shots List** | `LIME_UL_shots` | `ui_shots.py` | Lista de SHOT collections |
 | **Cameras List** | `LIME_UL_render_cameras` | `ui_cameras_manager.py` | Lista de cámaras |
 | **Alpha Events List** | `LIME_TB_UL_alpha_events` | `ui_alpha_manager.py` | Lista de eventos alpha |
-| **AI Materials List** | `LIME_TB_UL_ai_mat_rows` | `ui_ai_material_renamer.py` | Lista de materiales IA |
+| **AI Asset Items List** | `LIME_TB_UL_ai_asset_items` | `ui_ai_asset_organizer.py` | Lista unificada de propuestas IA |
 | **Noise Names List** | `LIME_TB_UL_noise_names` | `ui_noise_movement.py` | Lista de perfiles de ruido |
 | **Noise Objects List** | `LIME_TB_UL_noise_objects` | `ui_noise_movement.py` | Lista de objetos con ruido |
 

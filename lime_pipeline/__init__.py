@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 6, 5),  # API keys now loaded from local .env (OpenRouter/Krea)
+    "version": (0, 7, 0),  # Retire AI Material Renamer and keep AI Asset Organizer as single workflow
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -71,24 +71,10 @@ from .ui import (
     LIME_TB_PT_alpha_manager,
     LIME_TB_UL_alpha_events,
 )
-from .ui import LIME_TB_PT_ai_material_renamer, LIME_TB_UL_ai_mat_rows
 from .ui import LIME_TB_PT_ai_asset_organizer, LIME_TB_UL_ai_asset_items
 from .ui import LIME_TB_PT_experimental
-from .ops.ops_ai_material_renamer import (
-    LIME_TB_OT_ai_test_connection,
-    LIME_TB_OT_ai_rename_single,
-    LIME_TB_OT_ai_scan_materials,
-    LIME_TB_OT_ai_apply_materials,
-    LIME_TB_OT_ai_test_state,
-    LIME_TB_OT_ai_clear_materials,
-    LIME_TB_OT_ai_select_all,
-    LIME_TB_OT_ai_select_none,
-    LIME_TB_OT_ai_normalize_to_closest,
-    LIME_TB_OT_ai_keep_proposal,
-    LIME_TB_OT_ai_toggle_review,
-    LIME_TB_OT_open_ai_material_manager,
-)
 from .ops.ops_ai_asset_organizer import (
+    LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
     LIME_TB_OT_ai_asset_scope_preset,
@@ -120,7 +106,6 @@ from .ops.ops_ai_render_converter import (
     LIME_OT_ai_render_import_style,
 )
 from .props_ai_assets import register as register_ai_asset_props, unregister as unregister_ai_asset_props
-from .props_ai_materials import register as register_ai_props, unregister as unregister_ai_props
 from .props_ai_renders import register as register_ai_render_props, unregister as unregister_ai_render_props
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_render_shortcut_props, unregister_render_shortcut_props
@@ -330,18 +315,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_create_view_layers,
     LIME_OT_setup_view_layer_outputs,
     LIME_OT_localize_linked_collection,
-    LIME_TB_OT_ai_test_connection,
-    LIME_TB_OT_ai_rename_single,
-    LIME_TB_OT_ai_scan_materials,
-    LIME_TB_OT_ai_apply_materials,
-    LIME_TB_OT_ai_test_state,
-    LIME_TB_OT_ai_clear_materials,
-    LIME_TB_OT_ai_select_all,
-    LIME_TB_OT_ai_select_none,
-    LIME_TB_OT_ai_normalize_to_closest,
-    LIME_TB_OT_ai_keep_proposal,
-    LIME_TB_OT_ai_toggle_review,
-    LIME_TB_OT_open_ai_material_manager,
+    LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
     LIME_TB_OT_ai_asset_scope_preset,
@@ -354,7 +328,6 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_ai_asset_material_debug_report,
     LIME_TB_OT_ai_asset_collection_debug_report,
     LIME_TB_UL_ai_asset_items,
-    LIME_TB_UL_ai_mat_rows,
     LIME_OT_ai_render_refresh,
     LIME_OT_ai_render_frame,
     LIME_OT_ai_render_generate,
@@ -390,7 +363,6 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_asset_organizer,
-    LIME_TB_PT_ai_material_renamer,
     LIME_TB_PT_experimental,
     LIME_PT_ai_render_converter,
 )
@@ -402,7 +374,6 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_asset_organizer,
-    LIME_TB_PT_ai_material_renamer,
     LIME_TB_PT_experimental,
     LIME_PT_ai_render_converter,
 )
@@ -493,7 +464,6 @@ def register():
     register_anim_params_props()
     register_noise_props()
     register_alpha_props()
-    register_ai_props()
     register_ai_asset_props()
     register_ai_render_props()
     register_camera_list_props()
@@ -651,7 +621,6 @@ def unregister():
     unregister_anim_params_props()
     unregister_noise_props()
     unregister_alpha_props()
-    unregister_ai_props()
     unregister_ai_asset_props()
     unregister_ai_render_props()
     unregister_camera_list_props()

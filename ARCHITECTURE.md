@@ -30,10 +30,10 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - No imperative code; only data structures
 
 ### props
-- Files: `props.py` (WindowManager state), `props_ai_materials.py` (Scene-scoped AI material proposals), `props_ai_assets.py` (Scene-scoped AI asset organizer proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
+- Files: `props.py` (WindowManager state), `props_ai_assets.py` (Scene-scoped AI asset organizer proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
 - Responsibilities:
   - Centralize PropertyGroup definitions for persistent add-on state
-  - Expose editable collections (`Scene.lime_ai_mat` for AI Material Renamer)
+  - Expose editable collections (`Scene.lime_ai_assets` for AI Asset Organizer)
   - Store AI render converter paths, prompts, previews, and job status (`Scene.lime_ai_render`)
 
 ### scene
@@ -50,7 +50,6 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Responsibilities:
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
-- `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
 - `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections, hierarchy-aware collection target resolution (active-collection aware by default, with virtual-hint fallback when no active candidates exist), enriched object hierarchy signals (parent/root/depth + empty role hints + inferred hierarchy roles), controller/root guardrails for technical subcategories, ambiguity handling, apply-scope filters, optional collection reorganization, and debug reports for material normalization / collection resolution
 - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
 - Camera operations (`ops_cameras.py`): rig and simple camera creation in SHOT camera collections, automatic margin background setup on camera creation/duplication
@@ -63,7 +62,6 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Responsibilities:
   - Layout and user interactions; no heavy IO
 - Highlights:
-  - `ui_ai_material_renamer.py`: Lime Toolbox / AI Material Renamer panel with simplified UI (2-column editable list, local detection, filtering/ordering)
   - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, thumbnail grids, large previews, generate/retry, cleanup, output access)
   - `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel
 - `ui_ai_asset_organizer.py`: Lime Toolbox panel hosts a separate Textures block (Scan/Adopt/Manifests) and supports opening a focused popup manager for naming/organization (objects/materials/collections) without texture actions; planned collections are surfaced as editable virtual rows synced with object target paths
@@ -80,15 +78,9 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ## Key flows
 
 
-### AI Material Renamer (AI-assisted)
-1. User clicks **Search Materials**. `ops_ai_material_renamer.ai_scan_materials` now evaluates every material with `detect_issues` + `material_quality.evaluate_material_name`, marking rename needs or manual review and counting totals.
-2. **Selective AI query**: only materials flagged for rename (or forced re-analysis) are sent to OpenRouter with enriched metadata and quality hints (`texture_basenames`, `object_hints`, `collection_hints`, confidence baseline).
-3. Proposals are stored in `Scene.lime_ai_mat.rows` with quality metadata (`quality_label`, `quality_score`, `review_requested`), family/finish/version, and similarity fingerprints.
-4. UI displays status, quality, confidence and proposals; a per-row **Review** toggle keeps excellent names visible without forcing a rename.
-5. Users edit `proposed_name` for actionable or review rows; **Apply Rename** normalizes, bumps V## deterministically, and respects manual selections while preserving untouched excellent names.
-6. Selection helpers consider rename needs and review toggles; applying without a custom proposal leaves the original name intact.
-7. The summary counts in both panel and dialog highlight rename vs review workload and overall quality distribution.
-8. **Clear** removes proposals and resets review toggles without renaming anything.
+### AI Connectivity Check
+1. OpenRouter connectivity for naming workflows is exposed as `lime_tb.ai_asset_test_connection`.
+2. Add-on preferences use that operator as the canonical "Test Connection" entry point.
 
 ### AI Asset Organizer v2 (AI-assisted)
 1. User clicks **Suggest Names (AI)** from Lime Toolbox.

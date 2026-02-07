@@ -1,5 +1,5 @@
 """
-Material taxonomy utilities for Lime Pipeline AI Material Renamer.
+Material taxonomy utilities for Lime Pipeline AI Asset Organizer.
 
 Provides external taxonomy loading and inference helpers for material classification.
 """

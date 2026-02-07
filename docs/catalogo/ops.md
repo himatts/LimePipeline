@@ -19,6 +19,12 @@ The operators handle various aspects of pipeline management including:
 Each operator follows Blender's operator conventions with proper bl_idname,
 bl_label, and poll/execute methods for integration with Blender's UI system.
 
+## lime_pipeline/ops/ai_http.py
+
+Shared HTTP helpers for AI integrations (OpenRouter/Krea).
+
+These helpers centralize small request utilities to avoid duplication across ops modules.
+
 ## lime_pipeline/ops/ops_add_missing.py
 
 Add Missing Collections Operator
@@ -42,55 +48,12 @@ Clases Blender detectadas:
 
 - LIME_OT_add_missing_collections (Operator): bl_idname=lime.add_missing_collections, bl_label=Add Missing Collections
 
-## lime_pipeline/ops/ops_ai_material_renamer.py
-
-AI Material Renamer Operators
-
-This module provides operators for AI-powered material renaming and management in Blender.
-It integrates with external AI services to analyze material properties and suggest
-appropriate names based on material taxonomy and naming conventions.
-
-The operators handle various aspects of the AI material renaming workflow:
-- Testing AI service connections
-- Scanning materials for analysis
-- Generating renaming proposals
-- Applying approved name changes
-- Managing material selection states
-
-Key Features:
-- Integrates with external AI services for material analysis
-- Supports batch material processing with progress tracking
-- Maintains material naming consistency with Lime Pipeline conventions
-- Provides selection management for large material sets
-- Includes connection testing and error handling for AI services
-- Supports taxonomy-based material type detection and validation
-
-Clases Blender detectadas:
-
-- LIME_TB_OT_ai_test_connection (Operator): bl_idname=lime_tb.ai_test_connection, bl_label=AI: Test Connection
-- LIME_TB_OT_ai_rename_single (Operator): bl_idname=lime_tb.ai_rename_single, bl_label=AI: Propose Single
-- LIME_TB_OT_ai_scan_materials (Operator): bl_idname=lime_tb.ai_scan_materials, bl_label=AI: Scan Materials
-- LIME_TB_OT_ai_apply_materials (Operator): bl_idname=lime_tb.ai_apply_materials, bl_label=AI: Apply Proposals
-- LIME_TB_OT_ai_test_state (Operator): bl_idname=lime_tb.ai_test_state, bl_label=AI: Test State
-- LIME_TB_OT_ai_clear_materials (Operator): bl_idname=lime_tb.ai_clear_materials, bl_label=AI: Clear Proposals
-- LIME_TB_OT_ai_select_all (Operator): bl_idname=lime_tb.ai_select_all, bl_label=AI: Select All
-- LIME_TB_OT_ai_select_none (Operator): bl_idname=lime_tb.ai_select_none, bl_label=AI: Select None
-- LIME_TB_OT_ai_normalize_to_closest (Operator): bl_idname=lime_tb.ai_normalize_to_closest, bl_label=AI: Normalize to Closest
-- LIME_TB_OT_ai_keep_proposal (Operator): bl_idname=lime_tb.ai_keep_proposal, bl_label=AI: Keep Proposal or Undo Normalize
-- LIME_TB_OT_ai_toggle_review (Operator): bl_idname=lime_tb.ai_toggle_review, bl_label=AI: Toggle Manual Review
-- LIME_TB_OT_open_ai_material_manager (Operator): bl_idname=lime_tb.open_ai_material_manager, bl_label=Open AI Material Manager
-
 ## lime_pipeline/ops/ops_ai_asset_organizer.py
 
-AI Asset Organizer Operators.
+AI Asset Organizer operators.
 
-Suggests clear names for selected objects, materials and optional collections using OpenRouter.
-The workflow is intentionally user-controlled: suggestions are reviewed in a panel
-and only applied when the user confirms.
-
-Includes optional post-apply automation:
-- safe collection organization (Lights/Cameras/group key) from generic/root collections
-- preview counters before apply
+Suggests and applies names for selected objects/materials/collections with AI,
+plus optional safe collection reorganization.
 
 Clases Blender detectadas:
 
@@ -99,7 +62,35 @@ Clases Blender detectadas:
 - LIME_TB_OT_ai_asset_scope_preset (Operator): bl_idname=lime_tb.ai_asset_scope_preset, bl_label=AI: Scope Preset
 - LIME_TB_OT_ai_asset_refresh_targets (Operator): bl_idname=lime_tb.ai_asset_refresh_targets, bl_label=AI: Refresh Targets
 - LIME_TB_OT_ai_asset_resolve_target (Operator): bl_idname=lime_tb.ai_asset_resolve_target, bl_label=AI: Resolve Target
+- LIME_TB_OT_ai_asset_set_target_for_item (Operator): bl_idname=lime_tb.ai_asset_set_target_for_item, bl_label=AI: Re-route Object
+- LIME_TB_OT_ai_asset_set_target_for_selected (Operator): bl_idname=lime_tb.ai_asset_set_target_for_selected, bl_label=AI: Re-route Selected Objects
 - LIME_TB_OT_ai_asset_clear (Operator): bl_idname=lime_tb.ai_asset_clear, bl_label=AI: Clear
+- LIME_TB_OT_open_ai_asset_manager (Operator): bl_idname=lime_tb.open_ai_asset_manager, bl_label=Open AI Asset Manager
+- LIME_TB_OT_ai_asset_test_connection (Operator): bl_idname=lime_tb.ai_asset_test_connection, bl_label=AI: Test Connection
+- LIME_TB_OT_ai_asset_material_debug_report (Operator): bl_idname=lime_tb.ai_asset_material_debug_report, bl_label=AI: Material Debug Report
+- LIME_TB_OT_ai_asset_collection_debug_report (Operator): bl_idname=lime_tb.ai_asset_collection_debug_report, bl_label=AI: Collection Debug Report
+
+## lime_pipeline/ops/ops_ai_render_converter.py
+
+AI Render Converter Operators
+
+Implements the render-to-style conversion workflow using Krea (Nano Banana)
+and optional prompt rewriting via OpenRouter.
+
+Clases Blender detectadas:
+
+- LIME_OT_ai_render_refresh (Operator): bl_idname=lime.ai_render_refresh, bl_label=AI: Refresh Source
+- LIME_OT_ai_render_frame (Operator): bl_idname=lime.ai_render_frame, bl_label=AI: Render Current Frame
+- LIME_OT_ai_render_generate (Operator): bl_idname=lime.ai_render_generate, bl_label=AI: Generate Storyboard
+- LIME_OT_ai_render_retry (Operator): bl_idname=lime.ai_render_retry, bl_label=AI: Retry Generation
+- LIME_OT_ai_render_cancel (Operator): bl_idname=lime.ai_render_cancel, bl_label=AI: Cancel Job
+- LIME_OT_ai_render_test_connection (Operator): bl_idname=lime.ai_render_test_connection, bl_label=AI: Test Krea Connection
+- LIME_OT_ai_render_add_to_sequencer (Operator): bl_idname=lime.ai_render_add_to_sequencer, bl_label=AI: Add Result to Sequencer
+- LIME_OT_ai_render_open_outputs_folder (Operator): bl_idname=lime.ai_render_open_outputs_folder, bl_label=AI: Open Outputs Folder
+- LIME_OT_ai_render_delete_selected (Operator): bl_idname=lime.ai_render_delete_selected, bl_label=AI: Delete Selected Image
+- LIME_OT_ai_render_delete_batch (Operator): bl_idname=lime.ai_render_delete_batch, bl_label=AI: Delete Image Batch
+- LIME_OT_ai_render_open_preview (Operator): bl_idname=lime.ai_render_open_preview, bl_label=AI: Open Image Preview
+- LIME_OT_ai_render_import_style (Operator): bl_idname=lime.ai_render_import_style, bl_label=AI: Import Style Image
 
 ## lime_pipeline/ops/ops_alpha_manager.py
 
@@ -267,13 +258,22 @@ Clases Blender detectadas:
 - LIME_OT_render_invoke (Operator): bl_idname=lime.render_invoke, bl_label=Render
 - LIME_OT_duplicate_active_camera (Operator): bl_idname=lime.duplicate_active_camera, bl_label=Duplicate Camera
 - LIME_OT_rename_shot_cameras (Operator): bl_idname=lime.rename_shot_cameras, bl_label=Rename Cameras
-- LIME_OT_delete_camera_rig (Operator): bl_idname=lime.delete_camera_rig, bl_label=Delete Camera (Rig)
+- LIME_OT_delete_camera_rig (Operator): bl_idname=lime.delete_camera_rig, bl_label=Delete Camera
 - LIME_OT_pose_camera_rig (Operator): bl_idname=lime.pose_camera_rig, bl_label=Pose Rig
 - LIME_OT_sync_camera_list (Operator): bl_idname=lime.sync_camera_list, bl_label=Refresh Cameras
-- LIME_OT_delete_camera_rig_and_sync (Operator): bl_idname=lime.delete_camera_rig_and_sync, bl_label=Delete Camera (Rig) and Refresh
+- LIME_OT_delete_camera_rig_and_sync (Operator): bl_idname=lime.delete_camera_rig_and_sync, bl_label=Delete Camera and Refresh
 - LIME_OT_reset_margin_alpha (Operator): bl_idname=lime.reset_margin_alpha, bl_label=Reset Alpha
 - LIME_OT_retry_camera_margin_backgrounds (Operator): bl_idname=lime.retry_camera_margin_backgrounds, bl_label=Reintentar Márgenes
+- LIME_OT_add_simple_camera (Operator): bl_idname=lime.add_simple_camera, bl_label=Create Camera (Simple)
 - LIME_OT_add_camera_rig (Operator): bl_idname=lime.add_camera_rig, bl_label=Create Camera (Rig)
+
+## lime_pipeline/ops/ops_comp_view_layer_outputs.py
+
+Compositor utilities for per-View Layer outputs.
+
+Clases Blender detectadas:
+
+- LIME_OT_setup_view_layer_outputs (Operator): bl_idname=lime.setup_view_layer_outputs, bl_label=Setup View Layer Outputs
 
 ## lime_pipeline/ops/ops_create_file.py
 
@@ -683,6 +683,50 @@ Key Features:
 Clases Blender detectadas:
 
 - LIME_OT_clean_step (Operator): bl_idname=lime.clean_step, bl_label=Clean .STEP
+
+## lime_pipeline/ops/ops_texture_adopt.py
+
+Texture Fix/Adopt operator.
+
+Copies external "loose" textures into the project shared folder:
+<RAMV>/RSC/Textures
+
+Rules:
+- Never modify textures that are linked/library/protected roots.
+- Copy (do not move) eligible files and relink Blender image paths.
+- Deduplicate by file content hash (sha256) using an on-disk index.
+- Write a JSON manifest: originals -> adopted paths and skipped reasons.
+
+Clases Blender detectadas:
+
+- LIME_OT_texture_adopt (Operator): bl_idname=lime.texture_adopt, bl_label=Adopt Textures (Fix)
+
+## lime_pipeline/ops/ops_texture_manifest_cleanup.py
+
+Texture manifest cleanup operator.
+
+Deletes the _manifests folder under the project RSC/Textures directory.
+This removes JSON reports and hash index files generated by texture scan/adopt.
+
+Clases Blender detectadas:
+
+- LIME_OT_texture_manifest_cleanup (Operator): bl_idname=lime.texture_manifest_cleanup, bl_label=Delete Texture Manifests
+
+## lime_pipeline/ops/ops_texture_scan.py
+
+Texture Scan/Report operator.
+
+First deliverable for safer texture workflows:
+- Detect images used by materials (Image Texture nodes, including nested groups).
+- Classify them conservatively into:
+  - Protected (linked/library/asset-library roots) -> never touch
+  - External user paths (outside project root) -> candidates to adopt
+  - In-project / packed / generated / missing -> report only
+- Write a JSON report with proposed adoption destinations (no modifications).
+
+Clases Blender detectadas:
+
+- LIME_OT_texture_scan_report (Operator): bl_idname=lime.texture_scan_report, bl_label=Scan Textures (Report)
 
 ## lime_pipeline/ops/ops_tooltips.py
 

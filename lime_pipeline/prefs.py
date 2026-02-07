@@ -154,7 +154,7 @@ class LimePipelinePrefs(AddonPreferences):
         row.prop(self, "http_referer")
         row.prop(self, "x_title")
         box.separator()
-        box.operator("lime_tb.ai_test_connection", text="Test Connection")
+        box.operator("lime_tb.ai_asset_test_connection", text="Test Connection")
 
         krea_box = col.box()
         krea_box.label(text="AI Render Converter (Krea)")

@@ -1,4 +1,4 @@
-﻿"""
+"""
 UI to configure project naming (type, revision, scene) and saving helpers.
 
 Purpose: Centralize project root selection, enforce naming invariants, preview filename,
