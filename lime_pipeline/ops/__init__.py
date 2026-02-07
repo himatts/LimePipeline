@@ -36,7 +36,7 @@ from .ops_view_layers import (
 from .ops_comp_view_layer_outputs import (
     LIME_OT_setup_view_layer_outputs,
 )
-from .ops_ai_asset_organizer import (
+from .ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
@@ -84,5 +84,6 @@ __all__ = [
     "LIME_OT_texture_adopt",
     "LIME_OT_texture_manifest_cleanup",
 ]
+
 
 

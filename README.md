@@ -18,6 +18,7 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Cuando una reorganización requiere crear nuevas colecciones, AI Asset Organizer v2 las muestra como filas editables de “planned collections” para ajustar nombres antes de aplicar, manteniendo sincronía con destinos de objetos.
 - AI Asset Organizer v2 puede abrirse en una ventana emergente enfocada (`Open in Window`) para revisar nombrado/organización (objetos, materiales, colecciones) sin mezclar el bloque de texturas.
 - AI Asset Organizer v2 prioriza destinos de colecciones activas por defecto y ofrece reportes de debug (materiales y colecciones) para auditar decisiones IA/heurísticas.
+- Internamente, AI Asset Organizer v2 está modularizado en `ops/ai_asset_organizer/*` y usa helpers Blender-agnostic en `core/` para facilitar mantenimiento y testing.
 - AI Material Renamer fue retirado de la UI y del runtime; usa AI Asset Organizer como flujo único.
 - Los controles de debug y reroute masivo se mantienen como herramientas internas y no se muestran en la UI principal para reducir ruido.
 - Cuando no existen destinos activos, AI Asset Organizer puede usar un hint de IA válido como destino virtual (p. ej. `Props`) para crearlo durante `Organize collections on apply`, sin reactivar colecciones existentes desactivadas.

@@ -34,9 +34,10 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 
 ## Repository layout (high level)
 - `lime_pipeline/core`: naming, paths, validation, parsing (no hard `bpy` dependency)
+- `lime_pipeline/core`: naming, paths, validation, parsing (no hard `bpy` dependency), including AI organizer pure helpers (`ai_asset_prompt`, `ai_asset_collection_paths`, `ai_asset_material_rules`)
 - `lime_pipeline/data`: declarative templates/constants (e.g., SHOT_TREE)
 - `lime_pipeline/scene`: Blender scene helpers (collections/SHOTs)
-- `lime_pipeline/ops`: Blender operators (UI-triggered actions)
+- `lime_pipeline/ops`: Blender operators (UI-triggered actions), including `ops/ai_asset_organizer/` subpackage for AI organizer orchestration
 - `lime_pipeline/ui`: Panels and UI drawing
 
 See ARCHITECTURE.md for details.
@@ -85,7 +86,8 @@ See ARCHITECTURE.md for details.
 - [ ] Docs updated if visible behavior or structure changed (README, ARCHITECTURE, CONTRIBUTING)
 
 ## Existing tests (optional)
-The repo may contain a small number of unit tests for `core/` logic. Run them only when asked or when it helps validate a change.
+The repo contains unit tests for `core/` logic (including AI organizer helper modules). Use:
+- `python -m unittest discover tests -v`
 
 ## AI Asset Organizer smoke checklist
 - Select objects with materials and run **Suggest Names (AI)**; verify editable rows and read-only handling.

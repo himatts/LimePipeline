@@ -8,11 +8,14 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ## Modules and boundaries
 
 ### core (pure-ish Python)
-- Files: `core/material_naming.py`, `core/material_quality.py`, `core/asset_naming.py`, `core/collection_resolver.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/env_config.py`, `core/__init__.py`
+- Files: `core/material_naming.py`, `core/material_quality.py`, `core/asset_naming.py`, `core/collection_resolver.py`, `core/ai_asset_prompt.py`, `core/ai_asset_collection_paths.py`, `core/ai_asset_material_rules.py`, `core/ai_asset_response.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/env_config.py`, `core/__init__.py`
 - Responsibilities:
   - Material naming helpers: parse/build MAT_{TagEscena}_{Familia}_{Acabado}_{V##}, normalize components, enforce version blocks
   - Material quality heuristics: score existing names, classify excellence vs review needs, surface taxonomy-aligned hints
   - Collection destination resolver: deterministic ranking/ambiguity for full hierarchy paths (SHOT-aware)
+  - AI organizer prompt/schema and JSON contract helpers (`ai_asset_prompt`)
+  - AI organizer collection-path normalization and candidate serialization helpers (`ai_asset_collection_paths`)
+  - AI organizer material normalization guardrails and context-tag parsing (`ai_asset_material_rules`)
   - Project naming: normalize project names, build canonical filenames, detect/parse .blend names
   - Paths: map project type + rev + scene to folder targets
   - Validation: sanity checks for save operations (errors/warnings, path length)
@@ -50,7 +53,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Responsibilities:
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
-- `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections, hierarchy-aware collection target resolution (active-collection aware by default, with virtual-hint fallback when no active candidates exist), enriched object hierarchy signals (parent/root/depth + empty role hints + inferred hierarchy roles), controller/root guardrails for technical subcategories, ambiguity handling, apply-scope filters, optional collection reorganization, and debug reports for material normalization / collection resolution
+- `ops/ai_asset_organizer/*`: modular AI Asset Organizer package (`operators_*`, `runtime_api`, `planner`, `target_resolver`, `scene_snapshot`, `material_probe`, `openrouter_client`) with `ops_ai_asset_organizer.py` as compatibility shim
 - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
 - Camera operations (`ops_cameras.py`): rig and simple camera creation in SHOT camera collections, automatic margin background setup on camera creation/duplication
 - Rules:

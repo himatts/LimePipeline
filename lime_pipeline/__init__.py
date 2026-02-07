@@ -73,7 +73,7 @@ from .ui import (
 )
 from .ui import LIME_TB_PT_ai_asset_organizer, LIME_TB_UL_ai_asset_items
 from .ui import LIME_TB_PT_experimental
-from .ops.ops_ai_asset_organizer import (
+from .ops.ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
@@ -696,4 +696,5 @@ def _on_load_post(dummy):
         refresh_ai_render_assets(bpy.context, force=True)
     except Exception:
         pass
+
 

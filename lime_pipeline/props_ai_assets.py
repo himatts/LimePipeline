@@ -23,13 +23,13 @@ from bpy.props import (
 
 def _refresh_preview(scene) -> None:
     try:
-        ops_module = import_module("lime_pipeline.ops.ops_ai_asset_organizer")
+        runtime_api = import_module("lime_pipeline.ops.ai_asset_organizer.runtime_api")
     except Exception:
         return
-    if getattr(ops_module, "_AI_ASSET_PREVIEW_SUSPENDED", False):
+    if bool(getattr(runtime_api, "is_preview_suspended", lambda: False)()):
         return
     try:
-        ops_module.refresh_ai_asset_preview(scene)
+        runtime_api.refresh_preview(scene)
     except Exception:
         pass
 
@@ -56,14 +56,14 @@ def _suggested_name_update(self, context) -> None:
     if scene is None:
         return
     try:
-        ops_module = import_module("lime_pipeline.ops.ops_ai_asset_organizer")
+        runtime_api = import_module("lime_pipeline.ops.ai_asset_organizer.runtime_api")
     except Exception:
         _refresh_preview(scene)
         return
-    if getattr(ops_module, "_AI_ASSET_PREVIEW_SUSPENDED", False):
+    if bool(getattr(runtime_api, "is_preview_suspended", lambda: False)()):
         return
     try:
-        ops_module.on_ai_asset_item_suggested_name_changed(scene, getattr(self, "item_id", ""))
+        runtime_api.on_name_changed(scene, getattr(self, "item_id", ""))
     except Exception:
         _refresh_preview(scene)
 
@@ -78,14 +78,14 @@ def _scope_update(self, context) -> None:
     if scene is None:
         return
     try:
-        ops_module = import_module("lime_pipeline.ops.ops_ai_asset_organizer")
+        runtime_api = import_module("lime_pipeline.ops.ai_asset_organizer.runtime_api")
     except Exception:
         _refresh_preview(scene)
         return
-    if getattr(ops_module, "_AI_ASSET_PREVIEW_SUSPENDED", False):
+    if bool(getattr(runtime_api, "is_preview_suspended", lambda: False)()):
         return
     try:
-        ops_module.sync_ai_asset_row_selection(scene)
+        runtime_api.sync_row_selection(scene)
     except Exception:
         _refresh_preview(scene)
 
