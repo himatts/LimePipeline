@@ -1,21 +1,8 @@
----
-description: Global high-level architecture and invariants for Lime Pipeline
-globs:
+﻿---
+description: Global architecture/invariants adapter
 alwaysApply: true
 ---
+# Architecture Adapter
 
-# Purpose
-- Keep this rule short; details live in @ARCHITECTURE.md and scoped rules.
-
-# Architecture (high-level)
-- Modules: core, data, scene, ops, ui.
-- UI/messages in English; future-friendly for Blender i18n. Code, comments, identifiers in English.
-- Prefer native Blender UI elements; avoid custom widgets/drawing unless necessary.
-
-# Invariants (single source of truth)
-- Project root matches `^[A-Z]{2}-\d{5}\s+(.+)$`
-- Revision letter is exactly one A–Z
-- PV/REND/SB/ANIM require SC (1–999); unless `free_scene_numbering`, SC must be multiple of `scene_step`
-
-# References
-@ARCHITECTURE.md
+Use @ARCHITECTURE.md for module boundaries and invariants.
+Use @AGENTS.md for workflow and maintenance rules.

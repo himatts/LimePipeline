@@ -1,19 +1,10 @@
----
-description: PR checklist and test guidance for Lime Pipeline
-globs:
+﻿---
+description: PR checklist adapter
 alwaysApply: false
 ---
+# PR Checklist Adapter
 
-# PR Checklist
-- UI/messages in EN. Code, comments, identifiers in English.
-- Prefer native Blender UI elements; avoid custom GPU drawing unless strictly necessary.
-- No duplicated literals for paths/constants (use core helpers)
-- No duplicated logic; reuse `core`/`scene`
-- No IO in `draw()`; no silent `except`
-- Typed public functions; short "why" docstrings
-- Bump `bl_info["version"]` if user-facing behavior changes
-- Docs updated (README, ARCHITECTURE, CONTRIBUTING)
-
-# Tests
-- Unit (core): naming, paths, validate
-- Optional smoke: Blender headless for key flows
+Before finishing, verify docs and behavior consistency using:
+- @AGENTS.md
+- @ARCHITECTURE.md
+- @CONTRIBUTING.md

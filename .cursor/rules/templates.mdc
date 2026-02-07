@@ -1,39 +1,7 @@
----
-description: Handy code templates (operators, panels) for Lime Pipeline
-globs:
+﻿---
+description: Templates adapter
 alwaysApply: false
 ---
+# Templates Adapter
 
-## Operator template (Python)
-```python
-import bpy
-from bpy.types import Operator
-
-class LIME_OT_example(Operator):
-    bl_idname = "lime.example"
-    bl_label = "Example"
-    bl_options = {'REGISTER', 'UNDO'}
-    bl_description = "Short, actionable description in EN"
-
-    def execute(self, context):
-        # Delegate to core/scene helpers where possible
-        self.report({'INFO'}, "Done")
-        return {'FINISHED'}
-```
-
-## Panel template (Python)
-```python
-import bpy
-from bpy.types import Panel
-CAT = "Lime Pipeline"
-
-class LIME_PT_example(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = CAT
-    bl_label = "Example"
-    bl_order = 99
-    def draw(self, ctx):
-        layout = self.layout
-        layout.label(text="Hello")
-```
+Use project conventions from @AGENTS.md and structure constraints from @ARCHITECTURE.md.

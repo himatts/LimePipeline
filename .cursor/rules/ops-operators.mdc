@@ -1,16 +1,9 @@
----
-description: Operators rules (naming, feedback, delegation to core/scene)
+﻿---
+description: Operators files adapter
 globs:
   - "lime_pipeline/ops/**/*.py"
 alwaysApply: false
 ---
+# Operators Adapter
 
-# Conventions
-- Class prefix `LIME_OT_` and `bl_idname` prefixed `lime.*`.
-- Delegate naming/paths/validate to `core`; no RAMV literals or formatting duplication.
-- User feedback via `self.report({'ERROR'|'WARNING'|'INFO'}, msg)`.
-- Labels, descriptions (`bl_label`, `bl_description`), property names and messages must be in English.
-- Avoid silent `except`; log or report.
-
-# Templates (invoke manually when creating a new operator)
-- Use @templates for a starter skeleton.
+Follow @ARCHITECTURE.md (ops responsibilities) and @AGENTS.md (registration/checklist).

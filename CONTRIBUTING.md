@@ -33,7 +33,6 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Cameras panel supports adding Camera Rigs or Simple Cameras inside the active SHOT
 
 ## Repository layout (high level)
-- `lime_pipeline/core`: naming, paths, validation, parsing (no hard `bpy` dependency)
 - `lime_pipeline/core`: naming, paths, validation, parsing (no hard `bpy` dependency), including AI organizer pure helpers (`ai_asset_prompt`, `ai_asset_collection_paths`, `ai_asset_material_rules`)
 - `lime_pipeline/data`: declarative templates/constants (e.g., SHOT_TREE)
 - `lime_pipeline/scene`: Blender scene helpers (collections/SHOTs)
@@ -45,7 +44,7 @@ See ARCHITECTURE.md for details.
 ## Development workflow
 1. Create a feature branch from `main`.
 2. Implement changes following rules below.
-3. Update docs if applicable: `.cursor/rules/limepipelinerules.mdc`, ARCHITECTURE.md, this file, README.md.
+3. Update docs if applicable: AGENTS.md, ARCHITECTURE.md, this file, README.md.
 4. Manually test in Blender (preferred) using Blender Development.
 5. Open a Pull Request; include:
    - Summary and rationale (the "why")
@@ -116,6 +115,6 @@ The repo contains unit tests for `core/` logic (including AI organizer helper mo
 - If similar exists, extend or reuse instead of duplicating
 
 ## Canonical rules file
-- The canonical rules live in: `.cursor/rules/limepipelinerules.mdc`.
+- The canonical rules for agents live in: `AGENTS.md`.
 
 Thanks for keeping Lime Pipeline robust and consistent!

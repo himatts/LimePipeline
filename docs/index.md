@@ -11,7 +11,7 @@ Bienvenido a la documentación de Lime Pipeline. Este add-on de Blender estandar
 - ¿Cómo se usa?: Desde los paneles de las pestañas "Lime Pipeline" y "Lime Toolbox", y a través de operadores con prefijo `lime.`.
 
 Si tu prioridad es contribuir, sigue esta ruta:
-1. Contribuir: reglas de PR, estándares de código, política de tests y checklist.
+1. Contributing (`CONTRIBUTING.md` en la raiz): reglas de PR, estandares de codigo, politica de tests y checklist.
 2. Desarrollo en Blender: flujo con Cursor + Blender Development.
 3. Arquitectura: responsabilidades por capa y flujos clave.
 4. Convenciones: nomenclaturas y reglas canónicas.

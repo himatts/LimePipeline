@@ -1,7 +1,7 @@
 # Lime Pipeline – AGENTS
 
 ## Alcance
-Este archivo aplica a todo el repositorio. Complementa las reglas descritas en `lime_pipeline/generalrules.md` y `ARCHITECTURE.md`.
+Este archivo aplica a todo el repositorio y es la fuente primaria de reglas para agentes. La arquitectura y decisiones tecnicas se detallan en `ARCHITECTURE.md`.
 
 ## Contexto del proyecto
 - Add-on de Blender 4.5 LTS para estandarizar nombres, rutas, backups y flujos de SHOT/renders.

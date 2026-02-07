@@ -50,4 +50,4 @@ Scene Collection
 ## Próximos pasos
 - Revisa **Convenciones de nombres** para reglas de naming.
 - Explora **Flujos típicos** para procesos completos.
-- Si vas a contribuir, comienza en **Contribuir**.
+- Si vas a contribuir, revisa `CONTRIBUTING.md` en la raiz del repositorio.

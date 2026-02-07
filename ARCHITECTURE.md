@@ -163,5 +163,5 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Unit tests for `core` and optional smoke tests in CI
 
 ## Canonical rules and docs maintenance
-- Canonical rules file: `.cursor/rules/limepipelinerules.mdc` (source of truth for editing/architecture rules)
+- Canonical rules for agents: `AGENTS.md` (source of truth for editing workflow rules)
 - If user-visible behavior or architecture changes, also update: `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`

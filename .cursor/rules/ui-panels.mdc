@@ -1,16 +1,9 @@
----
-description: UI rules for panels (fast draw, no IO, only layout)
+﻿---
+description: UI files adapter
 globs:
   - "lime_pipeline/ui/**/*.py"
 alwaysApply: false
 ---
+# UI Adapter
 
-# View3D / Image Editor panels
-- `draw()` no IO/hydration, no state mutation; keep fast and deterministic.
-- Messages/tooltips in EN. Code, comments, identifiers in English. Show warnings from `core.validate`.
-- Reuse properties from `WindowManager.lime_pipeline`; do not scan disk.
-- Prefer native Blender UI elements (layout, operators, props); avoid custom GPU drawing or non-standard widgets unless strictly necessary.
-
-# References
-@lime_pipeline/ui/ui_render_configs.py
-@lime_pipeline/ui/ui_project_org.py
+Follow @ARCHITECTURE.md (UI constraints) and @AGENTS.md (draw/performance rules).
