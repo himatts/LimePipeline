@@ -27,6 +27,8 @@ from ..ops.ops_save_templates import _ensure_editables_dir, _resolve_prj_rev_sc,
 from ..prefs import LimePipelinePrefs
 from ..props_ai_renders import update_ai_render_asset_cache
 from .ai_http import (
+    has_krea_api_key,
+    has_openrouter_api_key,
     openrouter_headers,
     OPENROUTER_CHAT_URL,
     http_post_json,
@@ -827,8 +829,8 @@ class LIME_OT_ai_render_generate(Operator):
         if prefs is None:
             self.report({"ERROR"}, "Addon preferences unavailable")
             return {"CANCELLED"}
-        if not (getattr(prefs, "krea_api_key", "") or "").strip():
-            self.report({"ERROR"}, "Krea API key not set in Preferences")
+        if not has_krea_api_key():
+            self.report({"ERROR"}, "Krea API key not found in .env")
             return {"CANCELLED"}
 
         try:
@@ -855,7 +857,7 @@ class LIME_OT_ai_render_generate(Operator):
                 return {"CANCELLED"}
             source_path = Path(state.source_image_path or "")
             if mode == "SKETCH_PLUS" and getattr(state, "rewrite_with_llm", True):
-                if (getattr(prefs, "openrouter_api_key", "") or "").strip():
+                if has_openrouter_api_key():
                     use_style = bool(getattr(state, "llm_use_style_reference", False))
                     style_for_llm = Path(state.style_image_path or "") if use_style else None
                     detail_opt = _rewrite_details_with_llm(prefs, detail_text, source_path)
@@ -1178,8 +1180,8 @@ class LIME_OT_ai_render_test_connection(Operator):
         if prefs is None:
             self.report({"ERROR"}, "Preferences unavailable")
             return {"CANCELLED"}
-        if not (getattr(prefs, "krea_api_key", "") or "").strip():
-            self.report({"ERROR"}, "Krea API key not set in Preferences")
+        if not has_krea_api_key():
+            self.report({"ERROR"}, "Krea API key not found in .env")
             return {"CANCELLED"}
 
         url = f"{_krea_base_url(prefs)}{KREA_JOBS_PATH}?limit=1"

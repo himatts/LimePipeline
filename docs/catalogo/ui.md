@@ -21,7 +21,8 @@ UI panel for AI-assisted object/material/collection naming in Lime Toolbox.
 
 This panel is lightweight; network calls and rename logic live in operators.
 Supports optional image context for multimodal models, preview counters,
-and an opt-in toggle for collection organization on apply. Hosts the Textures
+apply-scope filters, ambiguity indicators for collection targets, and an opt-in toggle
+for collection organization on apply. Hosts the Textures
 block (Scan/Adopt/Manifests).
 
 Clases Blender detectadas:

@@ -11,8 +11,9 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 - Asiste en el primer guardado y crea backups numerados.
 - Facilita la creación/duplicado/instanciado de “shots” con reglas claras.
 - Ayuda a mantener materiales bajo una nomenclatura consistente (manual y, opcionalmente, asistido por IA).
-- Incluye un AI Asset Organizer v2 para sugerir y aplicar nombres de objetos/materiales/colecciones (OpenRouter), con preview de cambios y organización opcional de colecciones.
+- Incluye un AI Asset Organizer v2 para sugerir y aplicar nombres de objetos/materiales/colecciones (OpenRouter), con preview unificado, resolución jerárquica de destinos y organización opcional de colecciones.
 - AI Asset Organizer v2 usa PascalCase por segmentos separados con guion bajo para objetos y colecciones (ejemplo: `SciFiCrate_Large_02`).
+- AI Asset Organizer v2 muestra rutas completas de destino, maneja ambigüedad con confirmación por fila y permite filtros de Apply Scope (All / Only Objects / Only Materials / Only Collections).
 - Incluye herramientas de Textures (Scan/Adopt) dentro de AI Asset Organizer para centralizar texturas en `rsc/Textures`.
 - Incluye un AI Render Converter para convertir renders a storyboard/sketch con Krea y OpenRouter.
 - Mejora la gestión visual del AI Render Converter con miniaturas, vista grande y filtros por sección.
@@ -29,3 +30,11 @@ Estandarizar el trabajo para reducir fricción y errores humanos: archivos mal n
 1. Blender > Edit > Preferences > Add-ons > Install...
 2. Selecciona el `.zip` del proyecto (o la carpeta que contiene `lime_pipeline`).
 3. Activa “Lime Pipeline”.
+
+## API keys (.env)
+- Las API keys de OpenRouter y Krea ya no se guardan en preferencias de Blender.
+- Se cargan desde un archivo `.env` local en la raíz del repositorio.
+- Variables soportadas:
+  - `LIME_OPENROUTER_API_KEY` (o `OPENROUTER_API_KEY`)
+  - `LIME_KREA_API_KEY` (o `KREA_API_KEY`)
+- Puedes usar `.env.example` como plantilla.

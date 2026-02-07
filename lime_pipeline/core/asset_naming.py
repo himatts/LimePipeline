@@ -226,25 +226,25 @@ def asset_group_key_from_name(name: str) -> str:
     return token
 
 
-def build_material_name_with_scene_tag(
-    scene_tag: str,
+def build_material_name_with_tag(
+    tag: str,
     material_type: str,
     finish: str,
     version_index: int,
 ) -> str:
-    """Build a material name `MAT_{SceneTag?}_{MaterialType}_{Finish}_{V##}`.
+    """Build a material name `MAT_{Tag?}_{MaterialType}_{Finish}_{V##}`.
 
-    The `scene_tag` component is optional; when empty it is omitted.
+    The `tag` component is optional; when empty it is omitted.
     The output is truncated (finish only) to satisfy the core max length.
     """
-    tag = (scene_tag or "").strip()
+    tag_value = (tag or "").strip()
     type_token = (material_type or "").strip()
     finish_token = (finish or "").strip()
     version_block = build_version(int(version_index or 1))
 
     prefix_parts = [MAT_PREFIX]
-    if tag:
-        prefix_parts.append(tag)
+    if tag_value:
+        prefix_parts.append(tag_value)
     prefix_parts.append(type_token)
 
     parts = prefix_parts + [finish_token, version_block]
@@ -257,6 +257,16 @@ def build_material_name_with_scene_tag(
     max_finish_len = max(1, MAT_MAX_LENGTH - head_len)
     truncated_finish = finish_token[:max_finish_len]
     return MAT_SEPARATOR.join(prefix_parts + [truncated_finish, version_block])
+
+
+def build_material_name_with_scene_tag(
+    scene_tag: str,
+    material_type: str,
+    finish: str,
+    version_index: int,
+) -> str:
+    """Backward-compatible wrapper for build_material_name_with_tag()."""
+    return build_material_name_with_tag(scene_tag, material_type, finish, version_index)
 
 
 def bump_material_version_until_unique(universe: Iterable[str], proposed_name: str) -> str:
@@ -273,7 +283,7 @@ def bump_material_version_until_unique(universe: Iterable[str], proposed_name: s
             suffix += 1
         return f"{base}{MAT_SEPARATOR}{suffix}"
 
-    scene_tag = parsed.get("scene_tag") or ""
+    tag = parsed.get("tag") or parsed.get("scene_tag") or ""
     material_type = parsed.get("material_type") or ""
     finish = parsed.get("finish") or ""
     start_idx = int(parsed.get("version_index") or 1)
@@ -281,7 +291,7 @@ def bump_material_version_until_unique(universe: Iterable[str], proposed_name: s
     idx = max(1, start_idx)
     for _ in range(0, 99):
         idx += 1
-        candidate = build_material_name_with_scene_tag(scene_tag, material_type, finish, idx)
+        candidate = build_material_name_with_tag(tag, material_type, finish, idx)
         if candidate not in used:
             return candidate
 

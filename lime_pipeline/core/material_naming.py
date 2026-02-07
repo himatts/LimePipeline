@@ -94,8 +94,8 @@ def build_version(index: int) -> str:
 def parse_name(name: str) -> Optional[Dict[str, str]]:
     """Parse material names adhering to MAT_{Tag?}_{MaterialType}_{MaterialFinish}_{Version}.
 
-    The scene tag component is optional. When present, it is stored in the returned dict
-    under ``scene_tag``.
+    The optional tag component is returned under ``tag``.
+    For backward compatibility it is also exposed as ``scene_tag``.
     """
     if not name or INVALID_CHARS_PATTERN.search(name):
         return None
@@ -104,7 +104,7 @@ def parse_name(name: str) -> Optional[Dict[str, str]]:
     if len(parts) < 4 or parts[0] != PREFIX:
         return None
 
-    scene_tag = ""
+    tag = ""
     version_block = parts[-1]
 
     type_index = 1
@@ -113,13 +113,13 @@ def parse_name(name: str) -> Optional[Dict[str, str]]:
     material_type = normalize_material_type(material_type_raw)
 
     if material_type not in ALLOWED_MATERIAL_TYPES:
-        # Names may include an optional scene tag between prefix and type.
+        # Names may include an optional tag between prefix and type.
         # Detect this by checking the next token as potential material type.
         if len(parts) >= 5:
             candidate_raw = parts[type_index + 1]
             candidate_type = normalize_material_type(candidate_raw)
             if candidate_type in ALLOWED_MATERIAL_TYPES:
-                scene_tag = material_type_raw
+                tag = material_type_raw
                 type_index += 1
                 material_type_raw = parts[type_index]
                 material_type = candidate_type
@@ -140,7 +140,8 @@ def parse_name(name: str) -> Optional[Dict[str, str]]:
         return None
 
     return {
-        "scene_tag": scene_tag,
+        "tag": tag,
+        "scene_tag": tag,
         "material_type": material_type,
         "finish": finish,
         "version": build_version(version_idx),
@@ -248,7 +249,7 @@ def detect_issues(name: str) -> list[str]:
 
     parsed = parse_name(name)
     if parsed is None:
-        issues.append("Does not match MAT_{MaterialType}_{MaterialFinish}_{Version} schema")
+        issues.append("Does not match MAT_{Tag?}_{MaterialType}_{MaterialFinish}_{Version} schema")
     else:
         if NUMERIC_SUFFIX_PATTERN.search(name):
             issues.append("Has numeric suffix (.###)")

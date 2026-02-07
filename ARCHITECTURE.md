@@ -8,13 +8,15 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ## Modules and boundaries
 
 ### core (pure-ish Python)
-- Files: `core/material_naming.py`, `core/material_quality.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/__init__.py`
+- Files: `core/material_naming.py`, `core/material_quality.py`, `core/asset_naming.py`, `core/collection_resolver.py`, `core/naming.py`, `core/paths.py`, `core/validate.py`, `core/validate_scene.py`, `core/env_config.py`, `core/__init__.py`
 - Responsibilities:
   - Material naming helpers: parse/build MAT_{TagEscena}_{Familia}_{Acabado}_{V##}, normalize components, enforce version blocks
   - Material quality heuristics: score existing names, classify excellence vs review needs, surface taxonomy-aligned hints
+  - Collection destination resolver: deterministic ranking/ambiguity for full hierarchy paths (SHOT-aware)
   - Project naming: normalize project names, build canonical filenames, detect/parse .blend names
   - Paths: map project type + rev + scene to folder targets
   - Validation: sanity checks for save operations (errors/warnings, path length)
+  - Environment config: load local `.env` values for API credentials (OpenRouter/Krea)
   - Scene validation helpers (selection/shot context); note: this file uses bpy
 - Rules:
   - Only `validate_scene.py` imports `bpy` at module import time; the rest keep it local when needed
@@ -49,7 +51,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - User actions (create folders/files, backups, renders, proposal views, camera rigs, select root, stage lights, material normalization)
 - Highlights:
 - `ops_ai_material_renamer.py`: AI-assisted workflow (local detection -> selective AI query -> apply with editing support), enriched metadata extraction, structured outputs via OpenRouter
-- `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections with preview counters and optional safe collection reorganization
+- `ops_ai_asset_organizer.py`: AI-assisted naming for objects/materials/collections, hierarchy-aware collection target resolution, ambiguity handling, apply-scope filters, and optional collection reorganization
 - `ops_ai_render_converter.py`: AI render conversion (source frame render, prompt rewriting, Krea job creation/polling, download, manifest)
 - Camera operations (`ops_cameras.py`): rig and simple camera creation in SHOT camera collections, automatic margin background setup on camera creation/duplication
 - Rules:
@@ -91,15 +93,16 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ### AI Asset Organizer v2 (AI-assisted)
 1. User clicks **Suggest Names (AI)** from Lime Toolbox.
 2. Operator collects selected objects/materials and optional non-SHOT collections from selection ownership.
-3. Prompt includes hierarchy/context metadata (`parent_id`, `children_count`, `shared_data_users`, usage hints) and enforces strict JSON output.
-4. Suggestions are written to `Scene.lime_ai_assets.items` with row status (`NORMALIZED`, `INVALID`, read-only).
-5. Preview counters are computed before apply (`planned_renames_*`, collections to create, objects to move).
-6. **Apply Selected** renames selected rows with uniqueness guarantees:
+3. Prompt includes hierarchy/context metadata (`parent_id`, `children_count`, `shared_data_users`, collection paths, scene hierarchy) and enforces strict JSON output; object entries may optionally return `target_collection_hint`.
+4. Suggestions are written to `Scene.lime_ai_assets.items` with row status (`NORMALIZED`, `INVALID`, read-only) plus destination metadata (`target_collection_path`, `target_status`, ranked candidates).
+5. A local deterministic resolver analyzes the full collection tree to choose destination paths (`AUTO`) or mark unresolved cases (`AMBIGUOUS`), prioritizing SHOT branch context.
+6. Preview counters are computed from a unified planner before apply (`planned_renames_*`, deep-path collections to create, objects to move, ambiguous/skipped counts).
+7. **Apply Selected** renames selected rows with uniqueness guarantees and Apply Scope filters (objects/materials/collections):
    - Objects: PascalCase segments separated by underscores, numeric suffix as `_NN`, deterministic uniqueness.
    - Materials: `MAT_*` validation + version bump when needed.
    - Collections: PascalCase segments separated by underscores, numeric suffix as `_NN`, deterministic uniqueness.
-7. Optional post-apply automation:
-   - Safe collection organization (`Lights`, `Cameras`, grouped asset keys) only from generic/root collections.
+8. Optional post-apply organization links objects to resolved target paths, creates missing subcollection paths when required, and skips ambiguous objects until confirmed.
+9. Ambiguous rows can be resolved explicitly from the panel using full collection paths.
 
 ### AI Render Converter (Storyboard)
 1. Resolve current frame and expected source render path under Storyboard/editables/AI/sources.

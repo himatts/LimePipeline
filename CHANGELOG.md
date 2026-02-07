@@ -22,8 +22,12 @@
 - AI Render Converter now uses thumbnail grids per section, includes large Image Editor previews, syncs Source Render selections to frames, and deduplicates style imports.
 - AI Render Converter adds deletion controls for selected images and batch cleanup with double confirmation.
 - AI Render Converter adds output folder access and batch manifest cleanup.
+- OpenRouter/Krea API keys are now loaded from local `.env` instead of Blender Add-on Preferences.
 - Textures tools moved to AI Asset Organizer; removed "Organize Textures on Apply".
 - AI Asset Organizer object/collection naming now uses PascalCase segments separated by underscores with numeric suffix blocks.
+- AI Asset Organizer now resolves collection destinations from the full hierarchy (deep paths), surfaces ambiguity with full-path candidates, supports manual target confirmation, and applies partial-safe moves (skips unresolved ambiguous rows).
+- AI Asset Organizer adds Apply Scope filters/presets (All / Only Objects / Only Materials / Only Collections), unified preview counters for ambiguities/skips, and deep-path collection creation when organizing objects.
+- AI Asset Organizer now normalizes material proposals to `MAT_{Tag?}_{MaterialType}_{Finish}_{V##}` consistently, including coercion from partial/legacy AI outputs.
 
 ## [0.2.1] - 2025-09-28
 ### Changed

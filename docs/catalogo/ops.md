@@ -96,6 +96,9 @@ Clases Blender detectadas:
 
 - LIME_TB_OT_ai_asset_suggest_names (Operator): bl_idname=lime_tb.ai_asset_suggest_names, bl_label=AI: Suggest Names
 - LIME_TB_OT_ai_asset_apply_names (Operator): bl_idname=lime_tb.ai_asset_apply_names, bl_label=AI: Apply Names
+- LIME_TB_OT_ai_asset_scope_preset (Operator): bl_idname=lime_tb.ai_asset_scope_preset, bl_label=AI: Scope Preset
+- LIME_TB_OT_ai_asset_refresh_targets (Operator): bl_idname=lime_tb.ai_asset_refresh_targets, bl_label=AI: Refresh Targets
+- LIME_TB_OT_ai_asset_resolve_target (Operator): bl_idname=lime_tb.ai_asset_resolve_target, bl_label=AI: Resolve Target
 - LIME_TB_OT_ai_asset_clear (Operator): bl_idname=lime_tb.ai_asset_clear, bl_label=AI: Clear
 
 ## lime_pipeline/ops/ops_alpha_manager.py

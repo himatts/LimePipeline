@@ -26,6 +26,8 @@ class LIME_TB_UL_ai_asset_items(UIList):
         read_only = bool(getattr(item, "read_only", False))
         item_type = (getattr(item, "item_type", "OBJECT") or "OBJECT").upper()
         status = (getattr(item, "status", "") or "").upper()
+        target_status = (getattr(item, "target_status", "") or "NONE").upper()
+        target_path = (getattr(item, "target_collection_path", "") or "").strip()
 
         if item_type == "OBJECT":
             type_icon = "OBJECT_DATA"
@@ -40,7 +42,7 @@ class LIME_TB_UL_ai_asset_items(UIList):
         if status == "INVALID":
             status_icon = "ERROR"
         elif status == "NORMALIZED":
-            status_icon = "FILE_REFRESH"
+            status_icon = "CHECKMARK"
 
         checkbox_col = row_layout.column(align=True)
         checkbox_col.ui_units_x = 1.0
@@ -56,11 +58,35 @@ class LIME_TB_UL_ai_asset_items(UIList):
         status_col.label(text="", icon=status_icon)
 
         proposal_col = row_layout.column(align=True)
-        proposal_col.ui_units_x = 10.0
+        proposal_col.ui_units_x = 8.0
         if read_only:
             proposal_col.label(text=getattr(item, "suggested_name", "") or "-")
         else:
             proposal_col.prop(item, "suggested_name", text="")
+
+        target_col = row_layout.column(align=True)
+        target_col.ui_units_x = 12.0
+        if item_type == "OBJECT":
+            target_icon = "BLANK1"
+            if target_status == "AUTO":
+                target_icon = "OUTLINER_COLLECTION"
+            elif target_status == "CONFIRMED":
+                target_icon = "CHECKMARK"
+            elif target_status == "AMBIGUOUS":
+                target_icon = "QUESTION"
+            elif target_status == "SKIPPED":
+                target_icon = "ERROR"
+            target_col.label(text=target_path or "-", icon=target_icon)
+        else:
+            target_col.label(text="-")
+
+        action_col = row_layout.column(align=True)
+        action_col.ui_units_x = 1.5
+        if item_type == "OBJECT" and target_status in {"AMBIGUOUS", "SKIPPED"}:
+            op = action_col.operator("lime_tb.ai_asset_resolve_target", text="", icon="QUESTION")
+            op.item_id = getattr(item, "item_id", "")
+        else:
+            action_col.label(text="", icon="BLANK1")
 
 
 class LIME_TB_PT_ai_asset_organizer(Panel):
@@ -121,7 +147,24 @@ class LIME_TB_PT_ai_asset_organizer(Panel):
             row = layout.row(align=True)
             row.enabled = not getattr(state, "is_busy", False)
             row.operator("lime_tb.ai_asset_suggest_names", text="Suggest Names (AI)", icon="FILE_REFRESH")
+            row.operator("lime_tb.ai_asset_refresh_targets", text="Refresh Targets", icon="OUTLINER_COLLECTION")
             row.operator("lime_tb.ai_asset_clear", text="Clear", icon="TRASH")
+
+            scope_box = layout.box()
+            scope_box.label(text="Apply Scope", icon="FILTER")
+            scope_toggles = scope_box.row(align=True)
+            scope_toggles.prop(state, "apply_scope_objects", text="Objects", toggle=True)
+            scope_toggles.prop(state, "apply_scope_materials", text="Materials", toggle=True)
+            scope_toggles.prop(state, "apply_scope_collections", text="Collections", toggle=True)
+            scope_presets = scope_box.row(align=True)
+            op = scope_presets.operator("lime_tb.ai_asset_scope_preset", text="All")
+            op.preset = "ALL"
+            op = scope_presets.operator("lime_tb.ai_asset_scope_preset", text="Only Objects")
+            op.preset = "OBJECTS"
+            op = scope_presets.operator("lime_tb.ai_asset_scope_preset", text="Only Materials")
+            op.preset = "MATERIALS"
+            op = scope_presets.operator("lime_tb.ai_asset_scope_preset", text="Only Collections")
+            op.preset = "COLLECTIONS"
 
             apply_row = layout.row()
             apply_row.enabled = bool(getattr(state, "items", None)) and not getattr(state, "is_busy", False)
@@ -140,10 +183,19 @@ class LIME_TB_PT_ai_asset_organizer(Panel):
                 preview_box.label(
                     text=(
                         f"Will create {getattr(state, 'planned_collections_created', 0)} collections, "
-                        f"move {getattr(state, 'planned_objects_moved', 0)} objects"
+                        f"move {getattr(state, 'planned_objects_moved', 0)} objects, "
+                        f"skip {getattr(state, 'planned_objects_skipped_ambiguous', 0)} ambiguous"
                     ),
                     icon="OUTLINER_COLLECTION",
                 )
+                ambiguous_count = int(getattr(state, "planned_ambiguities_objects", 0) or 0)
+                if ambiguous_count > 0:
+                    amb_box = layout.box()
+                    amb_box.alert = True
+                    amb_box.label(
+                        text=f"{ambiguous_count} object(s) require target confirmation",
+                        icon="ERROR",
+                    )
                 layout.separator()
                 layout.template_list(
                     "LIME_TB_UL_ai_asset_items",

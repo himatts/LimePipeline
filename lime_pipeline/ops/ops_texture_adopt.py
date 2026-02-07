@@ -35,6 +35,7 @@ from ..core.texture_paths import classify_path, is_subpath
 from .ai_http import (
     OPENROUTER_CHAT_URL,
     extract_message_content,
+    has_openrouter_api_key,
     http_post_json,
     openrouter_headers,
 )
@@ -362,9 +363,8 @@ class LIME_OT_texture_adopt(Operator):
         image_preview_data_url: str | None,
         want_image_summary: bool,
     ) -> tuple[str, str | None, str | None, str | None]:
-        key = (getattr(prefs, "openrouter_api_key", "") or "").strip()
-        if not key:
-            return "", None, None, "OpenRouter API key not set"
+        if not has_openrouter_api_key():
+            return "", None, None, "OpenRouter API key not found in .env"
 
         model = (getattr(prefs, "openrouter_model", "") or "").strip()
         if not model:

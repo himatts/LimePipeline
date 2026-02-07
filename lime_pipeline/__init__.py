@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 6, 3),  # Simple camera creation in Cameras panel
+    "version": (0, 6, 5),  # API keys now loaded from local .env (OpenRouter/Krea)
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -91,6 +91,9 @@ from .ops.ops_ai_material_renamer import (
 from .ops.ops_ai_asset_organizer import (
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
+    LIME_TB_OT_ai_asset_scope_preset,
+    LIME_TB_OT_ai_asset_refresh_targets,
+    LIME_TB_OT_ai_asset_resolve_target,
     LIME_TB_OT_ai_asset_clear,
 )
 from .ops.ops_ai_render_converter import (
@@ -336,6 +339,9 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_open_ai_material_manager,
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
+    LIME_TB_OT_ai_asset_scope_preset,
+    LIME_TB_OT_ai_asset_refresh_targets,
+    LIME_TB_OT_ai_asset_resolve_target,
     LIME_TB_OT_ai_asset_clear,
     LIME_TB_UL_ai_asset_items,
     LIME_TB_UL_ai_mat_rows,

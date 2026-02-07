@@ -24,3 +24,8 @@ Thumbs.db
 
 # Documentation build output
 site/
+
+# Local secrets
+.env
+.env.*
+!.env.example

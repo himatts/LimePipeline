@@ -14,6 +14,13 @@ import urllib.error
 
 from typing import TYPE_CHECKING, Any
 
+from ..core.env_config import (
+    get_krea_api_key,
+    get_openrouter_api_key,
+    has_krea_api_key as _has_krea_api_key,
+    has_openrouter_api_key as _has_openrouter_api_key,
+)
+
 if TYPE_CHECKING:
     from ..prefs import LimePipelinePrefs
 
@@ -29,8 +36,16 @@ OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 
+def has_openrouter_api_key() -> bool:
+    return _has_openrouter_api_key()
+
+
+def has_krea_api_key() -> bool:
+    return _has_krea_api_key()
+
+
 def openrouter_headers(prefs: "LimePipelinePrefs | Any") -> Dict[str, str]:
-    key = (getattr(prefs, "openrouter_api_key", "") or "").strip()
+    key = get_openrouter_api_key()
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -55,7 +70,7 @@ def openrouter_headers(prefs: "LimePipelinePrefs | Any") -> Dict[str, str]:
 
 
 def krea_headers(prefs: "LimePipelinePrefs | Any", *, content_type: Optional[str] = "application/json") -> Dict[str, str]:
-    key = (getattr(prefs, "krea_api_key", "") or "").strip()
+    key = get_krea_api_key()
     headers = {
         "Accept": "application/json",
     }

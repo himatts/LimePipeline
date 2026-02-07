@@ -55,8 +55,8 @@ MiProyecto_Tmp_Rev_C.blend
 ## Nombres de materiales
 
 ### Sistema MAT
-- Formato: `MAT_{SceneTag?}_{MaterialType}_{Finish}_{V##}`
-- `SceneTag` es opcional.
+- Formato: `MAT_{Tag?}_{MaterialType}_{Finish}_{V##}`
+- `Tag` es opcional (por ejemplo, etiqueta de asset/contexto).
 - `MaterialType` permitido:
   `Plastic, Metal, Glass, Rubber, Silicone, Background, Paint, Wood, Fabric, Ceramic, Emissive, Stone, Concrete, Paper, Leather, Liquid, Organic, Tissue, Tooth, Text`
 - `Finish` es alfanumerico CamelCase (sin espacios ni caracteres especiales).
@@ -190,7 +190,7 @@ SC015 - Closing
 - Proyecto sin formato valido: usar `XX-##### Nombre`.
 - SC no multiplo: revisar `scene_step` o activar `free_scene_numbering`.
 - Revision invalida: una sola letra `A-Z`.
-- Material mal formado: `MAT_{SceneTag?}_{MaterialType}_{Finish}_{V##}`.
+- Material mal formado: `MAT_{Tag?}_{MaterialType}_{Finish}_{V##}`.
 - ProjectName distinto a la carpeta: es normal por la normalizacion.
 
 ### Validacion manual

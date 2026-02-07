@@ -7,15 +7,64 @@ This module is intentionally UI-agnostic; panels and operators consume the state
 from __future__ import annotations
 
 import bpy
+from importlib import import_module
 from bpy.types import PropertyGroup
 from bpy.props import (
     BoolProperty,
     CollectionProperty,
     EnumProperty,
+    FloatProperty,
     IntProperty,
     PointerProperty,
     StringProperty,
 )
+
+
+def _refresh_preview(scene) -> None:
+    try:
+        ops_module = import_module("lime_pipeline.ops.ops_ai_asset_organizer")
+    except Exception:
+        return
+    if getattr(ops_module, "_AI_ASSET_PREVIEW_SUSPENDED", False):
+        return
+    try:
+        ops_module.refresh_ai_asset_preview(scene)
+    except Exception:
+        pass
+
+
+def _selected_for_apply_update(self, context) -> None:
+    scene = getattr(context, "scene", None) if context else None
+    if scene is None:
+        try:
+            scene = bpy.context.scene  # type: ignore[attr-defined]
+        except Exception:
+            scene = None
+    if scene is None:
+        return
+    _refresh_preview(scene)
+
+
+def _scope_update(self, context) -> None:
+    scene = getattr(context, "scene", None) if context else None
+    if scene is None:
+        try:
+            scene = bpy.context.scene  # type: ignore[attr-defined]
+        except Exception:
+            scene = None
+    if scene is None:
+        return
+    try:
+        ops_module = import_module("lime_pipeline.ops.ops_ai_asset_organizer")
+    except Exception:
+        _refresh_preview(scene)
+        return
+    if getattr(ops_module, "_AI_ASSET_PREVIEW_SUSPENDED", False):
+        return
+    try:
+        ops_module.sync_ai_asset_row_selection(scene)
+    except Exception:
+        _refresh_preview(scene)
 
 
 class LimeAIAssetItem(PropertyGroup):
@@ -31,11 +80,26 @@ class LimeAIAssetItem(PropertyGroup):
     object_ref: PointerProperty(type=bpy.types.Object)
     material_ref: PointerProperty(type=bpy.types.Material)
     collection_ref: PointerProperty(type=bpy.types.Collection)
+    item_id: StringProperty(name="Item ID", default="")
     original_name: StringProperty(name="Original", default="")
     suggested_name: StringProperty(name="Suggested", default="")
-    selected_for_apply: BoolProperty(name="Apply", default=True)
+    selected_for_apply: BoolProperty(name="Apply", default=True, update=_selected_for_apply_update)
     read_only: BoolProperty(name="Read Only", default=False)
     status: StringProperty(name="Status", default="")
+    target_collection_path: StringProperty(name="Target Collection Path", default="")
+    target_status: EnumProperty(
+        name="Target Status",
+        items=[
+            ("NONE", "None", "No target destination"),
+            ("AUTO", "Auto", "Destination selected automatically"),
+            ("AMBIGUOUS", "Ambiguous", "Multiple valid destinations"),
+            ("CONFIRMED", "Confirmed", "Destination manually confirmed"),
+            ("SKIPPED", "Skipped", "Destination skipped"),
+        ],
+        default="NONE",
+    )
+    target_confidence: FloatProperty(name="Target Confidence", default=0.0, min=0.0, max=1.0)
+    target_candidates_json: StringProperty(name="Target Candidates", default="")
 
 
 class LimeAIAssetState(PropertyGroup):
@@ -68,6 +132,24 @@ class LimeAIAssetState(PropertyGroup):
         description="Move selected objects to safer category/group collections after applying names",
         default=False,
     )
+    apply_scope_objects: BoolProperty(
+        name="Apply Objects",
+        description="Include object rename and organization operations in Apply",
+        default=True,
+        update=_scope_update,
+    )
+    apply_scope_materials: BoolProperty(
+        name="Apply Materials",
+        description="Include material rename operations in Apply",
+        default=True,
+        update=_scope_update,
+    )
+    apply_scope_collections: BoolProperty(
+        name="Apply Collections",
+        description="Include collection rename operations in Apply",
+        default=True,
+        update=_scope_update,
+    )
     preview_summary: StringProperty(name="Preview", default="")
     preview_dirty: BoolProperty(name="Preview Dirty", default=False)
     planned_renames_objects: IntProperty(name="Planned Object Renames", default=0)
@@ -75,6 +157,9 @@ class LimeAIAssetState(PropertyGroup):
     planned_renames_collections: IntProperty(name="Planned Collection Renames", default=0)
     planned_collections_created: IntProperty(name="Planned Collections Created", default=0)
     planned_objects_moved: IntProperty(name="Planned Objects Moved", default=0)
+    planned_ambiguities_objects: IntProperty(name="Planned Ambiguous Objects", default=0)
+    planned_objects_skipped_ambiguous: IntProperty(name="Planned Skipped Ambiguous Objects", default=0)
+    last_used_collection_path: StringProperty(name="Last Used Collection Path", default="")
     is_busy: BoolProperty(name="Busy", default=False)
     last_error: StringProperty(name="Last Error", default="")
 

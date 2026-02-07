@@ -27,6 +27,7 @@ from bpy.types import AddonPreferences
 from bpy.props import StringProperty, IntProperty, BoolProperty, CollectionProperty
 
 from .props import LimeRenderPresetSlot
+from .core.env_config import env_file_path, has_krea_api_key, has_openrouter_api_key
 
 
 ADDON_PKG = __package__
@@ -84,12 +85,6 @@ class LimePipelinePrefs(AddonPreferences):
         default=False,
     )
     # --- OpenRouter (AI features) ---
-    openrouter_api_key: StringProperty(
-        name="OpenRouter API Key",
-        subtype='PASSWORD',
-        default="",
-        description="API key for OpenRouter (used by Lime AI tools)",
-    )
     openrouter_model: StringProperty(
         name="OpenRouter Model",
         default="google/gemini-2.0-flash-lite-001",
@@ -111,12 +106,6 @@ class LimePipelinePrefs(AddonPreferences):
         description="Optional X-Title header for OpenRouter attribution",
     )
     # --- AI Render Converter (Krea) ---
-    krea_api_key: StringProperty(
-        name="Krea API Key",
-        subtype="PASSWORD",
-        default="",
-        description="API key for Krea (used by AI Render Converter)",
-    )
     krea_base_url: StringProperty(
         name="Krea Base URL",
         default="https://api.krea.ai",
@@ -154,7 +143,11 @@ class LimePipelinePrefs(AddonPreferences):
         col.separator()
         box = col.box()
         box.label(text="OpenRouter (AI Tools)")
-        box.prop(self, "openrouter_api_key")
+        box.label(text=f"API key source: {env_file_path().as_posix()}", icon="FILE_SCRIPT")
+        box.label(
+            text="OpenRouter key loaded" if has_openrouter_api_key() else "OpenRouter key missing in .env",
+            icon="CHECKMARK" if has_openrouter_api_key() else "ERROR",
+        )
         box.prop(self, "openrouter_model")
         box.prop(self, "openrouter_debug")
         row = box.row()
@@ -165,7 +158,10 @@ class LimePipelinePrefs(AddonPreferences):
 
         krea_box = col.box()
         krea_box.label(text="AI Render Converter (Krea)")
-        krea_box.prop(self, "krea_api_key")
+        krea_box.label(
+            text="Krea key loaded" if has_krea_api_key() else "Krea key missing in .env",
+            icon="CHECKMARK" if has_krea_api_key() else "ERROR",
+        )
         krea_box.prop(self, "krea_base_url")
         krea_box.prop(self, "krea_model")
         krea_box.prop(self, "krea_debug")

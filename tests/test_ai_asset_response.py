@@ -49,6 +49,19 @@ class AIAssetResponseTests(unittest.TestCase):
         items = parse_items_from_response(payload)
         self.assertEqual(len(items or []), 3)
 
+    def test_parse_items_with_optional_target_hint(self):
+        payload = {
+            "items": [
+                {
+                    "id": "obj_0",
+                    "name": "Background",
+                    "target_collection_hint": "SHOT 01/SH01_Background/Background",
+                }
+            ]
+        }
+        items = parse_items_from_response(payload)
+        self.assertEqual(items, payload["items"])
+
     def test_parse_reject_invalid_payload(self):
         self.assertIsNone(parse_items_from_response(None))
         self.assertIsNone(parse_items_from_response({"message": "no items"}))
@@ -56,4 +69,3 @@ class AIAssetResponseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

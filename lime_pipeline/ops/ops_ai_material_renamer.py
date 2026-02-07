@@ -38,9 +38,12 @@ from .ai_http import (
     OPENROUTER_CHAT_URL,
     OPENROUTER_MODELS_URL,
     extract_message_content,
+    has_openrouter_api_key,
     openrouter_headers,
     http_get_json,
+    http_get_json_with_status,
     http_post_json,
+    http_post_json_with_status,
     parse_json_from_text,
 )
 from ..core.material_naming import (
@@ -984,13 +987,16 @@ class LIME_TB_OT_ai_test_connection(Operator):
 
     def execute(self, context):
         prefs: LimePipelinePrefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences  # type: ignore
-        if not prefs.openrouter_api_key:
-            self.report({'ERROR'}, "OpenRouter API key not set in Preferences")
+        if not has_openrouter_api_key():
+            self.report({'ERROR'}, "OpenRouter API key not found in .env")
             return {'CANCELLED'}
         headers = openrouter_headers(prefs)
-        data = http_get_json(OPENROUTER_MODELS_URL, headers=headers, timeout=15)
+        models_resp = http_get_json_with_status(OPENROUTER_MODELS_URL, headers=headers, timeout=15)
+        data = models_resp.data if models_resp else None
         if not data or not isinstance(data, dict):
-            self.report({'ERROR'}, "OpenRouter: request failed")
+            detail = (models_resp.error or "No response body") if models_resp else "No response"
+            status = models_resp.status if models_resp else None
+            self.report({'ERROR'}, f"OpenRouter models check failed (status={status}): {detail[:220]}")
             return {'CANCELLED'}
         models = [m.get('id') for m in data.get('data', []) if isinstance(m, dict)] if 'data' in data else []
         slug = prefs.openrouter_model or "google/gemini-2.5-flash-lite-preview-09-2025"
@@ -1000,15 +1006,45 @@ class LIME_TB_OT_ai_test_connection(Operator):
             payload = {
                 "model": slug,
                 "messages": [
-                    {"role": "system", "content": "You are a test endpoint validator."},
-                    {"role": "user", "content": json.dumps({"ping": True})},
+                    {"role": "system", "content": "You are a test endpoint validator. Return valid JSON only."},
+                    {"role": "user", "content": "Reply with a JSON object: {\"ping\": true}"},
                 ],
                 "temperature": 0,
+                "max_tokens": 128,
                 "response_format": _schema_json_object(),
             }
-            r = http_post_json(OPENROUTER_CHAT_URL, payload, headers=headers, timeout=20)
-            ok = bool(extract_message_content(r or {}))
-            self.report({'INFO'}, f"Chat endpoint: {'OK' if ok else 'UNKNOWN'}")
+            chat_resp = http_post_json_with_status(OPENROUTER_CHAT_URL, payload, headers=headers, timeout=20)
+            r = chat_resp.data if chat_resp else None
+            content = extract_message_content(r or {})
+            status = chat_resp.status if chat_resp else None
+            finish_reason = ""
+            try:
+                choices = (r or {}).get("choices") or []
+                if choices and isinstance(choices[0], dict):
+                    finish_reason = str(choices[0].get("finish_reason") or "")
+            except Exception:
+                finish_reason = ""
+
+            # Consider endpoint healthy if HTTP is OK and provider returned choices,
+            # even when output is truncated (finish_reason=length) in this minimal test.
+            has_choices = bool(isinstance(r, dict) and isinstance((r or {}).get("choices"), list) and (r or {}).get("choices"))
+            ok = bool(content) or (status == 200 and has_choices)
+            if ok:
+                if finish_reason.lower() == "length":
+                    self.report({'INFO'}, "Chat endpoint: OK (truncated test response)")
+                else:
+                    self.report({'INFO'}, "Chat endpoint: OK")
+            else:
+                if chat_resp and chat_resp.error:
+                    detail = chat_resp.error
+                elif r:
+                    try:
+                        detail = json.dumps(r, ensure_ascii=True)[:220]
+                    except Exception:
+                        detail = "Empty/unsupported chat response content"
+                else:
+                    detail = "No response body"
+                self.report({'WARNING'}, f"Chat endpoint: FAILED (status={status}) - {detail}")
             return {'FINISHED'}
         # If listing succeeded but slug not found, still confirm connectivity
         self.report({'WARNING'}, f"OpenRouter reachable. Model not found in provider list: {slug}")
@@ -1122,7 +1158,7 @@ class LIME_TB_OT_ai_rename_single(Operator):
         }
         result = None
         used_ai = False
-        if (getattr(prefs, 'openrouter_api_key', '') or '').strip():
+        if has_openrouter_api_key():
             result = http_post_json(OPENROUTER_CHAT_URL, payload, headers=openrouter_headers(prefs), timeout=60)
 
         item = None
@@ -1139,7 +1175,7 @@ class LIME_TB_OT_ai_rename_single(Operator):
             item = None
 
         # Fallback attempt: request json_object and parse message text
-        if not item and (getattr(prefs, 'openrouter_api_key', '') or '').strip():
+        if not item and has_openrouter_api_key():
             payload_fallback = dict(payload)
             payload_fallback["response_format"] = _schema_json_object()
             result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=openrouter_headers(prefs), timeout=60)
@@ -1469,7 +1505,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
 
         result = None
         used_ai = False
-        if (getattr(prefs, 'openrouter_api_key', '') or '').strip():
+        if has_openrouter_api_key():
             result = http_post_json(OPENROUTER_CHAT_URL, payload, headers=openrouter_headers(prefs), timeout=120)
 
         items: List[Dict[str, object]] = []
@@ -1528,7 +1564,7 @@ class LIME_TB_OT_ai_scan_materials(Operator):
             items = []
 
         # Fallback attempt: json_object + parse text
-        if not items and (getattr(prefs, 'openrouter_api_key', '') or '').strip():
+        if not items and has_openrouter_api_key():
             payload_fallback = dict(payload)
             payload_fallback["response_format"] = _schema_json_object()
             result2 = http_post_json(OPENROUTER_CHAT_URL, payload_fallback, headers=openrouter_headers(prefs), timeout=120)

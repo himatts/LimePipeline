@@ -39,6 +39,9 @@ from .ops_comp_view_layer_outputs import (
 from .ops_ai_asset_organizer import (
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,
+    LIME_TB_OT_ai_asset_scope_preset,
+    LIME_TB_OT_ai_asset_refresh_targets,
+    LIME_TB_OT_ai_asset_resolve_target,
     LIME_TB_OT_ai_asset_clear,
 )
 from .ops_texture_scan import (
@@ -61,6 +64,9 @@ __all__ = [
     "LIME_OT_setup_view_layer_outputs",
     "LIME_TB_OT_ai_asset_suggest_names",
     "LIME_TB_OT_ai_asset_apply_names",
+    "LIME_TB_OT_ai_asset_scope_preset",
+    "LIME_TB_OT_ai_asset_refresh_targets",
+    "LIME_TB_OT_ai_asset_resolve_target",
     "LIME_TB_OT_ai_asset_clear",
     "LIME_OT_texture_scan_report",
     "LIME_OT_texture_adopt",

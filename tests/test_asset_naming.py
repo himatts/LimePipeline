@@ -39,6 +39,7 @@ normalize_collection_name = asset_naming.normalize_collection_name
 is_valid_collection_name = asset_naming.is_valid_collection_name
 ensure_unique_collection_name = asset_naming.ensure_unique_collection_name
 asset_group_key_from_name = asset_naming.asset_group_key_from_name
+build_material_name_with_tag = asset_naming.build_material_name_with_tag
 build_material_name_with_scene_tag = asset_naming.build_material_name_with_scene_tag
 bump_material_version_until_unique = asset_naming.bump_material_version_until_unique
 
@@ -81,6 +82,12 @@ class AssetNamingTests(unittest.TestCase):
         self.assertTrue(name.startswith("MAT_Wheelchair_Metal_Glossy_V"))
         bumped = bump_material_version_until_unique({name}, name)
         self.assertNotEqual(bumped, name)
+
+    def test_material_name_build_with_tag_alias(self):
+        direct = build_material_name_with_tag("Iphone", "Glass", "Clear", 3)
+        legacy = build_material_name_with_scene_tag("Iphone", "Glass", "Clear", 3)
+        self.assertEqual(direct, legacy)
+        self.assertEqual(direct, "MAT_Iphone_Glass_Clear_V03")
 
 
 if __name__ == "__main__":

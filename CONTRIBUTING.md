@@ -20,7 +20,7 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Blender minimum version: 4.5.0
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
-- AI Asset Organizer v2: object/material/collection naming, preview counters, optional collection organization
+- AI Asset Organizer v2: object/material/collection naming, hierarchy-aware target resolution, ambiguity handling, preview counters, apply-scope filters, and optional collection organization
 - AI Asset Organizer v2 object/collection format: PascalCase segments separated by underscores (numeric suffix as `_NN`)
 - Texture Scan/Adopt tools live in AI Asset Organizer (Lime Toolbox)
 - AI Render Converter UI includes thumbnail grids per section, large previews, cleanup tools, and output access
@@ -88,9 +88,12 @@ The repo may contain a small number of unit tests for `core/` logic. Run them on
 
 ## AI Asset Organizer smoke checklist
 - Select objects with materials and run **Suggest Names (AI)**; verify editable rows and read-only handling.
-- In SHOT-structured scenes, verify SHOT collections are not renamed/reorganized by the organizer.
+- In SHOT-structured scenes, verify target resolution prioritizes the current SHOT branch and shows full destination paths.
+- Validate ambiguous destination handling: unresolved rows must show candidate paths and require confirmation (or be skipped on apply).
+- Use **Apply Scope** presets/toggles (All / Only Objects / Only Materials / Only Collections) and verify only enabled types are applied.
 - Apply selected rows and verify uniqueness handling for objects/materials/collections.
-- Enable **Organize Collections on Apply** and verify only generic/root memberships are moved.
+- Enable **Organize Collections on Apply** and verify deep destination paths are created when missing.
+- Verify apply is partial-safe: ambiguous objects are skipped while unambiguous operations still execute.
 - Run **Scan / Report** and **Adopt / Fix** from the Textures block and verify manifests are written under `rsc/Textures/_manifests`.
 
 ## Commit style
@@ -103,6 +106,7 @@ The repo may contain a small number of unit tests for `core/` logic. Run them on
 ## Security and paths
 - Enforce path length limits (warn/block) from preferences
 - Never write outside computed target directories
+- Keep API keys only in local `.env` (never in tracked files or Blender preferences)
 
 ## How to search before adding
 - Check if helpers already exist in `core/naming.py`, `core/paths.py`, `core/validate.py`, `scene/scene_utils.py`, `data/templates.py`

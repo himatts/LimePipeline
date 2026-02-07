@@ -14,6 +14,14 @@ This module provides small, Blender-agnostic helpers used by tools that rename
 scene assets (objects/materials). It intentionally avoids `bpy` imports so it
 can be unit-tested outside Blender.
 
+## lime_pipeline/core/collection_resolver.py
+
+Deterministic collection destination resolver for AI Asset Organizer.
+
+Ranks full collection paths using name/path token overlap, SHOT context,
+current memberships, and optional destination hints. Returns either AUTO
+or AMBIGUOUS status with top scored candidates.
+
 ## lime_pipeline/core/material_naming.py
 
 Material naming utilities for Lime Pipeline.

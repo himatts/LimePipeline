@@ -5,7 +5,8 @@
 AI Asset Organizer properties and state.
 
 Stores AI-generated rename proposals for selected objects, materials and collections, including optional image context.
-Also stores preview counters and opt-in automation toggles:
+Also stores destination-resolution metadata for object rows (`target_collection_path`, `target_status`, candidate payload),
+preview counters, apply-scope filters, and opt-in automation toggles:
 - include collections in AI suggestions
 - organize collections on apply
 This module is intentionally UI-agnostic; panels and operators consume the state.
