@@ -14,29 +14,24 @@ from typing import Optional
 import bpy
 from bpy.types import Operator
 
-from ..core.naming import find_project_root
-from ..core.paths import get_ramv_dir
+from ..core.texture_workspace import deduce_texture_project_workspace, resolve_texture_root
 
 
-def _deduce_project_root(context) -> Optional[Path]:
+def _state_local_mode(context) -> bool:
     st = getattr(getattr(context, "window_manager", None), "lime_pipeline", None)
-    raw = (getattr(st, "project_root", "") or "").strip() if st is not None else ""
-    if raw:
-        try:
-            p = Path(raw)
-            if p.exists():
-                return p.resolve()
-        except Exception:
-            pass
+    return bool(getattr(st, "use_local_project", False)) if st is not None else False
 
+
+def _deduce_project_root(context) -> tuple[Optional[Path], bool]:
+    st = getattr(getattr(context, "window_manager", None), "lime_pipeline", None)
+    raw_root = (getattr(st, "project_root", "") or "").strip() if st is not None else ""
     blend_path = (getattr(bpy.data, "filepath", "") or "").strip()
-    if blend_path:
-        try:
-            root = find_project_root(blend_path)
-            return root.resolve() if root is not None else None
-        except Exception:
-            return None
-    return None
+    root, local_mode = deduce_texture_project_workspace(
+        state_project_root=raw_root,
+        use_local_project=_state_local_mode(context),
+        blend_path=blend_path,
+    )
+    return root, local_mode
 
 
 def _blend_dir() -> Path:
@@ -52,13 +47,8 @@ def _blend_dir() -> Path:
         return Path.cwd()
 
 
-def _resolve_texture_root(project_root: Optional[Path]) -> Path:
-    if project_root is not None:
-        try:
-            return get_ramv_dir(project_root) / "rsc" / "Textures"
-        except Exception:
-            pass
-    return _blend_dir() / "rsc" / "Textures"
+def _resolve_texture_root(project_root: Optional[Path], *, local_mode: bool) -> Path:
+    return resolve_texture_root(project_root, local_mode=local_mode, blend_dir=_blend_dir())
 
 
 class LIME_OT_texture_manifest_cleanup(Operator):
@@ -68,8 +58,8 @@ class LIME_OT_texture_manifest_cleanup(Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context):
-        project_root = _deduce_project_root(context)
-        texture_root = _resolve_texture_root(project_root)
+        project_root, local_mode = _deduce_project_root(context)
+        texture_root = _resolve_texture_root(project_root, local_mode=local_mode)
         manifest_dir = texture_root / "_manifests"
 
         if not manifest_dir.exists():

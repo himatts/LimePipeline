@@ -59,6 +59,12 @@ from .ops_texture_adopt import (
 from .ops_texture_manifest_cleanup import (
     LIME_OT_texture_manifest_cleanup,
 )
+from .ops_ai_textures_organizer import (
+    LIME_OT_texture_analyze,
+    LIME_OT_texture_refine,
+    LIME_OT_texture_apply,
+    LIME_OT_texture_clear_session,
+)
 
 __all__ = [
     "LIME_OT_new_shot",
@@ -83,6 +89,10 @@ __all__ = [
     "LIME_OT_texture_scan_report",
     "LIME_OT_texture_adopt",
     "LIME_OT_texture_manifest_cleanup",
+    "LIME_OT_texture_analyze",
+    "LIME_OT_texture_refine",
+    "LIME_OT_texture_apply",
+    "LIME_OT_texture_clear_session",
 ]
 
 

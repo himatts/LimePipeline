@@ -277,13 +277,17 @@ def build_collection_reorg_plan(scene, state, snapshot: Dict[str, object]) -> Di
         if target_status not in {"AUTO", "CONFIRMED"} or not target_path:
             continue
 
-        users_collection = list(getattr(obj, "users_collection", []) or [])
-        source_generic = [c for c in users_collection if _is_generic_collection(c, scene)]
         path_to_collection = snapshot.get("path_to_collection", {}) if isinstance(snapshot, dict) else {}
         target_coll = path_to_collection.get(target_path) if isinstance(path_to_collection, dict) else None
+        users_collection = list(getattr(obj, "users_collection", []) or [])
+        source_other_editable = [
+            c
+            for c in users_collection
+            if c is not None and c != target_coll and not is_collection_read_only(c)
+        ]
         already_linked = bool(target_coll is not None and obj in list(getattr(target_coll, "objects", []) or []))
 
-        if already_linked and not source_generic:
+        if already_linked and not source_other_editable:
             continue
 
         move_ops.append({"row": row, "object": obj, "target_path": target_path})
@@ -298,6 +302,7 @@ def build_unified_plan(scene, state) -> Dict[str, object]:
     snapshot = build_scene_collection_snapshot(scene)
     rename_plan = build_rename_plan(state)
     reorg_plan = build_collection_reorg_plan(scene, state, snapshot)
+    reorg_plan["collection_ops"] = list(rename_plan.get("collection_ops", []) or [])
     return {
         "snapshot": snapshot,
         "rename_plan": rename_plan,
@@ -428,6 +433,43 @@ def apply_collection_reorganization(scene, reorg_plan: Dict[str, object], report
     path_to_collection = snapshot.get("path_to_collection", {}) if isinstance(snapshot, dict) else {}
     if not isinstance(path_to_collection, dict):
         path_to_collection = {}
+    collection_ptr_to_paths = snapshot.get("collection_ptr_to_paths", {}) if isinstance(snapshot, dict) else {}
+    if not isinstance(collection_ptr_to_paths, dict):
+        collection_ptr_to_paths = {}
+
+    # Add aliases for collections that will be renamed in the same Apply run.
+    # This prevents creating duplicate collections when a target path points to
+    # a name that already exists as a pending rename.
+    collection_ops = list(reorg_plan.get("collection_ops", []) or [])
+    if collection_ops:
+        base_entries = list(path_to_collection.items())
+        for op in collection_ops:
+            if not isinstance(op, tuple) or len(op) != 2:
+                continue
+            coll, new_name = op
+            if coll is None:
+                continue
+            desired_name = normalize_collection_name(str(new_name or ""))
+            if not desired_name:
+                continue
+            old_paths = list(collection_ptr_to_paths.get(coll.as_pointer(), []) or [])
+            for old_path in old_paths:
+                if not old_path:
+                    continue
+                parent_path = old_path.rsplit("/", 1)[0] if "/" in old_path else ""
+                new_prefix = f"{parent_path}/{desired_name}" if parent_path else desired_name
+                if new_prefix not in path_to_collection:
+                    path_to_collection[new_prefix] = coll
+                old_prefix = f"{old_path}/"
+                for existing_path, existing_coll in base_entries:
+                    if not existing_path.startswith(old_prefix):
+                        continue
+                    suffix = existing_path[len(old_prefix):]
+                    if not suffix:
+                        continue
+                    aliased_path = f"{new_prefix}/{suffix}"
+                    if aliased_path not in path_to_collection:
+                        path_to_collection[aliased_path] = existing_coll
 
     for row in list(reorg_plan.get("ambiguous_rows", []) or []):
         name = (getattr(row, "original_name", "") or "").strip() or "<unnamed>"
@@ -469,7 +511,7 @@ def apply_collection_reorganization(scene, reorg_plan: Dict[str, object], report
         for source in list(getattr(obj, "users_collection", []) or []):
             if source == target:
                 continue
-            if not _is_generic_collection(source, scene):
+            if is_collection_read_only(source):
                 continue
             try:
                 source.objects.unlink(obj)

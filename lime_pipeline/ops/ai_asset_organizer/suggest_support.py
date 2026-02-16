@@ -5,17 +5,20 @@ from __future__ import annotations
 import base64
 import os
 import re
+import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import bpy
 from bpy.types import Collection, Material, Object
 
 from ...core.ai_asset_material_rules import (
+    context_requests_material_tag as core_context_requests_material_tag,
     extract_context_material_tag_directive as core_extract_context_material_tag_directive,
     fold_text_for_match as core_fold_text_for_match,
     force_material_name_tag as core_force_material_name_tag,
     material_status_from_trace as core_material_status_from_trace,
     normalize_material_name_for_organizer as core_normalize_material_name_for_organizer,
+    normalize_tag_token as core_normalize_tag_token,
 )
 from ...core.ai_asset_prompt import build_prompt as core_build_prompt
 from ...core.collection_resolver import tokenize as tokenize_name
@@ -136,6 +139,61 @@ def _image_mime_for_path(path: str) -> Optional[str]:
     return None
 
 
+def _to_data_url(raw: bytes, mime: str) -> str:
+    encoded = base64.b64encode(raw).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def _optimize_large_image_data_url(path: str, *, max_bytes: int) -> Tuple[Optional[str], Optional[str]]:
+    """Downscale and re-encode oversized images for context upload."""
+    try:
+        src = bpy.data.images.load(path, check_existing=True)
+    except Exception as ex:
+        return None, f"Failed loading image for optimization: {ex}"
+
+    try:
+        width = int(getattr(src, "size", [0, 0])[0] or 0)
+        height = int(getattr(src, "size", [0, 0])[1] or 0)
+    except Exception:
+        width, height = 0, 0
+    if width <= 0 or height <= 0:
+        return None, "Image dimensions are unavailable for optimization"
+
+    max_dims = [1024, 896, 768, 640, 512, 384, 256]
+    with tempfile.TemporaryDirectory(prefix="lime_ai_ctx_") as td:
+        for max_dim in max_dims:
+            candidate = None
+            try:
+                candidate = src.copy()
+                scale = max(float(width) / float(max_dim), float(height) / float(max_dim), 1.0)
+                new_w = max(1, int(round(float(width) / scale)))
+                new_h = max(1, int(round(float(height) / scale)))
+                candidate.scale(new_w, new_h)
+
+                out_path = os.path.join(td, f"context_{new_w}x{new_h}.jpg")
+                candidate.filepath_raw = out_path
+                try:
+                    candidate.file_format = "JPEG"  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                candidate.save()
+
+                with open(out_path, "rb") as fh:
+                    optimized = fh.read()
+                if optimized and len(optimized) <= int(max_bytes):
+                    return _to_data_url(optimized, "image/jpeg"), None
+            except Exception:
+                continue
+            finally:
+                if candidate is not None:
+                    try:
+                        bpy.data.images.remove(candidate)
+                    except Exception:
+                        pass
+
+    return None, "Image remains above limit after downscale optimization"
+
+
 def load_image_data_url(path: str) -> Tuple[Optional[str], Optional[str]]:
     if not path:
         return None, None
@@ -147,7 +205,11 @@ def load_image_data_url(path: str) -> Tuple[Optional[str], Optional[str]]:
         if size <= 0:
             return None, "Image file is empty"
         if size > _MAX_IMAGE_BYTES:
-            return None, f"Image too large ({size} bytes). Max {_MAX_IMAGE_BYTES} bytes."
+            optimized_url, optimize_err = _optimize_large_image_data_url(path, max_bytes=_MAX_IMAGE_BYTES)
+            if optimized_url:
+                return optimized_url, None
+            detail = f" ({optimize_err})" if optimize_err else ""
+            return None, f"Image too large ({size} bytes). Max {_MAX_IMAGE_BYTES} bytes{detail}."
     except Exception as ex:
         return None, f"Cannot read image size: {ex}"
     try:
@@ -155,8 +217,7 @@ def load_image_data_url(path: str) -> Tuple[Optional[str], Optional[str]]:
             raw = fh.read()
         if not raw:
             return None, "Image file is empty"
-        encoded = base64.b64encode(raw).decode("ascii")
-        return f"data:{mime};base64,{encoded}", None
+        return _to_data_url(raw, mime), None
     except Exception as ex:
         return None, f"Failed to read image: {ex}"
 
@@ -350,6 +411,14 @@ def extract_context_material_tag_directive(context_text: str) -> Tuple[str, str]
     return core_extract_context_material_tag_directive(context_text)
 
 
+def context_requests_material_tag(context_text: str) -> bool:
+    return core_context_requests_material_tag(context_text)
+
+
+def normalize_tag_token(raw: str) -> str:
+    return core_normalize_tag_token(raw)
+
+
 def force_material_name_tag(name: str, forced_tag: str) -> str:
     return core_force_material_name_tag(name, forced_tag)
 
@@ -375,6 +444,7 @@ __all__ = [
     "collect_selection",
     "empty_role_hint",
     "extract_context_material_tag_directive",
+    "context_requests_material_tag",
     "fold_text_for_match",
     "force_material_name_tag",
     "infer_hierarchy_role",
@@ -384,6 +454,7 @@ __all__ = [
     "load_image_data_url",
     "material_status_from_trace",
     "normalize_material_name_for_organizer",
+    "normalize_tag_token",
     "object_collection_paths",
     "object_hierarchy_depth",
     "object_root_name",
@@ -391,4 +462,3 @@ __all__ = [
     "resolve_object_targets_for_state",
     "tokenize_name",
 ]
-

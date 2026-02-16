@@ -32,6 +32,7 @@ from .suggest_support import (
     build_scene_collection_snapshot,
     build_scene_summary,
     collect_selection,
+    context_requests_material_tag,
     empty_role_hint,
     extract_context_material_tag_directive,
     fold_text_for_match,
@@ -43,6 +44,7 @@ from .suggest_support import (
     load_image_data_url,
     material_status_from_trace,
     normalize_material_name_for_organizer,
+    normalize_tag_token,
     object_collection_paths,
     object_hierarchy_depth,
     object_root_name,
@@ -55,6 +57,29 @@ from ..ai_http import has_openrouter_api_key, openrouter_headers
 
 def _status_invalid(status: str) -> bool:
     return (status or "").strip().upper().startswith("INVALID")
+
+
+def _material_tag_candidate_from_object_name(name: str) -> str:
+    raw = (name or "").strip()
+    if not raw:
+        return ""
+    lead = raw.split("_", 1)[0].strip()
+    tag = normalize_tag_token(lead)
+    if tag:
+        return tag
+    return normalize_tag_token(raw)
+
+
+def _infer_auto_material_tag(usage_names: List[str]) -> str:
+    votes: Dict[str, int] = {}
+    for name in list(usage_names or []):
+        candidate = _material_tag_candidate_from_object_name(str(name or ""))
+        if not candidate:
+            continue
+        votes[candidate] = votes.get(candidate, 0) + 1
+    if not votes:
+        return ""
+    return sorted(votes.items(), key=lambda kv: (-kv[1], len(kv[0]), kv[0]))[0][0]
 
 
 class LIME_TB_OT_ai_asset_suggest_names(Operator):
@@ -71,6 +96,8 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
     _forced_material_tag: str = ""
     _forced_material_object_filter: str = ""
     _forced_material_ptrs: set[int] = set()
+    _require_material_tag: bool = False
+    _auto_material_tag_by_ptr: Dict[int, str] = {}
 
     def _finish(self, context) -> None:
         wm = context.window_manager
@@ -102,9 +129,11 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             self.report({"ERROR"}, "No objects selected")
             return {"CANCELLED"}
         forced_tag, object_filter = extract_context_material_tag_directive(getattr(state, "context", "") or "")
+        self._require_material_tag = context_requests_material_tag(getattr(state, "context", "") or "")
         self._forced_material_tag = forced_tag
         self._forced_material_object_filter = object_filter
         self._forced_material_ptrs = set()
+        self._auto_material_tag_by_ptr = {}
         if forced_tag:
             candidate_objects = list(objects)
             if object_filter:
@@ -215,6 +244,17 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                     mat_usage_names[key].append(obj.name)
                 if obj_token and obj_token not in mat_usage_ids[key]:
                     mat_usage_ids[key].append(obj_token)
+
+        default_auto_tag = _infer_auto_material_tag([str(getattr(obj, "name", "") or "") for obj in list(objects or [])])
+        for mat in list(materials or []):
+            if mat is None:
+                continue
+            ptr = mat.as_pointer()
+            auto_tag = _infer_auto_material_tag(mat_usage_names.get(ptr, []))
+            if not auto_tag:
+                auto_tag = default_auto_tag
+            if auto_tag:
+                self._auto_material_tag_by_ptr[ptr] = auto_tag
 
         for idx, mat in enumerate(materials[:60]):
             token = f"mat_{idx}"
@@ -487,6 +527,21 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                             if forced_name != suggested_norm:
                                 notes.append(f"Forced context tag: {forced_tag}")
                             suggested_norm = forced_name
+                    require_tag = bool(getattr(self, "_require_material_tag", False))
+                    if suggested_norm and require_tag and mat is not None:
+                        parsed_with_context = parse_material_name(suggested_norm)
+                        current_tag = (
+                            str(parsed_with_context.get("scene_tag") or "").strip()
+                            if isinstance(parsed_with_context, dict)
+                            else ""
+                        )
+                        if not current_tag:
+                            auto_tag = str(getattr(self, "_auto_material_tag_by_ptr", {}).get(mat.as_pointer(), "") or "")
+                            if auto_tag:
+                                auto_name = force_material_name_tag(suggested_norm, auto_tag)
+                                if auto_name != suggested_norm:
+                                    notes.append(f"Auto-added context tag: {auto_tag}")
+                                suggested_norm = auto_name
                     if suggested_norm and parse_material_name(suggested_norm):
                         unique = bump_material_version_until_unique(material_name_universe, suggested_norm)
                         if unique != suggested_norm:

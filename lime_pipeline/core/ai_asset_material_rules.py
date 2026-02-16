@@ -37,14 +37,50 @@ _METAL_HINT_TOKENS = {
 }
 _EMISSIVE_HINT_TOKENS = {"emissive", "emission", "glow", "neon", "led", "screen"}
 _SPECIFIC_FINISH_HINTS = {"brushed", "anodized", "galvanized", "chrome", "rusty", "frosted"}
-_CONTEXT_TAG_RE = re.compile(
-    r"(?:\btag\b|\betiqueta\b)[^\"'\n\r]{0,80}?(?:que diga|=|:)?\s*[\"']?([A-Za-z][A-Za-z0-9 _-]{0,31})[\"']?",
-    re.IGNORECASE,
+_CONTEXT_TAG_VALUE_RE = r"([A-Za-z][A-Za-z0-9_-]{0,23}(?:\s+[A-Za-z0-9_-]{1,23}){0,2})"
+_CONTEXT_FORCE_TAG_PATTERNS = (
+    re.compile(
+        rf"(?:\bforce(?:d)?\s+tag\b|\btag\s+force\b|\bfixed\s+tag\b|\block(?:ed)?\s+tag\b|\betiqueta\s+forzada\b|\betiqueta\s+fija\b)\s*(?:que\s+diga|que\s+sea|sea|is|=|:|->|named|called)?\s*[\"']?{_CONTEXT_TAG_VALUE_RE}[\"']?",
+        re.IGNORECASE,
+    ),
 )
 _CONTEXT_MAT_PATTERN_TAG_RE = re.compile(r"\bMAT_([A-Za-z][A-Za-z0-9]{1,24})_[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9]+_V\d{2}\b")
 _CONTEXT_OBJECT_FILTER_RE = re.compile(
     r"(?:material(?:es)?(?:\s+del|\s+de)?\s+objeto|materials?\s+(?:for|of)\s+object)\s+['\"]?([A-Za-z0-9_ -]{1,48})['\"]?",
     re.IGNORECASE,
+)
+_CONTEXT_TAG_TRAILING_STOPWORDS = {
+    "for",
+    "of",
+    "material",
+    "materials",
+    "objeto",
+    "object",
+    "para",
+    "de",
+    "del",
+}
+_CONTEXT_NEGATIVE_TAG_REQUEST_RE = re.compile(
+    r"\b(?:no|sin|without)\s+(?:un\s+|una\s+)?(?:tag|etiqueta)\b",
+    re.IGNORECASE,
+)
+_CONTEXT_ADD_TAG_PATTERNS = (
+    re.compile(
+        r"(?:\bforce(?:d)?\s+tag\b|\btag\s+force\b|\bfixed\s+tag\b|\block(?:ed)?\s+tag\b)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:\badd\b|\binclude\b|\buse\b|\bput\b|\bdale\b|\bdar\b|\bagrega(?:r)?\b|\banade(?:r)?\b|\busa(?:r)?\b).{0,48}\b(?:tag|etiqueta)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:con|with)\s+(?:un\s+|una\s+)?(?:tag|etiqueta)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:tag|etiqueta)\b.{0,32}\b(?:relacionad[oa]|related)\b",
+        re.IGNORECASE,
+    ),
 )
 
 try:
@@ -209,6 +245,19 @@ def normalize_tag_token(raw: str) -> str:
     return "".join(out)[:24]
 
 
+def _normalize_forced_tag_candidate(raw: str) -> str:
+    candidate = (raw or "").strip()
+    if not candidate:
+        return ""
+    candidate = re.split(r"[,;.\n\r]", candidate, maxsplit=1)[0].strip()
+    tokens = [t for t in re.split(r"\s+", candidate) if t]
+    while tokens and tokens[-1].lower() in _CONTEXT_TAG_TRAILING_STOPWORDS:
+        tokens.pop()
+    if not tokens:
+        return ""
+    return normalize_tag_token(" ".join(tokens))
+
+
 def extract_context_material_tag_directive(context_text: str) -> Tuple[str, str]:
     text = (context_text or "").strip()
     if not text:
@@ -216,12 +265,16 @@ def extract_context_material_tag_directive(context_text: str) -> Tuple[str, str]
 
     mat_match = _CONTEXT_MAT_PATTERN_TAG_RE.search(text)
     if mat_match:
-        forced_tag = normalize_tag_token(mat_match.group(1))
+        forced_tag = _normalize_forced_tag_candidate(mat_match.group(1))
     else:
         forced_tag = ""
-        tag_match = _CONTEXT_TAG_RE.search(text)
-        if tag_match:
-            forced_tag = normalize_tag_token(tag_match.group(1))
+        for pattern in _CONTEXT_FORCE_TAG_PATTERNS:
+            tag_match = pattern.search(text)
+            if not tag_match:
+                continue
+            forced_tag = _normalize_forced_tag_candidate(tag_match.group(1))
+            if forced_tag:
+                break
 
     object_filter = ""
     obj_match = _CONTEXT_OBJECT_FILTER_RE.search(text)
@@ -229,6 +282,23 @@ def extract_context_material_tag_directive(context_text: str) -> Tuple[str, str]
         object_filter = normalize_tag_token(obj_match.group(1))
 
     return forced_tag, object_filter
+
+
+def context_requests_material_tag(context_text: str) -> bool:
+    text = (context_text or "").strip()
+    if not text:
+        return False
+    if _CONTEXT_NEGATIVE_TAG_REQUEST_RE.search(text):
+        return False
+    if _CONTEXT_MAT_PATTERN_TAG_RE.search(text):
+        return True
+    for pattern in _CONTEXT_FORCE_TAG_PATTERNS:
+        if pattern.search(text):
+            return True
+    for pattern in _CONTEXT_ADD_TAG_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
 
 
 def force_material_name_tag(name: str, forced_tag: str) -> str:
@@ -410,6 +480,7 @@ __all__ = [
     "normalize_material_name_for_organizer",
     "material_status_from_trace",
     "extract_context_material_tag_directive",
+    "context_requests_material_tag",
     "force_material_name_tag",
     "fold_text_for_match",
     "material_tokens_from_name",

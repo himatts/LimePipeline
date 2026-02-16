@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import hashlib
 import re
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 _NON_ALNUM_RE = re.compile(r"[^0-9A-Za-z]+")
@@ -147,6 +147,52 @@ def map_type_from_text(text: str) -> str:
     if any(k in lower for k in ("color", "albedo", "diffuse", "base")):
         return "BaseColor"
     return "Generic"
+
+
+def _socket_category(socket_name: str) -> str:
+    lower = (socket_name or "").strip().lower()
+    if not lower:
+        return ""
+    if any(k in lower for k in ("normal", "bump")):
+        return "Normal"
+    if any(k in lower for k in ("rough", "gloss")):
+        return "Roughness"
+    if any(k in lower for k in ("metal", "metallic", "metalness")):
+        return "Metallic"
+    if any(k in lower for k in ("ambient occlusion", "occlusion")) or lower == "ao":
+        return "AO"
+    if any(k in lower for k in ("alpha", "opacity", "mask", "transparency", "transmission")):
+        return "Alpha"
+    if any(k in lower for k in ("height", "displace", "displacement")):
+        return "Height"
+    if "emission" in lower:
+        return "Emission"
+    if any(k in lower for k in ("base color", "diffuse color", "albedo")):
+        return "BaseColor"
+    if lower == "color":
+        return "BaseColor"
+    return ""
+
+
+def map_type_from_socket_links(socket_names: Sequence[str], *, fallback_text: str = "") -> str:
+    """Infer map type from destination socket links, with conservative fallback.
+
+    If links indicate multiple functional roles, classify as Generic.
+    """
+    categories: list[str] = []
+    seen: set[str] = set()
+    for name in list(socket_names or []):
+        cat = _socket_category(name)
+        if not cat or cat in seen:
+            continue
+        seen.add(cat)
+        categories.append(cat)
+
+    if len(categories) == 1:
+        return categories[0]
+    if len(categories) > 1:
+        return "Generic"
+    return map_type_from_text(fallback_text)
 
 
 def short_hash(value: str, *, length: int = 8) -> str:

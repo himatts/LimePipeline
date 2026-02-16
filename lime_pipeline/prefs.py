@@ -87,7 +87,7 @@ class LimePipelinePrefs(AddonPreferences):
     # --- OpenRouter (AI features) ---
     openrouter_model: StringProperty(
         name="OpenRouter Model",
-        default="google/gemini-2.0-flash-lite-001",
+        default="google/gemini-3-flash-preview",
         description="Default model slug for OpenRouter AI tools",
     )
     openrouter_debug: BoolProperty(

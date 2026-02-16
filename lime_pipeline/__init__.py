@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 7, 0),  # Retire AI Material Renamer and keep AI Asset Organizer as single workflow
+    "version": (0, 8, 0),  # Introduce standalone AI Textures Organizer staged workflow
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -72,6 +72,14 @@ from .ui import (
     LIME_TB_UL_alpha_events,
 )
 from .ui import LIME_TB_PT_ai_asset_organizer, LIME_TB_UL_ai_asset_items
+from .ui import (
+    LIME_TB_PT_ai_textures_organizer,
+    LIME_TB_PT_ai_textures_analyze,
+    LIME_TB_PT_ai_textures_review,
+    LIME_TB_PT_ai_textures_apply,
+    LIME_TB_PT_ai_textures_maintenance,
+    LIME_TB_UL_ai_texture_items,
+)
 from .ui import LIME_TB_PT_experimental
 from .ops.ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
@@ -106,6 +114,7 @@ from .ops.ops_ai_render_converter import (
     LIME_OT_ai_render_import_style,
 )
 from .props_ai_assets import register as register_ai_asset_props, unregister as unregister_ai_asset_props
+from .props_ai_textures import register as register_ai_texture_props, unregister as unregister_ai_texture_props
 from .props_ai_renders import register as register_ai_render_props, unregister as unregister_ai_render_props
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_render_shortcut_props, unregister_render_shortcut_props
@@ -231,6 +240,12 @@ from .ops.ops_texture_adopt import (
 from .ops.ops_texture_manifest_cleanup import (
     LIME_OT_texture_manifest_cleanup,
 )
+from .ops.ops_ai_textures_organizer import (
+    LIME_OT_texture_analyze,
+    LIME_OT_texture_refine,
+    LIME_OT_texture_apply,
+    LIME_OT_texture_clear_session,
+)
 
 
 # Class collections for organized registration
@@ -242,6 +257,10 @@ NON_PANEL_CLASSES = (
     LIME_OT_ensure_folders,
     LIME_OT_open_folder,
     LIME_OT_open_output_folder,
+    LIME_OT_texture_analyze,
+    LIME_OT_texture_refine,
+    LIME_OT_texture_apply,
+    LIME_OT_texture_clear_session,
     LIME_OT_texture_scan_report,
     LIME_OT_texture_adopt,
     LIME_OT_texture_manifest_cleanup,
@@ -328,6 +347,7 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_ai_asset_material_debug_report,
     LIME_TB_OT_ai_asset_collection_debug_report,
     LIME_TB_UL_ai_asset_items,
+    LIME_TB_UL_ai_texture_items,
     LIME_OT_ai_render_refresh,
     LIME_OT_ai_render_frame,
     LIME_OT_ai_render_generate,
@@ -363,6 +383,11 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_asset_organizer,
+    LIME_TB_PT_ai_textures_organizer,
+    LIME_TB_PT_ai_textures_analyze,
+    LIME_TB_PT_ai_textures_review,
+    LIME_TB_PT_ai_textures_apply,
+    LIME_TB_PT_ai_textures_maintenance,
     LIME_TB_PT_experimental,
     LIME_PT_ai_render_converter,
 )
@@ -374,6 +399,11 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_asset_organizer,
+    LIME_TB_PT_ai_textures_organizer,
+    LIME_TB_PT_ai_textures_analyze,
+    LIME_TB_PT_ai_textures_review,
+    LIME_TB_PT_ai_textures_apply,
+    LIME_TB_PT_ai_textures_maintenance,
     LIME_TB_PT_experimental,
     LIME_PT_ai_render_converter,
 )
@@ -465,6 +495,7 @@ def register():
     register_noise_props()
     register_alpha_props()
     register_ai_asset_props()
+    register_ai_texture_props()
     register_ai_render_props()
     register_camera_list_props()
     register_shot_list_props()
@@ -529,6 +560,22 @@ def register():
 
     # Self-heal: ensure texture operators exist even if registration ordering changes.
     try:
+        if not hasattr(bpy.types, "LIME_OT_texture_analyze"):
+            from .ops.ops_ai_textures_organizer import LIME_OT_texture_analyze as _LIME_OT_texture_analyze
+            if _safe_register_class(_LIME_OT_texture_analyze):
+                REGISTERED_CLASSES.append(_LIME_OT_texture_analyze)
+        if not hasattr(bpy.types, "LIME_OT_texture_refine"):
+            from .ops.ops_ai_textures_organizer import LIME_OT_texture_refine as _LIME_OT_texture_refine
+            if _safe_register_class(_LIME_OT_texture_refine):
+                REGISTERED_CLASSES.append(_LIME_OT_texture_refine)
+        if not hasattr(bpy.types, "LIME_OT_texture_apply"):
+            from .ops.ops_ai_textures_organizer import LIME_OT_texture_apply as _LIME_OT_texture_apply
+            if _safe_register_class(_LIME_OT_texture_apply):
+                REGISTERED_CLASSES.append(_LIME_OT_texture_apply)
+        if not hasattr(bpy.types, "LIME_OT_texture_clear_session"):
+            from .ops.ops_ai_textures_organizer import LIME_OT_texture_clear_session as _LIME_OT_texture_clear_session
+            if _safe_register_class(_LIME_OT_texture_clear_session):
+                REGISTERED_CLASSES.append(_LIME_OT_texture_clear_session)
         if not hasattr(bpy.types, "LIME_OT_texture_scan_report"):
             from .ops.ops_texture_scan import LIME_OT_texture_scan_report as _LIME_OT_texture_scan_report
             if _safe_register_class(_LIME_OT_texture_scan_report):
@@ -543,12 +590,21 @@ def register():
     # Self-check: ensure key texture operators are registered (helps diagnose stale installs).
     try:
         lime_ops = getattr(bpy.ops, "lime", None)
+        analyze_ok = bool(lime_ops and getattr(lime_ops, "texture_analyze", None))
+        refine_ok = bool(lime_ops and getattr(lime_ops, "texture_refine", None))
+        apply_ok = bool(lime_ops and getattr(lime_ops, "texture_apply", None))
         scan_ok = bool(lime_ops and getattr(lime_ops, "texture_scan_report", None))
         adopt_ok = bool(lime_ops and getattr(lime_ops, "texture_adopt", None))
+        type_analyze_ok = bool(hasattr(bpy.types, "LIME_OT_texture_analyze"))
+        type_refine_ok = bool(hasattr(bpy.types, "LIME_OT_texture_refine"))
+        type_apply_ok = bool(hasattr(bpy.types, "LIME_OT_texture_apply"))
         type_scan_ok = bool(hasattr(bpy.types, "LIME_OT_texture_scan_report"))
         type_adopt_ok = bool(hasattr(bpy.types, "LIME_OT_texture_adopt"))
         print(
             "[Lime Pipeline] Operator registry:",
+            f"analyze ops={analyze_ok} types={type_analyze_ok};",
+            f"refine ops={refine_ok} types={type_refine_ok};",
+            f"apply ops={apply_ok} types={type_apply_ok};",
             f"scan ops={scan_ok} types={type_scan_ok};",
             f"adopt ops={adopt_ok} types={type_adopt_ok}",
         )
@@ -622,6 +678,7 @@ def unregister():
     unregister_noise_props()
     unregister_alpha_props()
     unregister_ai_asset_props()
+    unregister_ai_texture_props()
     unregister_ai_render_props()
     unregister_camera_list_props()
     unregister_shot_list_props()

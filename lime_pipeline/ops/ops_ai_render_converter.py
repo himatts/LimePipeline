@@ -234,7 +234,7 @@ def _rewrite_details_with_llm(prefs: LimePipelinePrefs, raw_text: str, image_pat
     else:
         _debug_log(prefs, "LLM detail image skipped: source image missing")
     payload = {
-        "model": prefs.openrouter_model or "google/gemini-2.0-flash-lite-001",
+        "model": prefs.openrouter_model or "google/gemini-3-flash-preview",
         "messages": [
             {
                 "role": "system",

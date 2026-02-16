@@ -40,6 +40,14 @@ from .ui_ai_asset_organizer import (
     LIME_TB_PT_ai_asset_organizer,
     LIME_TB_UL_ai_asset_items,
 )
+from .ui_ai_textures_organizer import (
+    LIME_TB_PT_ai_textures_organizer,
+    LIME_TB_PT_ai_textures_analyze,
+    LIME_TB_PT_ai_textures_review,
+    LIME_TB_PT_ai_textures_apply,
+    LIME_TB_PT_ai_textures_maintenance,
+    LIME_TB_UL_ai_texture_items,
+)
 from .ui_ai_render_converter import LIME_PT_ai_render_converter
 from .ui_experimental import LIME_TB_PT_experimental
 
@@ -65,8 +73,14 @@ __all__ = [
     "LIME_TB_PT_noisy_movement",
     "LIME_TB_PT_alpha_manager",
     "LIME_TB_PT_ai_asset_organizer",
+    "LIME_TB_PT_ai_textures_organizer",
+    "LIME_TB_PT_ai_textures_analyze",
+    "LIME_TB_PT_ai_textures_review",
+    "LIME_TB_PT_ai_textures_apply",
+    "LIME_TB_PT_ai_textures_maintenance",
     "LIME_TB_UL_alpha_events",
     "LIME_TB_UL_ai_asset_items",
+    "LIME_TB_UL_ai_texture_items",
     "LIME_PT_ai_render_converter",
     "LIME_TB_PT_experimental",
 ]

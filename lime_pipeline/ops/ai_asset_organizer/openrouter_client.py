@@ -14,8 +14,8 @@ from ..ai_http import (
 )
 
 
-DEFAULT_MODEL = "google/gemini-2.0-flash-lite-001"
-_AI_MAX_TOKENS = 8000
+DEFAULT_MODEL = "google/gemini-3-flash-preview"
+_AI_MAX_TOKENS = 50000
 
 
 def _parse_items_from_response(parsed: Optional[Dict[str, object]]) -> Optional[List[Dict[str, object]]]:

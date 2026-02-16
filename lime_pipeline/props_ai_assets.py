@@ -150,7 +150,7 @@ class LimeAIAssetState(PropertyGroup):
         name="Context",
         description="Optional context to improve AI naming suggestions",
         default="",
-        maxlen=2000,
+        maxlen=8000,
     )
     debug_material_flow: BoolProperty(
         name="Debug Material Flow",

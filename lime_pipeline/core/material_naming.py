@@ -66,6 +66,19 @@ def normalize_finish(value: str) -> str:
     return cleaned
 
 
+def _material_type_from_token(token: str) -> Optional[str]:
+    """Return normalized material type when token explicitly encodes one."""
+    raw = (token or "").strip()
+    if not raw:
+        return None
+    normalized = normalize_material_type(raw)
+    if normalized == "Plastic" and raw.lower() != "plastic":
+        return None
+    if normalized in ALLOWED_MATERIAL_TYPES:
+        return normalized
+    return None
+
+
 # -----------------------------------------------------------------------------
 # Version helpers
 # -----------------------------------------------------------------------------
@@ -104,29 +117,25 @@ def parse_name(name: str) -> Optional[Dict[str, str]]:
     if len(parts) < 4 or parts[0] != PREFIX:
         return None
 
-    tag = ""
     version_block = parts[-1]
+    middle = parts[1:-1]
+    if len(middle) < 2:
+        return None
 
-    type_index = 1
-    material_type_raw = parts[type_index]
-
-    material_type = normalize_material_type(material_type_raw)
-
-    if material_type not in ALLOWED_MATERIAL_TYPES:
-        # Names may include an optional tag between prefix and type.
-        # Detect this by checking the next token as potential material type.
-        if len(parts) >= 5:
-            candidate_raw = parts[type_index + 1]
-            candidate_type = normalize_material_type(candidate_raw)
-            if candidate_type in ALLOWED_MATERIAL_TYPES:
-                tag = material_type_raw
-                type_index += 1
-                material_type_raw = parts[type_index]
-                material_type = candidate_type
-        if material_type not in ALLOWED_MATERIAL_TYPES:
+    tag = ""
+    type_index = 0
+    material_type = _material_type_from_token(middle[type_index] if middle else "")
+    if material_type is None:
+        # Optional tag is present: MAT_{Tag}_{Type}_{Finish}_{V##}
+        if len(middle) < 3:
+            return None
+        tag = middle[0]
+        type_index = 1
+        material_type = _material_type_from_token(middle[type_index])
+        if material_type is None:
             return None
 
-    finish_parts = parts[type_index + 1:-1]
+    finish_parts = middle[type_index + 1:]
     if not finish_parts:
         return None
     finish_raw = SEPARATOR.join(finish_parts)

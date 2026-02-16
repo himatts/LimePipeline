@@ -37,6 +37,7 @@ sanitize_filename_stem = texture_naming.sanitize_filename_stem
 canonicalize_texture_stem = texture_naming.canonicalize_texture_stem
 material_stem = texture_naming.material_stem
 map_type_from_text = texture_naming.map_type_from_text
+map_type_from_socket_links = texture_naming.map_type_from_socket_links
 short_hash = texture_naming.short_hash
 TextureNameHints = texture_naming.TextureNameHints
 propose_texture_filename = texture_naming.propose_texture_filename
@@ -76,6 +77,20 @@ class TextureNamingTests(unittest.TestCase):
         self.assertEqual(map_type_from_text("roughness"), "Roughness")
         self.assertEqual(map_type_from_text("baseColor"), "BaseColor")
         self.assertEqual(map_type_from_text("something else"), "Generic")
+
+    def test_map_type_from_socket_links_single_role(self):
+        self.assertEqual(map_type_from_socket_links(["Alpha"], fallback_text=""), "Alpha")
+        self.assertEqual(map_type_from_socket_links(["Base Color"], fallback_text=""), "BaseColor")
+        self.assertEqual(map_type_from_socket_links(["Normal"], fallback_text=""), "Normal")
+
+    def test_map_type_from_socket_links_multi_role_returns_generic(self):
+        self.assertEqual(
+            map_type_from_socket_links(["Base Color", "Roughness"], fallback_text="alpha mask"),
+            "Generic",
+        )
+
+    def test_map_type_from_socket_links_fallback(self):
+        self.assertEqual(map_type_from_socket_links([], fallback_text="opacity_mask"), "Alpha")
 
     def test_short_hash_length(self):
         self.assertEqual(len(short_hash("abc", length=8)), 8)

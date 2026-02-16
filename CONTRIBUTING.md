@@ -1,4 +1,4 @@
-﻿# Contributing to Lime Pipeline (Blender add-on)
+# Contributing to Lime Pipeline (Blender add-on)
 
 Thank you for contributing! This guide explains how to propose changes while preserving stability and consistency.
 
@@ -21,11 +21,14 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
 - AI Asset Organizer v2: object/material/collection naming, hierarchy-aware target resolution, ambiguity handling, preview counters, apply-scope filters, and optional collection organization
+- AI Asset Organizer context text is creative guidance by default; material tags can be requested either with explicit override directives (`force tag: X`, `fixed tag: X`) or with add-tag intent (for example "add/agrega un tag"), which triggers automatic tag inference from object context
 - AI Asset Organizer v2 object/collection format: PascalCase segments separated by underscores (numeric suffix as `_NN`)
-- Texture Scan/Adopt tools live in AI Asset Organizer (Lime Toolbox)
+- AI Textures Organizer is a standalone Lime Toolbox panel with staged flow (Analyze -> Refine -> Apply)
+- Texture Scan/Adopt must preserve external protected libraries (Asset Libraries + XPBR) and in local mode write under `<local_project_root>/rsc/Textures`
 - AI Material Renamer is fully retired; use AI Asset Organizer for AI material workflows
 - AI Render Converter UI includes thumbnail grids per section, large previews, cleanup tools, and output access
 - Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox)
+- 3D Model Organizer `Apply Deltas` and location-offset warning are selection-scoped (not whole-scene)
 - Dimension Checker behavior: each run creates a new helper; manual cleanup is expected
 - Dimension Checker overlay units are user-configurable (mm/cm/m/in/ft)
 - Dimension Checker helpers parent to the active object and update live on scale
@@ -96,7 +99,7 @@ The repo contains unit tests for `core/` logic (including AI organizer helper mo
 - Apply selected rows and verify uniqueness handling for objects/materials/collections.
 - Enable **Organize Collections on Apply** and verify deep destination paths are created when missing.
 - Verify apply is partial-safe: ambiguous objects are skipped while unambiguous operations still execute.
-- Run **Scan / Report** and **Adopt / Fix** from the Textures block and verify manifests are written under `rsc/Textures/_manifests`.
+- Run **Analyze Textures**, **Refine Suggestions (AI)**, and **Apply Texture Plan** from AI Textures Organizer and verify manifests are written under `rsc/Textures/_manifests`.
 
 ## Commit style
 - Conventional summary preferred: feat:, fix:, chore:, refactor:, docs:
@@ -118,3 +121,4 @@ The repo contains unit tests for `core/` logic (including AI organizer helper mo
 - The canonical rules for agents live in: `AGENTS.md`.
 
 Thanks for keeping Lime Pipeline robust and consistent!
+

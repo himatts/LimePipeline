@@ -86,6 +86,20 @@ class MaterialTaxonomyTests(unittest.TestCase):
         )
         self.assertEqual(material_type, "Background")
 
+    def test_material_name_parser_preserves_optional_tag(self) -> None:
+        parsed = material_naming.parse_name("MAT_ToolCart_Rubber_Matte_V01")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.get("scene_tag"), "ToolCart")
+        self.assertEqual(parsed.get("material_type"), "Rubber")
+
+    def test_material_name_parser_preserves_optional_tag_with_plastic(self) -> None:
+        parsed = material_naming.parse_name("MAT_ToolCart_Plastic_Matte_V01")
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.get("scene_tag"), "ToolCart")
+        self.assertEqual(parsed.get("material_type"), "Plastic")
+
 
 if __name__ == "__main__":
     unittest.main()

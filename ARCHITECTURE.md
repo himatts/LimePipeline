@@ -15,11 +15,12 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Collection destination resolver: deterministic ranking/ambiguity for full hierarchy paths (SHOT-aware)
   - AI organizer prompt/schema and JSON contract helpers (`ai_asset_prompt`)
   - AI organizer collection-path normalization and candidate serialization helpers (`ai_asset_collection_paths`)
-  - AI organizer material normalization guardrails and context-tag parsing (`ai_asset_material_rules`)
+  - AI organizer material normalization guardrails, context-tag override parsing, and add-tag intent detection (`ai_asset_material_rules`)
   - Project naming: normalize project names, build canonical filenames, detect/parse .blend names
   - Paths: map project type + rev + scene to folder targets
   - Validation: sanity checks for save operations (errors/warnings, path length)
   - Environment config: load local `.env` values for API credentials (OpenRouter/Krea)
+  - Texture workspace helpers: shared texture-root resolution for cloud/local mode and protected external texture roots (including XPBR library path)
   - Scene validation helpers (selection/shot context); note: this file uses bpy
 - Rules:
   - Only `validate_scene.py` imports `bpy` at module import time; the rest keep it local when needed
@@ -36,7 +37,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Files: `props.py` (WindowManager state), `props_ai_assets.py` (Scene-scoped AI asset organizer proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
 - Responsibilities:
   - Centralize PropertyGroup definitions for persistent add-on state
-  - Expose editable collections (`Scene.lime_ai_assets` for AI Asset Organizer)
+  - Expose editable collections (`Scene.lime_ai_assets` for AI Asset Organizer, `Scene.lime_ai_textures` for AI Textures Organizer)
   - Store AI render converter paths, prompts, previews, and job status (`Scene.lime_ai_render`)
 
 ### scene
@@ -66,8 +67,9 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Layout and user interactions; no heavy IO
 - Highlights:
   - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, thumbnail grids, large previews, generate/retry, cleanup, output access)
-  - `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel
-- `ui_ai_asset_organizer.py`: Lime Toolbox panel hosts a separate Textures block (Scan/Adopt/Manifests) and supports opening a focused popup manager for naming/organization (objects/materials/collections) without texture actions; planned collections are surfaced as editable virtual rows synced with object target paths
+- `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel; Apply Deltas status/action is selection-scoped
+- `ui_ai_asset_organizer.py`: Lime Toolbox panel for naming/organization (objects/materials/collections) and focused popup manager; planned collections are surfaced as editable virtual rows synced with object target paths
+- `ui_ai_textures_organizer.py`: standalone Lime Toolbox panel for staged texture workflow (Analyze -> Refine -> Apply) with editable hints and explicit apply
 - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI, overlay unit visibility toggles, and measurement unit presets (mm/cm/m/in/ft); each run creates a new helper, which remains until manually removed and updates live when its active parent is scaled; overlay text turns yellow when targets have unapplied scale
 - Rules:
   - Prefer Blender native subpanels for sections (parent/child panels) instead of manual collapsible boxes
@@ -165,3 +167,5 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 ## Canonical rules and docs maintenance
 - Canonical rules for agents: `AGENTS.md` (source of truth for editing workflow rules)
 - If user-visible behavior or architecture changes, also update: `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`
+
+

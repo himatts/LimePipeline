@@ -203,12 +203,14 @@ def disable_auto_select_hierarchy():
 
 
 
-def objects_with_location_offset(scene):
-    """Return scene objects whose location differs from zero within a tolerance."""
+def objects_with_location_offset(scene, objects=None):
+    """Return objects whose location differs from zero within a tolerance."""
     offenders = []
-    if scene is None:
-        return offenders
-    for obj in getattr(scene, 'objects', []) or []:
+    if objects is None:
+        if scene is None:
+            return offenders
+        objects = getattr(scene, 'objects', []) or []
+    for obj in objects:
         if obj is None:
             continue
         if getattr(obj, 'type', None) == 'EMPTY':
@@ -432,18 +434,23 @@ class LIME_OT_move_controller(Operator):
 
 
 class LIME_OT_apply_scene_deltas(Operator):
-    """Apply transforms to deltas for objects with non-zero location."""
+    """Apply transforms to deltas for selected objects with non-zero location."""
 
     bl_idname = "lime.apply_scene_deltas"
     bl_label = "Apply Deltas"
-    bl_description = "Move transforms into deltas for objects whose location is not zero."
+    bl_description = "Move transforms into deltas for selected objects whose location is not zero."
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        selected = list(context.selected_objects or [])
+        if not selected:
+            self.report({'WARNING'}, "Select at least one object.")
+            return {'CANCELLED'}
+
         scene = context.scene
-        offenders = objects_with_location_offset(scene)
+        offenders = objects_with_location_offset(scene, selected)
         if not offenders:
-            self.report({'INFO'}, "All scene objects already have zero location.")
+            self.report({'INFO'}, "Selected objects already have zero location.")
             return {'CANCELLED'}
 
         prev_sel = list(context.selected_objects or [])
@@ -457,7 +464,7 @@ class LIME_OT_apply_scene_deltas(Operator):
             pass
 
         try:
-            for obj in context.selected_objects:
+            for obj in list(context.selected_objects or []):
                 obj.select_set(False)
             for obj in offenders:
                 obj.select_set(True)
@@ -472,7 +479,7 @@ class LIME_OT_apply_scene_deltas(Operator):
             success = False
 
         try:
-            for obj in context.selected_objects:
+            for obj in list(context.selected_objects or []):
                 obj.select_set(False)
             for obj in prev_sel:
                 if obj and obj.name in bpy.data.objects:
@@ -486,7 +493,7 @@ class LIME_OT_apply_scene_deltas(Operator):
             self.report({'ERROR'}, "Failed to apply transforms to deltas.")
             return {'CANCELLED'}
 
-        self.report({'INFO'}, f"Applied transforms to deltas on {len(offenders)} object(s).")
+        self.report({'INFO'}, f"Applied transforms to deltas on {len(offenders)} selected object(s).")
         return {'FINISHED'}
 
 

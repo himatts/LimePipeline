@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-import bpy
 from bpy.types import Panel, UIList
 
 
@@ -233,44 +232,7 @@ def draw_ai_asset_organizer_content(layout, context, *, for_popup: bool = False)
     if for_popup:
         return
 
-    layout.separator()
-    box_textures = layout.box()
-    box_textures.label(text="Textures")
-    wm_state = getattr(getattr(context, "window_manager", None), "lime_pipeline", None)
-    if wm_state is None:
-        box_textures.label(text="Texture tools unavailable", icon="ERROR")
-        return
-    box_textures.prop(wm_state, "texture_adopt_use_ai", text="Use AI naming")
-    row_ai = box_textures.row(align=True)
-    row_ai.enabled = bool(getattr(wm_state, "texture_adopt_use_ai", False))
-    row_ai.prop(wm_state, "texture_adopt_ai_include_preview", text="AI include preview (low-res)")
-    row_tex = box_textures.row(align=True)
-    if hasattr(bpy.types, "LIME_OT_texture_scan_report"):
-        row_tex.operator("lime.texture_scan_report", text="Scan / Report", icon='IMAGE_DATA')
-    else:
-        row_tex.alert = True
-        row_tex.label(text="Texture Scan operator not registered", icon='ERROR')
-    row_fix = box_textures.row(align=True)
-    if hasattr(bpy.types, "LIME_OT_texture_adopt"):
-        op = row_fix.operator("lime.texture_adopt", text="Adopt / Fix", icon='IMPORT')
-        try:
-            op.use_ai = bool(getattr(wm_state, "texture_adopt_use_ai", False))
-        except Exception:
-            pass
-        try:
-            op.include_ai_preview = bool(getattr(wm_state, "texture_adopt_ai_include_preview", False))
-        except Exception:
-            pass
-    else:
-        row_fix.alert = True
-        row_fix.label(text="Texture Adopt operator not registered", icon='ERROR')
-
-    row_clean = box_textures.row(align=True)
-    if hasattr(bpy.types, "LIME_OT_texture_manifest_cleanup"):
-        row_clean.operator("lime.texture_manifest_cleanup", text="Delete Manifests", icon='TRASH')
-    else:
-        row_clean.alert = True
-        row_clean.label(text="Manifest cleanup operator not registered", icon='ERROR')
+    layout.label(text="Texture tools moved to AI Textures Organizer panel.", icon="INFO")
 
 
 __all__ = [

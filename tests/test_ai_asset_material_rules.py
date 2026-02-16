@@ -39,10 +39,33 @@ class AIAssetMaterialRulesTests(unittest.TestCase):
 
     def test_extract_context_directive(self):
         tag, obj_filter = module.extract_context_material_tag_directive(
-            'Please use tag "Iphone" for object "phone" materials'
+            'Please force tag "Iphone" for object "phone" materials'
         )
         self.assertEqual(tag, "Iphone")
         self.assertEqual(obj_filter, "")
+
+    def test_extract_context_directive_explicit_force(self):
+        tag, obj_filter = module.extract_context_material_tag_directive(
+            "Please force tag: PhonePro materials for object phone"
+        )
+        self.assertEqual(tag, "Phonepro")
+        self.assertEqual(obj_filter, "Phone")
+
+    def test_extract_context_directive_plain_tag_mention_does_not_force(self):
+        tag, obj_filter = module.extract_context_material_tag_directive(
+            'Please use tag "Iphone" for object "phone" materials'
+        )
+        self.assertEqual(tag, "")
+        self.assertEqual(obj_filter, "")
+
+    def test_context_requests_material_tag(self):
+        self.assertTrue(
+            module.context_requests_material_tag(
+                "este es un Tools Cart, dale a los materiales un tag relacionado con este objeto"
+            )
+        )
+        self.assertTrue(module.context_requests_material_tag("force tag: ToolsCart"))
+        self.assertFalse(module.context_requests_material_tag("sin tag en los materiales"))
 
     def test_force_material_tag(self):
         tagged = module.force_material_name_tag("MAT_Metal_Brushed_V01", "Iphone")
@@ -68,6 +91,13 @@ class AIAssetMaterialRulesTests(unittest.TestCase):
         self.assertTrue(out.startswith("MAT_"))
         self.assertTrue(out.endswith("_V01"))
         self.assertTrue(len(notes) >= 1)
+
+    def test_normalize_material_name_keeps_existing_tag(self):
+        out = module.normalize_material_name_for_organizer(
+            "MAT_ToolCart_Rubber_Matte_V01",
+            source_name="MAT_Rubber_Matte_V01",
+        )
+        self.assertEqual(out, "MAT_ToolCart_Rubber_Matte_V01")
 
     def test_material_status_from_trace(self):
         self.assertEqual(

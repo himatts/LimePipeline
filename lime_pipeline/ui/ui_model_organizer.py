@@ -32,17 +32,20 @@ class LIME_PT_model_organizer(Panel):
         layout.operator("import_scene.occ_import_step", text="Import STEP (.step)", icon='IMPORT')
         layout.operator("lime.clean_step", text="Clean .STEP", icon='FILE_REFRESH')
 
-        offsets = objects_with_location_offset(ctx.scene)
+        selection = list(ctx.selected_objects or [])
+        offsets = objects_with_location_offset(ctx.scene, selection)
         status_box = layout.box()
         status_row = status_box.row()
         status_row.alignment = 'CENTER'
-        status_row.alert = bool(offsets)
-        if offsets:
-            status_row.label(text=f"{len(offsets)} object(s) with offsets", icon='ERROR')
+        status_row.alert = bool(selection) and bool(offsets)
+        if not selection:
+            status_row.label(text="Select objects to check offsets", icon='INFO')
+        elif offsets:
+            status_row.label(text=f"{len(offsets)} selected object(s) with offsets", icon='ERROR')
         else:
-            status_row.label(text="All object locations zeroed", icon='CHECKMARK')
+            status_row.label(text="Selected objects already zeroed", icon='CHECKMARK')
         apply_row = layout.row()
-        apply_row.enabled = bool(offsets)
+        apply_row.enabled = bool(selection) and bool(offsets)
         apply_row.operator("lime.apply_scene_deltas", text="Apply Deltas", icon='DRIVER_DISTANCE')
 
         state = getattr(ctx.window_manager, "lime_pipeline", None)
