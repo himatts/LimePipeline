@@ -12,6 +12,7 @@ import bpy
 from bpy.types import Panel
 
 from ..ops.ops_model_organizer import objects_with_location_offset
+from ..ops.ops_linked_collections import get_localize_linked_summary
 
 
 CAT = "Lime Toolbox"
@@ -62,8 +63,54 @@ class LIME_PT_model_organizer(Panel):
         layout.separator()
 
         box_linked = layout.box()
-        box_linked.label(text="Linked Collections")
-        box_linked.operator("lime.localize_linked_collection", icon='LIBRARY_DATA_DIRECT')
+        box_linked.label(text="Linked Data Localization")
+
+        linked_summary = get_localize_linked_summary(ctx)
+        scope = linked_summary.get("scope", "none")
+        scope_label = "Selection" if scope == "selection" else "Active Collection" if scope == "active collection" else "None"
+        total_targets = int(linked_summary.get("targets", 0))
+        is_available = bool(linked_summary.get("available", False))
+
+        status_row = box_linked.row()
+        status_row.alert = not is_available
+        if is_available:
+            status_row.label(text=f"Ready: {total_targets} candidate(s) from {scope_label}", icon='CHECKMARK')
+        else:
+            status_row.label(text="Unavailable: no linked targets found", icon='ERROR')
+            reason_row = box_linked.row()
+            reason_row.label(text=str(linked_summary.get("unavailable_reason", "")), icon='INFO')
+
+        counts_row = box_linked.row(align=True)
+        counts_row.label(text=f"Selection: {linked_summary.get('selection_candidates', 0)}")
+        counts_row.label(text=f"Active: {linked_summary.get('active_collection_candidates', 0)}")
+
+        details_col = box_linked.column(align=True)
+        details_col.label(
+            text=(
+                f"Targets: Mesh {linked_summary.get('mesh_targets', 0)}, "
+                f"Empty {linked_summary.get('empty_targets', 0)}, "
+                f"Instances {linked_summary.get('instance_targets', 0)}"
+            ),
+            icon='OUTLINER_COLLECTION',
+        )
+        details_col.label(
+            text=(
+                f"Objects: Linked {linked_summary.get('linked_object_targets', 0)}, "
+                f"Overrides {linked_summary.get('override_object_targets', 0)}"
+            ),
+            icon='LIBRARY_DATA_OVERRIDE',
+        )
+        details_col.label(
+            text=(
+                f"Mesh data linked: {linked_summary.get('mesh_data_linked_targets', 0)} | "
+                f"External mats: {linked_summary.get('estimated_external_materials', 0)}"
+            ),
+            icon='MATERIAL',
+        )
+
+        action_row = box_linked.row()
+        action_row.enabled = is_available
+        action_row.operator("lime.localize_linked_collection", text="Localize Linked Data", icon='LIBRARY_DATA_DIRECT')
 
 
 __all__ = [

@@ -32,7 +32,8 @@ Estandarizar el trabajo para reducir fricci�n y errores humanos: archivos mal 
 - Permite abrir la carpeta de outputs de la IA y limpiar manifests generados.
 - A�ade utilidades pr�cticas de escena (por ejemplo, checks de dimensiones y ayudas de c�mara).
 - El panel de Cameras permite agregar Camera Rigs o Simple Cameras dentro del SHOT activo.
-- El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (convertir a local manteniendo meshes linkeados).
+- El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (prioriza objetos seleccionados; si no hay candidatos, usa la colección activa de forma recursiva para convertir linked/override a local preservando jerarquías y manteniendo mallas linkeadas).
+- La sección Linked Data Localization muestra diagnóstico previo (scope, candidatos y estimaciones) y pide confirmación automática en operaciones grandes.
 - En 3D Model Organizer, **Apply Deltas** y el aviso de offsets de locaci�n operan solo sobre objetos seleccionados.
 
 ## Requisitos

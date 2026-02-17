@@ -67,7 +67,7 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
   - Layout and user interactions; no heavy IO
 - Highlights:
   - `ui_ai_render_converter.py`: Lime Pipeline panel for AI Render Converter (source detection, thumbnail grids, large previews, generate/retry, cleanup, output access)
-- `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel; Apply Deltas status/action is selection-scoped
+- `ui_model_organizer.py`: 3D Model Organizer (Lime Toolbox) hosts the Linked Collections localization action at the end of the panel; linked-localization prioritizes selected objects and falls back to recursive active-collection scan (linked/override aware), localizes objects while keeping mesh data linked, and realizes selected collection instances into local hierarchies; the UI shows preflight diagnostics (scope/candidate counts) and large operations require confirmation; Apply Deltas status/action is selection-scoped
 - `ui_ai_asset_organizer.py`: Lime Toolbox panel for naming/organization (objects/materials/collections) and focused popup manager; planned collections are surfaced as editable virtual rows synced with object target paths
 - `ui_ai_textures_organizer.py`: standalone Lime Toolbox panel for staged texture workflow (Analyze -> Refine -> Apply) with editable hints and explicit apply
 - Dimension Utilities panel (`ui_dimension_utilities.py`) hosts the Dimension Checker UI, overlay unit visibility toggles, and measurement unit presets (mm/cm/m/in/ft); each run creates a new helper, which remains until manually removed and updates live when its active parent is scaled; overlay text turns yellow when targets have unapplied scale

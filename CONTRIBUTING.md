@@ -27,7 +27,8 @@ See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 - Texture Scan/Adopt must preserve external protected libraries (Asset Libraries + XPBR) and in local mode write under `<local_project_root>/rsc/Textures`
 - AI Material Renamer is fully retired; use AI Asset Organizer for AI material workflows
 - AI Render Converter UI includes thumbnail grids per section, large previews, cleanup tools, and output access
-- Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox)
+- Linked Collections localization UI lives in 3D Model Organizer (Lime Toolbox); scope is selection-first, with recursive active-collection fallback for linked/override targets; conversion preserves hierarchy, makes objects local, and keeps mesh data linked
+- Linked Collections UI must expose preflight context (scope + candidate counts + unavailable reason) before execution; large conversions trigger confirmation
 - 3D Model Organizer `Apply Deltas` and location-offset warning are selection-scoped (not whole-scene)
 - Dimension Checker behavior: each run creates a new helper; manual cleanup is expected
 - Dimension Checker overlay units are user-configurable (mm/cm/m/in/ft)
