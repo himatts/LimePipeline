@@ -15,6 +15,7 @@ from bpy.props import (
     CollectionProperty,
     IntProperty,
 )
+import re
 from pathlib import Path
 
 from ..core import validate_scene
@@ -25,6 +26,17 @@ CAT = "Lime Pipeline"
 
 
 _CAM_LIST_HANDLER = None
+_CAM_NAME_RE = re.compile(r"^SHOT_(\d{2,3})_CAMERA_(\d+)")
+
+
+def _camera_name_sort_key(name: str):
+    match = _CAM_NAME_RE.match(name or "")
+    if match:
+        try:
+            return (0, int(match.group(1)), int(match.group(2)), (name or "").lower())
+        except Exception:
+            pass
+    return (1, 999999, 999999, (name or "").lower())
 
 
 def _camera_has_rig(cam_obj) -> bool:
@@ -71,7 +83,14 @@ class LIME_PT_render_cameras(Panel):
             pass
         col.separator()
         col.operator("lime.duplicate_active_camera", text='', icon='DUPLICATE')
-        col.operator("lime.sync_camera_list", text='', icon='FILE_REFRESH')
+        move_up = col.operator("lime.move_camera_list_item", text='', icon='TRIA_UP')
+        move_up.direction = 'UP'
+        move_down = col.operator("lime.move_camera_list_item", text='', icon='TRIA_DOWN')
+        move_down.direction = 'DOWN'
+
+        actions = layout.row(align=True)
+        actions.operator("lime.rename_shot_cameras", text="Reorganize/Rename", icon='SORTALPHA')
+        actions.operator("lime.sync_camera_list", text="Refresh", icon='FILE_REFRESH')
 
         # -- Margins / Backgrounds section for selected camera --
         cam = getattr(scene, 'camera', None)
@@ -161,7 +180,14 @@ class LIME_UL_render_cameras(UIList):
         except Exception:
             pass
         split = layout.split(factor=0.85, align=True)
-        split.label(text=item.name, icon='CHECKMARK' if is_active else 'OUTLINER_DATA_CAMERA')
+        activate = split.operator(
+            "lime.set_active_camera",
+            text=item.name,
+            icon='CHECKMARK' if is_active else 'OUTLINER_DATA_CAMERA',
+            emboss=False,
+        )
+        activate.camera_name = item.name
+        activate.allow_ctrl_jump = True
         controls = split.row(align=True)
         controls.alignment = 'RIGHT'
         controls.scale_x = 0.9
@@ -260,7 +286,7 @@ def register_camera_list_props():
                 return
             items.clear()
             cams = _cams_in_scene(scene, prefer_active_shot=True)
-            cams.sort(key=lambda o: o.name)
+            cams.sort(key=lambda cam_obj: _camera_name_sort_key(getattr(cam_obj, "name", "") or ""))
             seen_names = set()
             for cam in cams:
                 name = getattr(cam, 'name', '') or ''

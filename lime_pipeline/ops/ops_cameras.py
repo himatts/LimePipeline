@@ -40,6 +40,58 @@ import re
 _CAM_NAME_RE = re.compile(r"^SHOT_(\d{2,3})_CAMERA_(\d+)")
 
 
+def _camera_name_sort_key(name: str):
+    match = _CAM_NAME_RE.match(name or "")
+    if match:
+        try:
+            return (0, int(match.group(1)), int(match.group(2)), (name or "").lower())
+        except Exception:
+            pass
+    return (1, 999999, 999999, (name or "").lower())
+
+
+def _next_camera_index_for_shot(cameras, shot_idx: int) -> int:
+    max_idx = 0
+    total = 0
+    for cam in cameras or []:
+        if getattr(cam, "type", None) != 'CAMERA':
+            continue
+        total += 1
+        name = getattr(cam, "name", "") or ""
+        match = _CAM_NAME_RE.match(name)
+        if not match:
+            continue
+        try:
+            cam_shot_idx = int(match.group(1))
+            cam_idx = int(match.group(2))
+        except Exception:
+            continue
+        if cam_shot_idx == shot_idx:
+            max_idx = max(max_idx, cam_idx)
+    if max_idx > 0:
+        return max_idx + 1
+    return total + 1
+
+
+def _ordered_cameras_from_ui(scene, cameras):
+    cams_by_name = {(getattr(cam, "name", "") or ""): cam for cam in cameras}
+    ordered = []
+    seen = set()
+    items = getattr(scene, "lime_render_cameras", None)
+    if items is not None:
+        for item in items:
+            name = getattr(item, "name", "") or ""
+            cam = cams_by_name.get(name)
+            if cam is None or name in seen:
+                continue
+            ordered.append(cam)
+            seen.add(name)
+    missing = [cam for cam in cameras if (getattr(cam, "name", "") or "") not in seen]
+    missing.sort(key=lambda cam_obj: _camera_name_sort_key(getattr(cam_obj, "name", "") or ""))
+    ordered.extend(missing)
+    return ordered
+
+
 def _apply_initial_rig_scale(rig_objects):
     """Apply initial scale of 0.1 to rig objects after creation."""
     try:
@@ -59,6 +111,18 @@ def _apply_initial_rig_scale(rig_objects):
             print("[LimePV] No suitable rig root found for scale application")
     except Exception as e:
         print(f"[LimePV] Could not apply initial rig scale: {e}")
+
+
+def _camera_has_armature_ancestor(cam_obj) -> bool:
+    cur = getattr(cam_obj, "parent", None)
+    while cur is not None:
+        try:
+            if getattr(cur, "type", None) == 'ARMATURE':
+                return True
+            cur = getattr(cur, "parent", None)
+        except Exception:
+            break
+    return False
 
 
 def _make_camera_data_independent(original_to_copy: dict):
@@ -118,16 +182,17 @@ def _make_camera_data_independent(original_to_copy: dict):
                             # En los rigs 3D, cuando el DOF se usa, suele ser el MCH del Aim.
                             new_data.dof.focus_subtarget = "MCH-Aim_shape_rotation"
 
-            # 4) Blindaje extra: asegurar que existe al menos un driver básico
-            if not (new_data.animation_data and new_data.animation_data.drivers):
-                # Crear un driver "lens" neutro, para que ui_panels.py no muera
-                try:
-                    fcu = new_data.driver_add("lens")
-                    fcu.driver.type = 'SCRIPTED'
-                    fcu.driver.expression = "lens"
-                    print(f"[LimePV] Creado driver básico para: {new_obj.name}")
-                except Exception as e:
-                    print(f"[LimePV] No se pudo crear driver básico para {new_obj.name}: {e}")
+            # 4) Fallback lens driver is only valid for rig cameras.
+            # Simple cameras should remain driver-free after duplication.
+            if _camera_has_armature_ancestor(new_obj):
+                if not (new_data.animation_data and new_data.animation_data.drivers):
+                    try:
+                        fcu = new_data.driver_add("lens")
+                        fcu.driver.type = 'SCRIPTED'
+                        fcu.driver.expression = "lens"
+                        print(f"[LimePV] Created fallback lens driver for rig camera: {new_obj.name}")
+                    except Exception as e:
+                        print(f"[LimePV] Could not create fallback lens driver for {new_obj.name}: {e}")
 
             print(f"[LimePV] Camera Data independiente y drivers retargeteados para: {new_obj.name}")
 
@@ -243,9 +308,16 @@ def _rename_parent_armature_for_camera(cam_obj, shot_idx_hint: int | None = None
 class LIME_OT_set_active_camera(Operator):
     bl_idname = "lime.set_active_camera"
     bl_label = "Set Active Camera"
+    bl_description = "Set active camera. Ctrl+Click in Cameras panel jumps to that camera's timeline marker frame"
     bl_options = {'REGISTER', 'UNDO'}
 
     camera_name: StringProperty(name="Camera Name", default="")
+    allow_ctrl_jump: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
+    jump_to_marker: bpy.props.BoolProperty(default=False, options={'HIDDEN', 'SKIP_SAVE'})
+
+    def invoke(self, context, event):
+        self.jump_to_marker = bool(self.allow_ctrl_jump and getattr(event, "ctrl", False))
+        return self.execute(context)
 
     def execute(self, context):
         name = (self.camera_name or "").strip()
@@ -253,8 +325,44 @@ class LIME_OT_set_active_camera(Operator):
         if cam is None or getattr(cam, "type", None) != 'CAMERA':
             self.report({'ERROR'}, f"Invalid camera: {name}")
             return {'CANCELLED'}
-        context.scene.camera = cam
-        self.report({'INFO'}, f"Active camera: {cam.name}")
+        scene = context.scene
+        scene.camera = cam
+        try:
+            items = getattr(scene, "lime_render_cameras", None)
+            if items is not None:
+                for i, item in enumerate(items):
+                    if (getattr(item, "name", "") or "") == cam.name:
+                        scene.lime_render_cameras_index = i
+                        break
+        except Exception:
+            pass
+
+        jumped = False
+        target_frame = None
+        if self.jump_to_marker:
+            markers = []
+            try:
+                markers = [
+                    marker for marker in list(getattr(scene, "timeline_markers", []) or [])
+                    if getattr(marker, "camera", None) is cam
+                ]
+            except Exception:
+                markers = []
+            if markers:
+                try:
+                    markers.sort(key=lambda marker: int(getattr(marker, "frame", 0)))
+                    target_frame = int(getattr(markers[0], "frame", 0))
+                    scene.frame_set(target_frame)
+                    jumped = True
+                except Exception:
+                    jumped = False
+
+        if jumped and target_frame is not None:
+            self.report({'INFO'}, f"Active camera: {cam.name}. Jumped to marker frame {target_frame}")
+        elif self.jump_to_marker:
+            self.report({'WARNING'}, f"Active camera: {cam.name}. No marker assigned to this camera")
+        else:
+            self.report({'INFO'}, f"Active camera: {cam.name}")
         return {'FINISHED'}
 
 
@@ -288,6 +396,19 @@ class LIME_OT_duplicate_active_camera(Operator):
         if cam is None:
             self.report({'ERROR'}, "No active camera in the scene")
             return {'CANCELLED'}
+
+        shot = None
+        cam_coll = None
+        shot_idx = 0
+        try:
+            shot = validate_scene.active_shot_context(context)
+            if shot is not None:
+                cam_coll = validate_scene.get_shot_child_by_basename(shot, C_CAM)
+                shot_idx = validate_scene.parse_shot_index(shot.name) or 0
+        except Exception:
+            shot = None
+            cam_coll = None
+            shot_idx = 0
 
         try:
             # Find rig root (top-most parent); if none, duplicate only the camera
@@ -462,59 +583,49 @@ class LIME_OT_duplicate_active_camera(Operator):
                     except Exception:
                         pass
 
+            duplicated_cams = []
+            for original_obj, new_obj in original_to_copy.items():
+                if getattr(original_obj, 'type', None) == 'CAMERA':
+                    duplicated_cams.append(new_obj)
+
+            # Keep duplicated camera naming deterministic: always append to the end.
+            try:
+                if cam_coll is not None and shot_idx > 0 and duplicated_cams:
+                    cams_in_shot = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
+                    next_idx = _next_camera_index_for_shot(cams_in_shot, shot_idx)
+                    duplicated_cams.sort(key=lambda cam_obj: (getattr(cam_obj, "name", "") or "").lower())
+
+                    for dup_cam in duplicated_cams:
+                        target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
+                        while target_name in bpy.data.objects.keys() and bpy.data.objects[target_name] is not dup_cam:
+                            next_idx += 1
+                            target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
+
+                        dup_cam.name = target_name
+                        if getattr(dup_cam, "data", None) is not None:
+                            try:
+                                dup_cam.data.name = target_name + ".Data"
+                            except Exception:
+                                pass
+                        try:
+                            _rename_parent_armature_for_camera(dup_cam, shot_idx_hint=shot_idx, cam_idx_hint=next_idx)
+                        except Exception:
+                            pass
+                        next_idx += 1
+            except Exception as ex:
+                print(f"[LimePV] Post-duplicate append naming failed: {ex}")
+
+            if duplicated_cams:
+                try:
+                    scene.camera = duplicated_cams[0]
+                except Exception:
+                    pass
+
             # Report
-            if root is cam and len(original_to_copy) == 1:
-                self.report({'INFO'}, f"Duplicated camera: {original_to_copy[cam].name}")
+            if root is cam and len(original_to_copy) == 1 and duplicated_cams:
+                self.report({'INFO'}, f"Duplicated camera: {duplicated_cams[0].name}")
             else:
                 self.report({'INFO'}, f"Duplicated camera rig with {len(original_to_copy)} objects")
-
-            # Ensure proper naming after duplication
-            try:
-                # Find the duplicated camera
-                duplicated_cam = None
-                for original_obj, new_obj in original_to_copy.items():
-                    if getattr(original_obj, 'type', None) == 'CAMERA':
-                        duplicated_cam = new_obj
-                        break
-
-                if duplicated_cam is not None:
-                    # Check if renaming is needed - improved logic to detect numeric suffixes
-                    shot = validate_scene.active_shot_context(context)
-                    if shot is not None:
-                        try:
-                            shot_idx = validate_scene.parse_shot_index(shot.name) or 0
-                            current_name = getattr(duplicated_cam, 'name', '')
-
-                            # Check if name follows pattern but has numeric suffix (indicating duplication)
-                            import re
-                            pattern = f"SHOT_{shot_idx:02d}_CAMERA_"
-                            if current_name.startswith(pattern):
-                                # Extract the number part after "CAMERA_"
-                                after_pattern = current_name[len(pattern):]
-                                if after_pattern and (after_pattern != "1" or ".001" in current_name):
-                                    print(f"[LimePV] Camera {current_name} needs renaming (has numeric suffix or wrong number)")
-                                    needs_rename = True
-                                else:
-                                    print(f"[LimePV] Camera {current_name} follows correct pattern without suffix")
-                                    needs_rename = False
-                            else:
-                                print(f"[LimePV] Camera {current_name} needs renaming (doesn't follow pattern)")
-                                needs_rename = True
-
-                            if needs_rename:
-                                # Execute rename operation specifically
-                                try:
-                                    result = bpy.ops.lime.rename_shot_cameras('EXEC_DEFAULT')
-                                    if result == {'FINISHED'}:
-                                        print("[LimePV] Camera renaming completed successfully")
-                                    else:
-                                        print(f"[LimePV] Camera renaming failed or was cancelled: {result}")
-                                except Exception as e:
-                                    print(f"[LimePV] Error during camera renaming: {e}")
-                        except Exception as e:
-                            print(f"[LimePV] Error checking camera naming: {e}")
-            except Exception as e:
-                print(f"[LimePV] Error in post-duplication naming check: {e}")
 
             # Note: Camera list will be updated automatically by the handler
             # No need to call sync_camera_list() manually to avoid conflicts
@@ -531,6 +642,7 @@ __all__ = [
     "LIME_OT_rename_shot_cameras",
     "LIME_OT_delete_camera_rig",
     "LIME_OT_pose_camera_rig",
+    "LIME_OT_move_camera_list_item",
     "LIME_OT_sync_camera_list",
     "LIME_OT_delete_camera_rig_and_sync",
     "LIME_OT_reset_margin_alpha",
@@ -542,8 +654,8 @@ __all__ = [
 
 class LIME_OT_rename_shot_cameras(Operator):
     bl_idname = "lime.rename_shot_cameras"
-    bl_label = "Rename Cameras"
-    bl_description = "Renames cameras in the active SHOT's camera collection to keep sequential order"
+    bl_label = "Reorganize Camera Names"
+    bl_description = "Rename cameras in the active SHOT using the current camera list order"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -568,17 +680,14 @@ class LIME_OT_rename_shot_cameras(Operator):
             self.report({'ERROR'}, "Active SHOT has no camera collection")
             return {'CANCELLED'}
 
+        scene = context.scene
         # Gather cameras in the SHOT camera collection
         cameras = [obj for obj in cam_coll.objects if getattr(obj, "type", None) == 'CAMERA']
         if not cameras:
             self.report({'WARNING'}, "No cameras found in SHOT camera collection")
             return {'CANCELLED'}
 
-        # Stable ordering based on name; fallback to id if needed
-        try:
-            cameras.sort(key=lambda o: o.name)
-        except Exception:
-            pass
+        cameras = _ordered_cameras_from_ui(scene, cameras)
 
         # Determine shot numeric index for naming
         try:
@@ -586,8 +695,7 @@ class LIME_OT_rename_shot_cameras(Operator):
         except Exception:
             shot_idx = 0
 
-        # First pass: move all to unique temporary names to avoid collisions
-        temp_names = {}
+        # First pass: move all to unique temporary names to avoid collisions.
         for cam in cameras:
             base_tmp = f"__TMP_RENAME__{cam.name}"
             tmp = base_tmp
@@ -602,9 +710,8 @@ class LIME_OT_rename_shot_cameras(Operator):
                         cam.data.name = tmp + ".Data"
                     except Exception:
                         pass
-                temp_names[cam] = tmp
             except Exception:
-                temp_names[cam] = cam.name
+                pass
 
         # Second pass: assign target sequential names
         renamed = 0
@@ -634,7 +741,12 @@ class LIME_OT_rename_shot_cameras(Operator):
             except Exception:
                 pass
 
-        self.report({'INFO'}, f"Renamed {renamed} cameras in {shot.name}")
+        try:
+            bpy.ops.lime.sync_camera_list('EXEC_DEFAULT')
+        except Exception:
+            pass
+
+        self.report({'INFO'}, f"Reorganized and renamed {renamed} cameras in {shot.name}")
         return {'FINISHED'}
 
 
@@ -842,10 +954,61 @@ class LIME_OT_pose_camera_rig(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_move_camera_list_item(Operator):
+    bl_idname = "lime.move_camera_list_item"
+    bl_label = "Move Camera In List"
+    bl_description = "Move the selected camera up or down in the panel list"
+    bl_options = {'REGISTER'}
+
+    direction: EnumProperty(
+        name="Direction",
+        items=(
+            ('UP', "Up", "Move up"),
+            ('DOWN', "Down", "Move down"),
+        ),
+        default='UP',
+    )
+
+    @classmethod
+    def poll(cls, ctx):
+        scene = getattr(ctx, "scene", None)
+        if scene is None:
+            return False
+        items = getattr(scene, "lime_render_cameras", None)
+        idx = getattr(scene, "lime_render_cameras_index", -1)
+        return items is not None and len(items) > 1 and 0 <= idx < len(items)
+
+    def execute(self, context):
+        scene = context.scene
+        items = getattr(scene, "lime_render_cameras", None)
+        idx = getattr(scene, "lime_render_cameras_index", -1)
+        if items is None or not (0 <= idx < len(items)):
+            self.report({'WARNING'}, "No camera selected")
+            return {'CANCELLED'}
+
+        if self.direction == 'UP':
+            if idx <= 0:
+                return {'CANCELLED'}
+            new_idx = idx - 1
+        else:
+            if idx >= len(items) - 1:
+                return {'CANCELLED'}
+            new_idx = idx + 1
+
+        try:
+            items.move(idx, new_idx)
+            scene.lime_render_cameras_index = new_idx
+        except Exception as ex:
+            self.report({'ERROR'}, f"Could not move camera entry: {ex}")
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+
 class LIME_OT_sync_camera_list(Operator):
     bl_idname = 'lime.sync_camera_list'
     bl_label = 'Refresh Cameras'
-    bl_description = 'Refresh the camera list from the current .blend'
+    bl_description = 'Refresh the camera list from the current .blend without renaming'
     bl_options = {'REGISTER'}
 
     def execute(self, context):
@@ -856,7 +1019,6 @@ class LIME_OT_sync_camera_list(Operator):
             return {'CANCELLED'}
         try:
             items.clear()
-            rename_message = 'refresh only'
             shot = None
             cam_coll = None
             try:
@@ -869,50 +1031,15 @@ class LIME_OT_sync_camera_list(Operator):
                 except Exception:
                     cam_coll = None
 
-            cams_in_shot = []
-            shot_idx = 0
             if cam_coll is not None:
-                try:
-                    cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
-                except Exception:
-                    cams_in_shot = []
-                try:
-                    shot_idx = validate_scene.parse_shot_index(shot.name) or 0
-                except Exception:
-                    shot_idx = 0
-
-            if cams_in_shot:
-                # Only rename if we actually need to (avoid unnecessary renaming)
-                cam_names = [cam.name for cam in cams_in_shot]
-                expected_pattern = f"SHOT_{shot_idx:02d}_CAMERA_"
-                needs_rename = any(not name.startswith(expected_pattern) for name in cam_names)
-
-                if needs_rename:
-                    try:
-                        result = bpy.ops.lime.rename_shot_cameras('EXEC_DEFAULT')
-                    except Exception:
-                        rename_message = 'refresh (rename failed)'
-                    else:
-                        if result == {'FINISHED'}:
-                            rename_message = 'combined rename+refresh'
-                            try:
-                                cams_in_shot = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
-                            except Exception:
-                                cams_in_shot = []
-                        else:
-                            rename_message = 'refresh (rename cancelled)'
-                else:
-                    rename_message = 'refresh (no rename needed)'
-
-            if cam_coll is not None:
-                cams = cams_in_shot
+                cams = [o for o in cam_coll.objects if getattr(o, 'type', None) == 'CAMERA']
             else:
                 try:
                     cams = [o for o in scene.objects if getattr(o, 'type', None) == 'CAMERA']
                 except Exception:
                     cams = []
 
-            cams.sort(key=lambda o: o.name)
+            cams.sort(key=lambda cam_obj: _camera_name_sort_key(getattr(cam_obj, "name", "") or ""))
             seen_names = set()
             for cam in cams:
                 name = getattr(cam, 'name', '') or ''
@@ -933,8 +1060,11 @@ class LIME_OT_sync_camera_list(Operator):
         except Exception:
             self.report({'WARNING'}, 'Could not refresh camera list')
             return {'CANCELLED'}
-        self.report({'INFO'}, f"Camera list {rename_message}: {len(items)} items")
-        return {'FINISHED'}## Removed: LIME_OT_add_camera_rig_and_sync (merged into LIME_OT_add_camera_rig)
+        self.report({'INFO'}, f"Camera list refreshed: {len(items)} items")
+        return {'FINISHED'}
+
+
+# Removed: LIME_OT_add_camera_rig_and_sync (merged into LIME_OT_add_camera_rig)
 
 
 class LIME_OT_delete_camera_rig_and_sync(Operator):
@@ -1084,6 +1214,7 @@ class LIME_OT_add_simple_camera(Operator):
             cams_before = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
             existing_cam_count = len(cams_before)
         except Exception:
+            cams_before = []
             existing_cam_count = 0
 
         try:
@@ -1126,7 +1257,7 @@ class LIME_OT_add_simple_camera(Operator):
 
         # Apply Lime naming and uniqueness.
         try:
-            next_idx = existing_cam_count + 1
+            next_idx = _next_camera_index_for_shot(cams_before, shot_idx)
             target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"
             while target_name in bpy.data.objects.keys() and bpy.data.objects[target_name] is not new_cam:
                 next_idx += 1
@@ -1185,6 +1316,7 @@ class LIME_OT_add_camera_rig(Operator):
             existing_cam_count = len(cams_before)
             before_cam_names = set(o.name for o in cams_before)
         except Exception:
+            cams_before = []
             existing_cam_count = 0
             before_cam_names = set()
         print(f"[LimePV] AddCameraRig: shot={shot.name}, existing_cam_count={existing_cam_count}, before_cam_names={sorted(list(before_cam_names))}")
@@ -1299,7 +1431,7 @@ class LIME_OT_add_camera_rig(Operator):
                 print("[LimePV] No new camera objects detected; aborting rename")
             else:
                 new_cams.sort(key=lambda o: o.name)
-                next_idx = existing_cam_count + 1
+                next_idx = _next_camera_index_for_shot(cams_before, shot_idx)
                 for cam in new_cams:
                     try:
                         target_name = f"SHOT_{shot_idx:02d}_CAMERA_{next_idx}"

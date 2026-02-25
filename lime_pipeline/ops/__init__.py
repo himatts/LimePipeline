@@ -59,6 +59,12 @@ from .ops_texture_adopt import (
 from .ops_texture_manifest_cleanup import (
     LIME_OT_texture_manifest_cleanup,
 )
+from .ops_cameras import (
+    LIME_OT_duplicate_active_camera,
+    LIME_OT_rename_shot_cameras,
+    LIME_OT_move_camera_list_item,
+    LIME_OT_sync_camera_list,
+)
 from .ops_ai_textures_organizer import (
     LIME_OT_texture_analyze,
     LIME_OT_texture_refine,
@@ -89,6 +95,10 @@ __all__ = [
     "LIME_OT_texture_scan_report",
     "LIME_OT_texture_adopt",
     "LIME_OT_texture_manifest_cleanup",
+    "LIME_OT_duplicate_active_camera",
+    "LIME_OT_rename_shot_cameras",
+    "LIME_OT_move_camera_list_item",
+    "LIME_OT_sync_camera_list",
     "LIME_OT_texture_analyze",
     "LIME_OT_texture_refine",
     "LIME_OT_texture_apply",
