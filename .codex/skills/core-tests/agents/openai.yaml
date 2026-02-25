@@ -1,0 +1,3 @@
+interface:
+  display_name: "Core Tests"
+  short_description: "Run Blender-agnostic unit tests for core rules"

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Blender API Research"
+  short_description: "Research Blender 4.5 API before implementing bpy features"

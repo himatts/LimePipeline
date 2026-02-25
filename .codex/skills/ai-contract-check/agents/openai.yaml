@@ -1,0 +1,3 @@
+interface:
+  display_name: "AI Contract Check"
+  short_description: "Validate AI schema, fallback, and safe apply behavior"

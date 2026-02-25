@@ -1,0 +1,3 @@
+interface:
+  display_name: "Registration Audit"
+  short_description: "Verify ops/ui exports and addon registration wiring"

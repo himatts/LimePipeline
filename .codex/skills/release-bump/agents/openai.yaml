@@ -1,0 +1,3 @@
+interface:
+  display_name: "Release Bump"
+  short_description: "Update version, changelog, and release QA checklist"

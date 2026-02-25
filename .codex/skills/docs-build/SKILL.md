@@ -1,20 +1,19 @@
 ---
 name: docs-build
-description: Build and verify the MkDocs documentation
+description: Build and verify Lime Pipeline MkDocs output. Use when editing docs/, README.md, ARCHITECTURE.md, CONTRIBUTING.md, or mkdocs.yml, and before PRs or releases with user-facing documentation changes.
 ---
 
-## When to use
-Use before publishing docs or after changing guides/architecture files.
-
 ## Inputs
-- Poetry environment with docs extras available
+- Poetry environment available.
+- Docs dependencies enabled (`poetry install --with docs`).
 
 ## Steps
-1) Install docs dependencies: `poetry install --with docs`.
+1) Install docs dependencies if needed: `poetry install --with docs`.
 2) Build docs: `poetry run mkdocs build`.
-3) (Optional) Preview locally: `poetry run mkdocs serve`.
-4) If navigation or new pages were added, ensure links from `mkdocs.yml` resolve and include any new images/assets.
+3) Optional local preview: `poetry run mkdocs serve`.
+4) If navigation changed, verify `mkdocs.yml` includes new pages and assets.
+5) Record warnings or broken links in the PR notes.
 
 ## Outputs
-- Successful MkDocs build (site/ directory)
-- Notes on any broken links or warnings
+- Successful MkDocs build (`site/`).
+- List of warnings/fixes if any.

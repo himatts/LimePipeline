@@ -1,0 +1,3 @@
+interface:
+  display_name: "UI Performance Checklist"
+  short_description: "Audit Blender panel draw performance and separation"

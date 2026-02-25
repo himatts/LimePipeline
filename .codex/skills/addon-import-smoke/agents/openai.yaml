@@ -1,0 +1,3 @@
+interface:
+  display_name: "Addon Import Smoke"
+  short_description: "Run import and compile smoke checks outside Blender"
