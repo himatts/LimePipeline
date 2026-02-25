@@ -179,6 +179,169 @@ def get_localize_linked_summary(context):
     }
 
 
+def _material_resync_skip_reason(obj):
+    """Return skip reason for material resync, or None when object is eligible."""
+    if obj is None:
+        return "invalid"
+
+    if getattr(obj, "type", None) != "MESH":
+        return "not_mesh"
+
+    if getattr(obj, "library", None) is not None:
+        return "linked_object"
+
+    mesh_data = getattr(obj, "data", None)
+    if mesh_data is None:
+        return "no_mesh_data"
+
+    if not _is_linked_or_override(mesh_data):
+        return "mesh_data_not_external"
+
+    return None
+
+
+def _collect_material_resync_targets_from_selection(context):
+    """Collect selected object targets and classify them for material resync."""
+    selected_objects = list(getattr(context, "selected_objects", []) or [])
+    seen_ids = set()
+    deduped_selection = []
+    for obj in selected_objects:
+        obj_id = id(obj)
+        if obj_id in seen_ids:
+            continue
+        seen_ids.add(obj_id)
+        deduped_selection.append(obj)
+
+    eligible_objects = []
+    skipped_by_reason = {}
+
+    for obj in deduped_selection:
+        reason = _material_resync_skip_reason(obj)
+        if reason is None:
+            eligible_objects.append(obj)
+            continue
+        skipped_by_reason[reason] = skipped_by_reason.get(reason, 0) + 1
+
+    return deduped_selection, eligible_objects, skipped_by_reason
+
+
+def _label_for_resync_skip_reason(reason):
+    """Return user-facing label for a material resync skip reason."""
+    labels = {
+        "invalid": "Invalid object",
+        "not_mesh": "Not a MESH object",
+        "linked_object": "Object itself is linked and not editable",
+        "no_mesh_data": "Missing mesh data",
+        "mesh_data_not_external": "Mesh data is local (not linked/override)",
+    }
+    return labels.get(reason, reason)
+
+
+def _library_from_id_block(id_block):
+    """Resolve source Library from linked/override ID block when possible."""
+    if id_block is None:
+        return None
+
+    direct_library = getattr(id_block, "library", None)
+    if direct_library is not None:
+        return direct_library
+
+    override_library = getattr(id_block, "override_library", None)
+    if override_library is None:
+        return None
+
+    reference = getattr(override_library, "reference", None)
+    if reference is None:
+        return None
+
+    return getattr(reference, "library", None)
+
+
+def _collect_libraries_for_material_resync(objects):
+    """Collect unique source libraries used by mesh data/material references."""
+    libraries = set()
+
+    for obj in objects:
+        mesh_data = getattr(obj, "data", None)
+        mesh_library = _library_from_id_block(mesh_data)
+        if mesh_library is not None:
+            libraries.add(mesh_library)
+
+        for mat in list(getattr(mesh_data, "materials", []) or []):
+            mat_library = _library_from_id_block(mat)
+            if mat_library is not None:
+                libraries.add(mat_library)
+
+        for slot in list(getattr(obj, "material_slots", []) or []):
+            mat = getattr(slot, "material", None)
+            mat_library = _library_from_id_block(mat)
+            if mat_library is not None:
+                libraries.add(mat_library)
+
+    return sorted(libraries, key=lambda lib: (getattr(lib, "filepath", "") or "", getattr(lib, "name", "") or ""))
+
+
+def _reload_libraries(libraries):
+    """Reload libraries and return success/failure diagnostics."""
+    reloaded = 0
+    failed = {}
+
+    for lib in libraries:
+        try:
+            lib.reload()
+            reloaded += 1
+        except Exception as ex:
+            lib_name = getattr(lib, "name", None) or getattr(lib, "filepath", None) or "<unknown>"
+            failed[lib_name] = str(ex)
+
+    return reloaded, failed
+
+
+def _sync_object_material_slots_from_mesh_data(obj):
+    """Copy mesh DATA material references into OBJECT-level material slots."""
+    synced_slots = 0
+    slot_errors = 0
+
+    material_slots = getattr(obj, "material_slots", None)
+    if material_slots is None:
+        return synced_slots, slot_errors
+
+    mesh_data = getattr(obj, "data", None)
+    mesh_materials = list(getattr(mesh_data, "materials", []) or [])
+
+    for idx, slot in enumerate(material_slots):
+        target_material = mesh_materials[idx] if idx < len(mesh_materials) else None
+        try:
+            slot.link = 'OBJECT'
+            slot.material = target_material
+            synced_slots += 1
+        except Exception:
+            slot_errors += 1
+
+    return synced_slots, slot_errors
+
+
+def get_material_resync_summary(context):
+    """Return UI-friendly diagnostics for OBJECT-level material resync."""
+    selected, eligible, skipped_by_reason = _collect_material_resync_targets_from_selection(context)
+
+    unavailable_reason = ""
+    if not eligible:
+        unavailable_reason = (
+            "Select editable MESH objects with linked/override mesh data "
+            "to resync OBJECT-level material slots"
+        )
+
+    return {
+        "available": bool(eligible),
+        "selection_count": len(selected),
+        "eligible_count": len(eligible),
+        "skipped_count": max(0, len(selected) - len(eligible)),
+        "skipped_by_reason": skipped_by_reason,
+        "unavailable_reason": unavailable_reason,
+    }
+
+
 def _is_external_collection_instance_object(obj):
     """Return True for EMPTY objects instancing a linked/override collection."""
     if obj is None or getattr(obj, "type", None) != "EMPTY":
@@ -474,7 +637,101 @@ class LIME_OT_localize_linked_collection(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_resync_object_materials_from_data(Operator):
+    bl_idname = "lime.resync_object_materials_from_data"
+    bl_label = "Resync Object Materials"
+    bl_description = (
+        "Reload linked libraries used by selected objects and copy mesh DATA materials "
+        "into OBJECT-level material slots"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        """Require at least one eligible selected object."""
+        _selected, eligible, _skipped = _collect_material_resync_targets_from_selection(context)
+        return bool(eligible)
+
+    def invoke(self, context, event):
+        """Ask confirmation for large material resync operations."""
+        _selected, eligible, _skipped = _collect_material_resync_targets_from_selection(context)
+        if len(eligible) >= LARGE_OPERATION_CONFIRM_THRESHOLD:
+            return context.window_manager.invoke_confirm(self, event)
+        return self.execute(context)
+
+    def execute(self, context):
+        """Resync selected OBJECT-level slots from linked mesh DATA materials."""
+        selected, eligible, skipped_by_reason = _collect_material_resync_targets_from_selection(context)
+        selected_count = len(selected)
+        eligible_count = len(eligible)
+        skipped_count = max(0, selected_count - eligible_count)
+
+        if eligible_count == 0:
+            self.report(
+                {'WARNING'},
+                "No eligible selected objects. Select editable MESH objects with linked/override mesh data.",
+            )
+            return {'CANCELLED'}
+
+        libraries = _collect_libraries_for_material_resync(eligible)
+        libraries_reloaded, reload_failures = _reload_libraries(libraries)
+
+        objects_synced = 0
+        slots_synced = 0
+        slot_errors_total = 0
+        object_errors = {}
+
+        for obj in eligible:
+            try:
+                synced_slots, slot_errors = _sync_object_material_slots_from_mesh_data(obj)
+                objects_synced += 1
+                slots_synced += synced_slots
+                slot_errors_total += slot_errors
+            except Exception as ex:
+                object_name = getattr(obj, "name", None) or "<unnamed>"
+                object_errors[object_name] = str(ex)
+
+        if reload_failures:
+            failed_names = ", ".join(sorted(reload_failures.keys())[:3])
+            suffix = "..." if len(reload_failures) > 3 else ""
+            self.report(
+                {'WARNING'},
+                f"{len(reload_failures)} library reload(s) failed: {failed_names}{suffix}",
+            )
+
+        summary_parts = [
+            f"selected: {selected_count}",
+            f"eligible: {eligible_count}",
+            f"synced objects: {objects_synced}",
+            f"synced slots: {slots_synced}",
+            f"libraries reloaded: {libraries_reloaded}/{len(libraries)}",
+        ]
+        if skipped_count > 0:
+            summary_parts.append(f"skipped: {skipped_count}")
+        if slot_errors_total > 0:
+            summary_parts.append(f"slot errors: {slot_errors_total}")
+        if object_errors:
+            summary_parts.append(f"object errors: {len(object_errors)}")
+
+        self.report({'INFO'}, ", ".join(summary_parts))
+
+        if skipped_by_reason:
+            reason_parts = []
+            for reason, count in sorted(skipped_by_reason.items(), key=lambda item: item[0]):
+                reason_parts.append(f"{_label_for_resync_skip_reason(reason)} ({count})")
+            self.report({'INFO'}, f"Skipped detail: {', '.join(reason_parts)}")
+
+        if object_errors:
+            object_names = ", ".join(sorted(object_errors.keys())[:3])
+            suffix = "..." if len(object_errors) > 3 else ""
+            self.report({'WARNING'}, f"Object sync failures: {object_names}{suffix}")
+
+        return {'FINISHED'}
+
+
 __all__ = [
     "LIME_OT_localize_linked_collection",
+    "LIME_OT_resync_object_materials_from_data",
     "get_localize_linked_summary",
+    "get_material_resync_summary",
 ]

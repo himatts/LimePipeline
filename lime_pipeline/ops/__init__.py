@@ -36,6 +36,10 @@ from .ops_view_layers import (
 from .ops_comp_view_layer_outputs import (
     LIME_OT_setup_view_layer_outputs,
 )
+from .ops_linked_collections import (
+    LIME_OT_localize_linked_collection,
+    LIME_OT_resync_object_materials_from_data,
+)
 from .ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
@@ -80,6 +84,8 @@ __all__ = [
     "LIME_OT_stage_create_next_scene_file",
     "LIME_OT_create_view_layers",
     "LIME_OT_setup_view_layer_outputs",
+    "LIME_OT_localize_linked_collection",
+    "LIME_OT_resync_object_materials_from_data",
     "LIME_TB_OT_ai_asset_test_connection",
     "LIME_TB_OT_ai_asset_suggest_names",
     "LIME_TB_OT_ai_asset_apply_names",

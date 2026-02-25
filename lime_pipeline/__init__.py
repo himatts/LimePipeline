@@ -20,7 +20,7 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 8, 0),  # Introduce standalone AI Textures Organizer staged workflow
+    "version": (0, 8, 1),  # Add resync operator for OBJECT-level material slots on linked meshes
     "blender": (4, 5, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
@@ -231,6 +231,7 @@ from .ops.ops_comp_view_layer_outputs import (
 )
 from .ops.ops_linked_collections import (
     LIME_OT_localize_linked_collection,
+    LIME_OT_resync_object_materials_from_data,
 )
 from .ops.ops_texture_scan import (
     LIME_OT_texture_scan_report,
@@ -336,6 +337,7 @@ NON_PANEL_CLASSES = (
     LIME_OT_create_view_layers,
     LIME_OT_setup_view_layer_outputs,
     LIME_OT_localize_linked_collection,
+    LIME_OT_resync_object_materials_from_data,
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
     LIME_TB_OT_ai_asset_apply_names,

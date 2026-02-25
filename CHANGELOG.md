@@ -2,6 +2,7 @@
 
 ## [Unreleased] - 2025-09-30
 ### Added
+- 3D Model Organizer: added `Resync Object Materials` (`lime.resync_object_materials_from_data`) to reload used linked libraries and copy mesh DATA materials back into OBJECT-level slots for selected editable meshes.
 - AI Render Converter panel for storyboard sketch conversion (Krea + OpenRouter), with manifested outputs.
 - AI Asset Organizer panel to suggest names for selected objects and their materials (OpenRouter).
 - AI Asset Organizer: optional image context for multimodal models.
@@ -22,6 +23,9 @@
 - Removed the AI Material Renamer panel from Lime Toolbox.
 - Removed legacy `lime_tb.ai_*` Material Renamer compatibility operators.
 - AI Asset Organizer is now the only recommended workflow for AI material renaming.
+- Camera Manager: duplicating the active camera now always assigns the next camera index at the end of the SHOT sequence.
+- Camera Manager: refresh (`lime.sync_camera_list`) no longer auto-renames cameras; renaming/renumbering is now explicit via `lime.rename_shot_cameras`.
+- Camera Manager: added manual list reordering support via `lime.move_camera_list_item` (up/down controls in the Cameras panel).
 - AI Render Converter now uses thumbnail grids per section, includes large Image Editor previews, syncs Source Render selections to frames, and deduplicates style imports.
 - AI Render Converter adds deletion controls for selected images and batch cleanup with double confirmation.
 - AI Render Converter adds output folder access and batch manifest cleanup.

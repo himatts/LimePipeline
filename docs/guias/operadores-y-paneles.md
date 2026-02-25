@@ -46,9 +46,14 @@ Esta gu�a documenta todos los operadores y paneles disponibles en Lime Pipelin
 | Operador | ID | Archivo | Prop�sito |
 |----------|----|---------|-----------|
 | **Add Camera Rig** | `lime.add_camera_rig` | `ops_cameras.py` | Crear rig de c�mara con m�rgenes |
+| **Duplicate Camera** | `lime.duplicate_active_camera` | `ops_cameras.py` | Duplicar c�mara/rig activo y asignar nuevo �ndice al final |
+| **Reorganize Camera Names** | `lime.rename_shot_cameras` | `ops_cameras.py` | Renombrar c�maras seg�n el orden actual de la lista en el panel |
+| **Move Camera List Item** | `lime.move_camera_list_item` | `ops_cameras.py` | Subir o bajar la c�mara seleccionada en la lista del panel |
 | **Set Active Camera** | `lime.set_active_camera` | `ops_cameras.py` | Establecer c�mara activa |
 | **Auto Camera Background** | `lime.auto_camera_background` | `ops_auto_camera_bg.py` | Generar background autom�tico |
-| **Sync Camera List** | `lime.sync_camera_list` | `ops_cameras.py` | Sincronizar lista de c�maras |
+| **Sync Camera List** | `lime.sync_camera_list` | `ops_cameras.py` | Refrescar lista sin renombrar autom�ticamente |
+
+Nota de uso (solo panel Cameras): `Ctrl+Click` sobre el nombre de una c�mara en la lista activa la c�mara y, si tiene marcador de timeline asignado, salta al frame de ese marcador.
 
 ### Materiales e IA
 | Operador | ID | Archivo | Prop�sito |
@@ -64,7 +69,7 @@ Esta gu�a documenta todos los operadores y paneles disponibles en Lime Pipelin
 | **Move Controller** | `lime.move_controller` | `ops_model_organizer.py` | Mover controlador de grupo |
 | **Apply Scene Deltas** | `lime.apply_scene_deltas` | `ops_model_organizer.py` | Aplicar deltas de transformaci�n solo sobre la selecci�n |
 | **Colorize Parent Groups** | `lime.colorize_parent_groups` | `ops_model_organizer.py` | Colorear grupos padre |
-
+| **Resync Object Materials** | `lime.resync_object_materials_from_data` | `ops_linked_collections.py` | Recargar librerias usadas y resincronizar materiales DATA->OBJECT en seleccion elegible |
 ### Render y Presets
 | Operador | ID | Archivo | Prop�sito |
 |----------|----|---------|-----------|

@@ -12,7 +12,10 @@ import bpy
 from bpy.types import Panel
 
 from ..ops.ops_model_organizer import objects_with_location_offset
-from ..ops.ops_linked_collections import get_localize_linked_summary
+from ..ops.ops_linked_collections import (
+    get_localize_linked_summary,
+    get_material_resync_summary,
+)
 
 
 CAT = "Lime Toolbox"
@@ -111,6 +114,30 @@ class LIME_PT_model_organizer(Panel):
         action_row = box_linked.row()
         action_row.enabled = is_available
         action_row.operator("lime.localize_linked_collection", text="Localize Linked Data", icon='LIBRARY_DATA_DIRECT')
+
+        resync_summary = get_material_resync_summary(ctx)
+        resync_row = box_linked.row()
+        resync_available = bool(resync_summary.get("available", False))
+        resync_selection = int(resync_summary.get("selection_count", 0))
+        resync_eligible = int(resync_summary.get("eligible_count", 0))
+        resync_row.alert = resync_selection > 0 and not resync_available
+        if resync_selection == 0:
+            resync_row.label(text="Resync: select objects to evaluate", icon='INFO')
+        elif resync_available:
+            resync_row.label(
+                text=f"Resync eligible: {resync_eligible}/{resync_selection} selected",
+                icon='CHECKMARK',
+            )
+        else:
+            resync_row.label(text="Resync unavailable for current selection", icon='ERROR')
+
+        resync_action_row = box_linked.row()
+        resync_action_row.enabled = resync_available
+        resync_action_row.operator(
+            "lime.resync_object_materials_from_data",
+            text="Resync Object Materials",
+            icon='FILE_REFRESH',
+        )
 
 
 __all__ = [

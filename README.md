@@ -34,6 +34,7 @@ Estandarizar el trabajo para reducir fricci�n y errores humanos: archivos mal 
 - El panel de Cameras permite agregar Camera Rigs o Simple Cameras dentro del SHOT activo.
 - El panel 3D Model Organizer (Lime Toolbox) incluye acciones de Linked Collections (prioriza objetos seleccionados; si no hay candidatos, usa la colección activa de forma recursiva para convertir linked/override a local preservando jerarquías y manteniendo mallas linkeadas).
 - La sección Linked Data Localization muestra diagnóstico previo (scope, candidatos y estimaciones) y pide confirmación automática en operaciones grandes.
+- La sección Linked Data Localization agrega **Resync Object Materials** para recargar librerías usadas por la selección y volver a sincronizar materiales desde DATA hacia slots en OBJECT (manteniendo edición por instancia).
 - En 3D Model Organizer, **Apply Deltas** y el aviso de offsets de locaci�n operan solo sobre objetos seleccionados.
 
 ## Requisitos
