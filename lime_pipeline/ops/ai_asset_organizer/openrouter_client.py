@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from ...core.ai_asset_prompt import schema_assets, schema_json_object
-from ...core.ai_asset_response import parse_items_from_response as parse_ai_asset_items
+from ...core.ai_asset_response import parse_items_from_response_strict as parse_ai_asset_items_strict
 from ..ai_http import (
     OPENROUTER_CHAT_URL,
     extract_message_content,
@@ -18,8 +18,12 @@ DEFAULT_MODEL = "google/gemini-3-flash-preview"
 _AI_MAX_TOKENS = 50000
 
 
-def _parse_items_from_response(parsed: Optional[Dict[str, object]]) -> Optional[List[Dict[str, object]]]:
-    return parse_ai_asset_items(parsed)
+def _parse_items_from_response(
+    parsed: Optional[Dict[str, object]],
+    *,
+    expected_ids: Optional[Iterable[str]] = None,
+) -> Tuple[Optional[List[Dict[str, str]]], Optional[str]]:
+    return parse_ai_asset_items_strict(parsed, expected_ids=expected_ids)
 
 
 def openrouter_suggest(
@@ -27,6 +31,7 @@ def openrouter_suggest(
     model: str,
     prompt: str,
     *,
+    expected_ids: Optional[Iterable[str]] = None,
     timeout: int = 60,
     debug: bool = False,
     image_data_url: Optional[str] = None,
@@ -86,7 +91,7 @@ def openrouter_suggest(
         except Exception:
             pass
     parsed = parse_json_from_text(text or "") if text else None
-    items = _parse_items_from_response(parsed) if parsed else None
+    items, parse_error = _parse_items_from_response(parsed, expected_ids=expected_ids) if parsed else (None, "AI response did not contain a JSON object")
     if items:
         return items, None, finish_reason
 
@@ -100,10 +105,11 @@ def openrouter_suggest(
         finish_reason2 = None
     text2 = extract_message_content(result2 or {}) if result2 else None
     parsed2 = parse_json_from_text(text2 or "") if text2 else None
-    items2 = _parse_items_from_response(parsed2) if parsed2 else None
+    items2, parse_error2 = _parse_items_from_response(parsed2, expected_ids=expected_ids) if parsed2 else (None, "AI response did not contain a JSON object")
     if items2:
         return items2, None, finish_reason2
 
-    return None, "AI response was not valid JSON for the expected schema", finish_reason2 or finish_reason
+    details = parse_error2 or parse_error or "AI response was not valid JSON for the expected schema"
+    return None, details, finish_reason2 or finish_reason
 
 __all__ = ["openrouter_suggest", "DEFAULT_MODEL"]

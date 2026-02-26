@@ -53,6 +53,7 @@ class AIAssetPromptTests(unittest.TestCase):
         self.assertIn("Return ONLY JSON per schema.", prompt)
         self.assertIn("Context: tag iphone", prompt)
         self.assertIn("MaterialType must be one of:", prompt)
+        self.assertIn("Return exactly one item for each provided id", prompt)
         self.assertIn('"scene_summary":"summary"', prompt)
 
 

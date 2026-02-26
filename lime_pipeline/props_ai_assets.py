@@ -211,6 +211,8 @@ class LimeAIAssetState(PropertyGroup):
     preview_dirty: BoolProperty(name="Preview Dirty", default=False)
     planned_renames_objects: IntProperty(name="Planned Object Renames", default=0)
     planned_renames_materials: IntProperty(name="Planned Material Renames", default=0)
+    planned_material_relinks: IntProperty(name="Planned Material Relinks", default=0)
+    planned_material_orphans_removed: IntProperty(name="Planned Material Orphans Removed", default=0)
     planned_renames_collections: IntProperty(name="Planned Collection Renames", default=0)
     planned_collections_created: IntProperty(name="Planned Collections Created", default=0)
     planned_objects_moved: IntProperty(name="Planned Objects Moved", default=0)

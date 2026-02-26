@@ -46,6 +46,22 @@ def normalize_collection_path_value(raw: str) -> str:
     return "/".join(normalized)
 
 
+def canonical_collection_name_key(raw: str) -> str:
+    normalized = normalize_collection_name(str(raw or ""))
+    if not normalized or not is_valid_collection_name(normalized):
+        return ""
+    return normalized.lower()
+
+
+def canonical_collection_path_key(raw: str) -> str:
+    normalized = normalize_collection_path_value(raw)
+    if not normalized:
+        return ""
+    parts = [canonical_collection_name_key(part) for part in normalized.split("/") if part]
+    parts = [part for part in parts if part]
+    return "/".join(parts)
+
+
 def replace_path_prefix(path: str, old_prefix: str, new_prefix: str) -> str:
     value = (path or "").strip()
     old = (old_prefix or "").strip()
@@ -111,6 +127,8 @@ def parse_target_candidates_json(value: str) -> List[Dict[str, object]]:
 __all__ = [
     "build_missing_path_segments",
     "normalize_collection_path_value",
+    "canonical_collection_name_key",
+    "canonical_collection_path_key",
     "replace_path_prefix",
     "serialize_ranked_candidates",
     "parse_target_candidates_json",

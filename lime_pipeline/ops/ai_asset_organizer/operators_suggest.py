@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 from typing import Dict, List, Optional
 
@@ -9,7 +10,6 @@ import bpy
 from bpy.types import Operator
 
 from ...core.asset_naming import (
-    bump_material_version_until_unique,
     is_valid_collection_name,
     is_valid_object_name,
     normalize_collection_name,
@@ -55,6 +55,21 @@ from .suggest_support import (
 from ..ai_http import has_openrouter_api_key, openrouter_headers
 
 
+_GENERIC_SOURCE_RE = re.compile(
+    r"^(mesh|cube|sphere|cylinder|plane|object|empty|curve|surface|solid)(?:[._\-\s]?\d+)?$",
+    re.IGNORECASE,
+)
+_TRUNCATION_ERROR_TOKENS = {
+    "length",
+    "max_tokens",
+    "stop_length",
+    "token limit",
+    "context length",
+    "too long",
+    "truncat",
+}
+
+
 def _status_invalid(status: str) -> bool:
     return (status or "").strip().upper().startswith("INVALID")
 
@@ -80,6 +95,92 @@ def _infer_auto_material_tag(usage_names: List[str]) -> str:
     if not votes:
         return ""
     return sorted(votes.items(), key=lambda kv: (-kv[1], len(kv[0]), kv[0]))[0][0]
+
+
+def _sorted_by_name_and_pointer(items) -> List[object]:
+    return sorted(
+        list(items or []),
+        key=lambda item: (
+            str(getattr(item, "name", "") or "").lower(),
+            str(getattr(item, "name", "") or ""),
+            int(item.as_pointer()) if item is not None else -1,
+        ),
+    )
+
+
+def _dynamic_ai_item_caps(context_text: str, object_count: int, material_count: int, collection_count: int) -> tuple[int, int, int]:
+    # Char-based budget approximation to keep a single request large but bounded.
+    base_budget = 180_000
+    context_penalty = min(len(context_text or ""), 12_000) * 4
+    budget = max(45_000, base_budget - context_penalty)
+    est_total = (object_count * 420) + (material_count * 320) + (collection_count * 160)
+    if est_total <= budget:
+        return object_count, material_count, collection_count
+    scale = max(0.05, min(1.0, float(budget) / float(max(1, est_total))))
+    obj_cap = min(object_count, max(1 if object_count else 0, int(object_count * scale)))
+    mat_cap = min(material_count, max(1 if material_count else 0, int(material_count * scale)))
+    col_cap = min(collection_count, max(1 if collection_count else 0, int(collection_count * scale)))
+    return obj_cap, mat_cap, col_cap
+
+
+def _neutral_object_base_by_type(obj_type: str) -> str:
+    kind = (obj_type or "").strip().upper()
+    if kind == "MESH":
+        return "Mesh"
+    if kind == "EMPTY":
+        return "Empty"
+    if kind == "CURVE":
+        return "Curve"
+    if kind == "LIGHT":
+        return "Light"
+    if kind == "CAMERA":
+        return "Camera"
+    return "Object"
+
+
+def _neutral_object_fallback_name(obj_type: str, index: int) -> str:
+    base = _neutral_object_base_by_type(obj_type)
+    safe_index = max(1, int(index))
+    return f"{base}_{safe_index:03d}"
+
+
+def _is_generic_source_name(name: str) -> bool:
+    normalized = normalize_object_name(name or "")
+    if not normalized:
+        return True
+    head = normalized.split("_", 1)[0]
+    if _GENERIC_SOURCE_RE.match(head or ""):
+        return True
+    if normalized.lower().startswith(("mesh_", "object_", "empty_")):
+        return True
+    return False
+
+
+def _looks_over_specific_name(name: str) -> bool:
+    normalized = normalize_object_name(name or "")
+    if not normalized:
+        return True
+    parts = [part for part in normalized.split("_") if part]
+    alpha_parts = [part for part in parts if not part.isdigit()]
+    return len(alpha_parts) >= 3 or len(normalized) >= 28
+
+
+def _should_use_neutral_object_fallback(original_name: str, suggested_name: str) -> bool:
+    if not suggested_name:
+        return True
+    if not _is_generic_source_name(original_name):
+        return False
+    return _looks_over_specific_name(suggested_name)
+
+
+def _is_length_limited_error(err: Optional[str], finish_reason: Optional[str]) -> bool:
+    reason = str(finish_reason or "").strip().lower()
+    if reason in {"length", "max_tokens", "stop_length"}:
+        return True
+    text = str(err or "").strip().lower()
+    if not text:
+        return False
+    return any(token in text for token in _TRUNCATION_ERROR_TOKENS)
 
 
 class LIME_TB_OT_ai_asset_suggest_names(Operator):
@@ -125,6 +226,9 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
 
         include_collections = bool(getattr(state, "include_collections", True))
         objects, materials, collections = collect_selection(context, include_collections=include_collections)
+        objects = _sorted_by_name_and_pointer(objects)
+        materials = _sorted_by_name_and_pointer(materials)
+        collections = _sorted_by_name_and_pointer(collections)
         if not objects:
             self.report({"ERROR"}, "No objects selected")
             return {"CANCELLED"}
@@ -163,13 +267,22 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
         scene_snapshot = build_scene_collection_snapshot(scene)
         hierarchy_paths = list(scene_snapshot.get("hierarchy_paths", []) or [])
 
+        obj_cap, mat_cap, col_cap = _dynamic_ai_item_caps(
+            getattr(state, "context", "") or "",
+            len(objects),
+            len(materials),
+            len(collections),
+        )
+        limited_objects = list(objects[:obj_cap])
+        limited_materials = list(materials[:mat_cap])
+        limited_collections = list(collections[:col_cap])
+
         obj_items: List[Dict[str, object]] = []
         mat_items: List[Dict[str, object]] = []
         col_items: List[Dict[str, object]] = []
         self._id_map = {}
 
         object_pointer_to_token: Dict[int, str] = {}
-        limited_objects = list(objects[:60])
         for idx, obj in enumerate(limited_objects):
             object_pointer_to_token[obj.as_pointer()] = f"obj_{idx}"
 
@@ -227,11 +340,15 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 "collection_ref": None,
                 "original_name": obj.name,
                 "read_only": is_object_read_only(obj),
+                "neutral_fallback_name": _neutral_object_fallback_name(
+                    str(getattr(obj, "type", "") or ""),
+                    idx + 1,
+                ),
             }
 
         mat_usage_names: Dict[int, List[str]] = {}
         mat_usage_ids: Dict[int, List[str]] = {}
-        for obj in objects:
+        for obj in limited_objects:
             obj_token = object_pointer_to_token.get(obj.as_pointer(), "")
             for slot in list(getattr(obj, "material_slots", []) or []):
                 mat = getattr(slot, "material", None)
@@ -245,8 +362,8 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 if obj_token and obj_token not in mat_usage_ids[key]:
                     mat_usage_ids[key].append(obj_token)
 
-        default_auto_tag = _infer_auto_material_tag([str(getattr(obj, "name", "") or "") for obj in list(objects or [])])
-        for mat in list(materials or []):
+        default_auto_tag = _infer_auto_material_tag([str(getattr(obj, "name", "") or "") for obj in list(limited_objects or [])])
+        for mat in list(limited_materials or []):
             if mat is None:
                 continue
             ptr = mat.as_pointer()
@@ -256,7 +373,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
             if auto_tag:
                 self._auto_material_tag_by_ptr[ptr] = auto_tag
 
-        for idx, mat in enumerate(materials[:60]):
+        for idx, mat in enumerate(limited_materials):
             token = f"mat_{idx}"
             entry = {"id": token, "name": mat.name}
             used_on = mat_usage_names.get(mat.as_pointer(), [])
@@ -279,7 +396,7 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 "read_only": is_material_read_only(mat),
             }
 
-        for idx, coll in enumerate(collections[:60]):
+        for idx, coll in enumerate(limited_collections):
             token = f"col_{idx}"
             member_count = len(list(getattr(coll, "objects", []) or []))
             col_items.append({"id": token, "name": coll.name, "member_count": member_count})
@@ -292,8 +409,16 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 "read_only": is_collection_read_only(coll),
             }
 
-        if len(objects) > 60 or len(materials) > 60 or len(collections) > 60:
-            self.report({"WARNING"}, "Selection is large; only first 60 items per category are sent to AI")
+        if len(limited_objects) < len(objects) or len(limited_materials) < len(materials) or len(limited_collections) < len(collections):
+            self.report(
+                {"WARNING"},
+                (
+                    "Selection is large; capped for AI request "
+                    f"(objects {len(limited_objects)}/{len(objects)}, "
+                    f"materials {len(limited_materials)}/{len(materials)}, "
+                    f"collections {len(limited_collections)}/{len(collections)})."
+                ),
+            )
 
         scene_summary = build_scene_summary(obj_items, mat_items, col_items)
         material_scene_context = build_material_scene_context(materials)
@@ -334,28 +459,20 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
 
         def worker():
             try:
-                total_items = len(obj_items) + len(mat_items) + len(col_items)
+                expected_ids = list(self._id_map.keys())
                 items, err, finish_reason = openrouter_suggest(
                     headers,
                     model,
                     prompt,
+                    expected_ids=expected_ids,
                     timeout=60,
                     debug=debug,
                     image_data_url=image_data_url,
                 )
 
-                def _needs_chunking(item_list: Optional[List[Dict[str, object]]], reason: Optional[str]) -> bool:
-                    if item_list is None:
-                        return True
-                    if reason and str(reason).lower() in {"length", "max_tokens", "stop_length"}:
-                        return True
-                    if len(item_list) < total_items:
-                        return True
-                    return False
-
-                if err or _needs_chunking(items, finish_reason):
+                if err and _is_length_limited_error(err, finish_reason):
                     if debug:
-                        print("[AI Asset Organizer] Falling back to chunked requests")
+                        print("[AI Asset Organizer] Falling back to chunked requests due to length limits")
                     combined: List[tuple[str, Dict[str, object]]] = []
                     for obj in obj_items:
                         combined.append(("objects", obj))
@@ -364,14 +481,15 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                     for coll in col_items:
                         combined.append(("collections", coll))
 
-                    chunk_size = 15
-                    by_id: Dict[str, Dict[str, str]] = {}
+                    chunk_size = 24
+                    chunk_items_accum: List[Dict[str, object]] = []
                     chunk_errors: List[str] = []
                     for i in range(0, len(combined), chunk_size):
                         chunk = combined[i : i + chunk_size]
                         chunk_objects = [item for kind, item in chunk if kind == "objects"]
                         chunk_materials = [item for kind, item in chunk if kind == "materials"]
                         chunk_collections = [item for kind, item in chunk if kind == "collections"]
+                        chunk_expected_ids = [str(item.get("id") or "").strip() for _, item in chunk if str(item.get("id") or "").strip()]
                         chunk_summary = build_scene_summary(chunk_objects, chunk_materials, chunk_collections)
                         chunk_prompt = build_prompt(
                             getattr(state, "context", ""),
@@ -387,32 +505,32 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                             headers,
                             model,
                             chunk_prompt,
+                            expected_ids=chunk_expected_ids,
                             timeout=60,
                             debug=debug,
                             image_data_url=image_data_url,
                         )
                         if chunk_err:
                             chunk_errors.append(chunk_err)
-                            continue
+                            break
                         if not chunk_items:
                             chunk_errors.append("Chunk returned no items")
-                            continue
-                        for entry in chunk_items:
-                            if not isinstance(entry, dict):
-                                continue
-                            item_id = str(entry.get("id") or "").strip()
-                            name = str(entry.get("name") or "").strip()
-                            if item_id and name:
-                                by_id[item_id] = {
-                                    "name": name,
-                                    "target_collection_hint": str(entry.get("target_collection_hint") or "").strip(),
-                                }
+                            break
+                        chunk_items_accum.extend(chunk_items)
 
-                    if by_id:
-                        items = [{"id": k, **v} for k, v in by_id.items()]
-                        err = None
+                    if not chunk_errors:
+                        by_id = {
+                            str(entry.get("id") or "").strip(): entry
+                            for entry in chunk_items_accum
+                            if isinstance(entry, dict) and str(entry.get("id") or "").strip()
+                        }
+                        if set(by_id.keys()) != set(expected_ids):
+                            err = "Chunked AI response did not cover all requested IDs"
+                        else:
+                            items = [by_id[item_id] for item_id in expected_ids]
+                            err = None
                     else:
-                        err = "; ".join(chunk_errors) if chunk_errors else err
+                        err = "; ".join(chunk_errors)
 
                 if err:
                     self._result = None
@@ -478,7 +596,11 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 if isinstance(hint, str):
                     by_id_hint[item_id] = hint
 
-        material_name_universe = {m.name for m in list(getattr(bpy.data, "materials", []) or [])}
+        material_name_index = {
+            str(getattr(m, "name", "") or "").strip().lower(): str(getattr(m, "name", "") or "").strip()
+            for m in list(getattr(bpy.data, "materials", []) or [])
+            if str(getattr(m, "name", "") or "").strip()
+        }
         with suspend_preview():
             for item_id, info in self._id_map.items():
                 row: LimeAIAssetItem = state.items.add()
@@ -500,21 +622,30 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                 suggested_raw = (by_id_name.get(item_id) or "").strip()
                 if row.item_type == "OBJECT":
                     suggested_norm = normalize_object_name(suggested_raw) if suggested_raw else ""
-                    row.suggested_name = suggested_norm
-                    if suggested_raw and suggested_norm != suggested_raw:
-                        row.status = "NORMALIZED"
-                    elif suggested_norm and not is_valid_object_name(suggested_norm):
-                        row.status = "INVALID"
+                    neutral_fallback = str(info.get("neutral_fallback_name") or "").strip()
+                    use_neutral_fallback = False
+                    if suggested_norm and not is_valid_object_name(suggested_norm):
+                        use_neutral_fallback = bool(neutral_fallback)
+                    elif _should_use_neutral_object_fallback(getattr(row, "original_name", "") or "", suggested_norm):
+                        use_neutral_fallback = bool(neutral_fallback)
+
+                    if use_neutral_fallback:
+                        row.suggested_name = neutral_fallback
+                        row.status = "NORMALIZED_FALLBACK"
                     else:
-                        row.status = ""
+                        row.suggested_name = suggested_norm
+                        if suggested_raw and suggested_norm != suggested_raw:
+                            row.status = "NORMALIZED"
+                        elif suggested_norm and not is_valid_object_name(suggested_norm):
+                            row.status = "INVALID"
+                        else:
+                            row.status = ""
                 elif row.item_type == "MATERIAL":
                     mat = getattr(row, "material_ref", None)
                     debug_enabled = bool(getattr(state, "debug_material_flow", False))
                     row.ai_raw_name = suggested_raw
                     notes: List[str] = []
-                    old_name = (getattr(mat, "name", "") or getattr(row, "original_name", "") or "").strip()
-                    if old_name:
-                        material_name_universe.discard(old_name)
+                    old_name = str(getattr(mat, "name", "") or getattr(row, "original_name", "") or "").strip()
                     suggested_norm = (
                         normalize_material_name_for_organizer(suggested_raw, mat=mat, trace=notes) if suggested_raw else ""
                     )
@@ -543,19 +674,19 @@ class LIME_TB_OT_ai_asset_suggest_names(Operator):
                                     notes.append(f"Auto-added context tag: {auto_tag}")
                                 suggested_norm = auto_name
                     if suggested_norm and parse_material_name(suggested_norm):
-                        unique = bump_material_version_until_unique(material_name_universe, suggested_norm)
-                        if unique != suggested_norm:
-                            notes.append("Bumped version to avoid name collision")
-                        material_name_universe.add(unique)
-                        row.suggested_name = unique
-                        row.status = material_status_from_trace(suggested_raw, row.suggested_name, notes)
+                        existing_same = material_name_index.get(suggested_norm.lower())
+                        if existing_same and existing_same != old_name:
+                            notes.append("Existing material match found; apply will relink instead of creating a version bump")
+                            row.status = "NORMALIZED_RELINK"
+                        else:
+                            row.status = material_status_from_trace(suggested_raw, suggested_norm, notes)
+                        row.suggested_name = suggested_norm
+                        material_name_index[suggested_norm.lower()] = row.suggested_name
                     else:
                         row.suggested_name = suggested_norm
                         row.status = "INVALID" if suggested_norm else ""
                         if suggested_norm:
                             notes.append("Output still invalid after normalization")
-                        if old_name:
-                            material_name_universe.add(old_name)
                     row.normalization_changed = bool(suggested_raw and row.suggested_name and row.suggested_name != suggested_raw)
                     if notes and (debug_enabled or row.normalization_changed or row.status == "INVALID"):
                         row.normalization_notes = "; ".join(notes[:8])

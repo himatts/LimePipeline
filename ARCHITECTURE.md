@@ -91,15 +91,17 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 1. User clicks **Suggest Names (AI)** from Lime Toolbox.
 2. Operator collects selected objects/materials and optional non-SHOT collections from selection ownership.
 3. Prompt includes hierarchy/context metadata (`parent_id`, `children_count`, `shared_data_users`, collection paths, scene hierarchy) and enforces strict JSON output; object entries may optionally return `target_collection_hint`.
-4. Suggestions are written to `Scene.lime_ai_assets.items` with row status (`NORMALIZED`, `INVALID`, read-only) plus destination metadata (`target_collection_path`, `target_status`, ranked candidates).
-5. A local deterministic resolver analyzes the full collection tree to choose destination paths (`AUTO`) or mark unresolved cases (`AMBIGUOUS`), prioritizing SHOT branch context.
-6. Preview counters are computed from a unified planner before apply (`planned_renames_*`, deep-path collections to create, objects to move, ambiguous/skipped counts).
-7. **Apply Selected** renames selected rows with uniqueness guarantees and Apply Scope filters (objects/materials/collections):
+4. Response parsing is strict: every requested ID must be returned exactly once, with valid strings and sanitized optional hints; partial/invalid payloads are rejected (no partial apply).
+5. Suggestions are written to `Scene.lime_ai_assets.items` with row status (`NORMALIZED`, `INVALID`, `NORMALIZED_RELINK`, `NORMALIZED_FALLBACK`, read-only) plus destination metadata (`target_collection_path`, `target_status`, ranked candidates).
+6. Request batching uses a dynamic prompt-budget cap (instead of a fixed per-category cap) and deterministic ordering to reduce order-dependent variability.
+7. A local deterministic resolver analyzes the full collection tree to choose destination paths (`AUTO`) or mark unresolved cases (`AMBIGUOUS`), prioritizing SHOT branch context.
+8. Preview counters are computed from a unified planner before apply (`planned_renames_*`, material relinks/orphan removals, deep-path collections to create, objects to move, ambiguous/skipped counts).
+9. **Apply Selected** renames selected rows with uniqueness guarantees and Apply Scope filters (objects/materials/collections):
    - Objects: PascalCase segments separated by underscores, numeric suffix as `_NN`, deterministic uniqueness.
-   - Materials: `MAT_*` validation + version bump when needed.
-   - Collections: PascalCase segments separated by underscores, numeric suffix as `_NN`, deterministic uniqueness.
-8. Optional post-apply organization links objects to resolved target paths, creates missing subcollection paths when required, and skips ambiguous objects until confirmed.
-9. Ambiguous rows can be resolved explicitly from the panel using full collection paths.
+   - Materials: `MAT_*` validation, existing-name reuse, relink-first strategy, and local orphan cleanup after relink when safe.
+   - Collections: canonical (normalized/case-insensitive) matching before create/rename to prevent near-duplicate branches.
+10. Optional post-apply organization links objects to resolved target paths, enforces a single editable primary collection per object (while preserving read-only memberships), creates missing subcollection paths when required, and skips ambiguous objects until confirmed.
+11. Ambiguous rows can be resolved explicitly from the panel using full collection paths.
 
 ### AI Render Converter (Storyboard)
 1. Resolve current frame and expected source render path under Storyboard/editables/AI/sources.

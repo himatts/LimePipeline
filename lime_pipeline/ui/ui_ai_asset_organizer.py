@@ -193,6 +193,12 @@ def draw_ai_asset_organizer_content(layout, context, *, for_popup: bool = False)
         apply_row.operator("lime_tb.ai_asset_apply_names", text="Apply Selected", icon="CHECKMARK")
 
         if getattr(state, "items", None):
+            fallback_count = sum(
+                1
+                for row in list(getattr(state, "items", []) or [])
+                if getattr(row, "item_type", "") == "OBJECT"
+                and (getattr(row, "status", "") or "").upper() == "NORMALIZED_FALLBACK"
+            )
             preview_box = layout.box()
             preview_box.label(
                 text=(
@@ -210,6 +216,18 @@ def draw_ai_asset_organizer_content(layout, context, *, for_popup: bool = False)
                 ),
                 icon="OUTLINER_COLLECTION",
             )
+            preview_box.label(
+                text=(
+                    f"Will relink {getattr(state, 'planned_material_relinks', 0)} materials, "
+                    f"remove up to {getattr(state, 'planned_material_orphans_removed', 0)} orphan(s)"
+                ),
+                icon="MATERIAL",
+            )
+            if fallback_count > 0:
+                preview_box.label(
+                    text=f"Neutral fallback object names: {fallback_count}",
+                    icon="INFO",
+                )
             ambiguous_count = int(getattr(state, "planned_ambiguities_objects", 0) or 0)
             if ambiguous_count > 0:
                 amb_box = layout.box()

@@ -35,6 +35,11 @@
 - AI Asset Organizer now resolves collection destinations from the full hierarchy (deep paths), surfaces ambiguity with full-path candidates, supports manual target confirmation, and applies partial-safe moves (skips unresolved ambiguous rows).
 - AI Asset Organizer adds Apply Scope filters/presets (All / Only Objects / Only Materials / Only Collections), unified preview counters for ambiguities/skips, and deep-path collection creation when organizing objects.
 - AI Asset Organizer now normalizes material proposals to `MAT_{Tag?}_{MaterialType}_{Finish}_{V##}` consistently, including coercion from partial/legacy AI outputs.
+- AI Asset Organizer now validates AI JSON responses strictly (one item per requested id, no missing/duplicate ids, sanitized hints) and blocks partial/invalid payloads.
+- AI Asset Organizer now uses dynamic prompt-budget caps with deterministic ordering for `Suggest Names`, replacing the fixed 60-item-per-category truncation.
+- AI Asset Organizer material flow now prefers reuse+relink over forced V## bumps, and removes local orphan materials after successful relink when safe.
+- AI Asset Organizer now applies deterministic neutral fallback names for ambiguous generic subparts (for example `Mesh_001`).
+- AI Asset Organizer collection path handling now uses canonical (normalized + case-insensitive) reconciliation to prevent duplicate branches from naming variants.
 
 ## [0.2.1] - 2025-09-28
 ### Changed

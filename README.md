@@ -17,7 +17,11 @@ Estandarizar el trabajo para reducir fricci�n y errores humanos: archivos mal 
 - Permite re-rutear manualmente en lote el destino de colecci�n para objetos seleccionados en la lista antes de aplicar cambios.
 - Cuando una reorganizaci�n requiere crear nuevas colecciones, AI Asset Organizer v2 las muestra como filas editables de �planned collections� para ajustar nombres antes de aplicar, manteniendo sincron�a con destinos de objetos.
 - AI Asset Organizer v2 puede abrirse en una ventana emergente enfocada (`Open in Window`) para revisar nombrado/organizacion (objetos, materiales, colecciones).
-- AI Asset Organizer v2 prioriza destinos de colecciones activas por defecto y ofrece reportes de debug (materiales y colecciones) para auditar decisiones IA/heur�sticas.
+- AI Asset Organizer v2 valida estrictamente la respuesta JSON de IA (IDs completos, unicos y sin omisiones); si la respuesta es parcial o invalida, bloquea el flujo y pide reintento.
+- AI Asset Organizer v2 usa un cap dinamico por presupuesto de prompt (ya no limite fijo de 60 por categoria) y mantiene orden estable para resultados reproducibles.
+- AI Asset Organizer v2 evita versiones innecesarias de materiales: reutiliza nombres existentes, aplica relink en Apply y limpia huerfanos locales cuando quedan sin usuarios.
+- AI Asset Organizer v2 aplica fallback neutral determinista para subpartes ambiguas (por ejemplo Mesh_001) para evitar nombres creativos sin evidencia.
+- AI Asset Organizer v2 reconcilia paths de coleccion con matching canonico (normalizado + case-insensitive) para prevenir duplicados por variaciones de nombre.
 - El contexto del AI Asset Organizer se usa como gu�a creativa; para materiales, tambi�n puedes pedir simplemente "agrega un tag" y el sistema intentar� inferirlo del objeto (adem�s de soportar override expl�cito como `force tag: Phone` o `fixed tag: Phone`).
 - Internamente, AI Asset Organizer v2 est� modularizado en `ops/ai_asset_organizer/*` y usa helpers Blender-agnostic en `core/` para facilitar mantenimiento y testing.
 - AI Material Renamer fue retirado de la UI y del runtime; usa AI Asset Organizer como flujo �nico.
@@ -52,5 +56,4 @@ Estandarizar el trabajo para reducir fricci�n y errores humanos: archivos mal 
   - `LIME_OPENROUTER_API_KEY` (o `OPENROUTER_API_KEY`)
   - `LIME_KREA_API_KEY` (o `KREA_API_KEY`)
 - Puedes usar `.env.example` como plantilla.
-
 

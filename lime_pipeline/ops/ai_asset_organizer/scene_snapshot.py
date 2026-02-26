@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 import bpy
 from bpy.types import Collection, Object
 
+from ...core.ai_asset_collection_paths import canonical_collection_path_key
 from ...core.collection_resolver import CollectionCandidate, tokenize as tokenize_name
 
 
@@ -48,6 +49,7 @@ def build_collection_activity_index(scene) -> Dict[int, Dict[str, bool]]:
 def build_scene_collection_snapshot(scene) -> Dict[str, object]:
     root = getattr(scene, "collection", None)
     path_to_collection: Dict[str, Collection] = {}
+    canonical_path_to_collection: Dict[str, Collection] = {}
     collection_ptr_to_paths: Dict[int, List[str]] = {}
     candidates: List[CollectionCandidate] = []
     hierarchy_paths: List[str] = []
@@ -55,6 +57,7 @@ def build_scene_collection_snapshot(scene) -> Dict[str, object]:
     if root is None:
         return {
             "path_to_collection": path_to_collection,
+            "canonical_path_to_collection": canonical_path_to_collection,
             "collection_ptr_to_paths": collection_ptr_to_paths,
             "candidates": candidates,
             "hierarchy_paths": hierarchy_paths,
@@ -72,6 +75,9 @@ def build_scene_collection_snapshot(scene) -> Dict[str, object]:
             if path not in path_to_collection:
                 path_to_collection[path] = child
                 hierarchy_paths.append(path)
+            canonical_path = canonical_collection_path_key(path)
+            if canonical_path and canonical_path not in canonical_path_to_collection:
+                canonical_path_to_collection[canonical_path] = child
             collection_ptr_to_paths.setdefault(ptr, [])
             if path not in collection_ptr_to_paths[ptr]:
                 collection_ptr_to_paths[ptr].append(path)
@@ -106,6 +112,7 @@ def build_scene_collection_snapshot(scene) -> Dict[str, object]:
     activity = build_collection_activity_index(scene)
     return {
         "path_to_collection": path_to_collection,
+        "canonical_path_to_collection": canonical_path_to_collection,
         "collection_ptr_to_paths": collection_ptr_to_paths,
         "candidates": candidates,
         "hierarchy_paths": hierarchy_paths,

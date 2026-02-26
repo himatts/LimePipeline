@@ -51,6 +51,13 @@ class AIAssetCollectionPathsTests(unittest.TestCase):
             "Props/New/Item",
         )
 
+    def test_canonical_collection_keys(self):
+        self.assertEqual(module.canonical_collection_name_key("my props"), "my_props")
+        self.assertEqual(
+            module.canonical_collection_path_key("SHOT 01/SH01_Props/My Props"),
+            "shot_01/sh_01_props/my_props",
+        )
+
     def test_serialize_parse_candidates(self):
         serialized = module.serialize_ranked_candidates(
             [

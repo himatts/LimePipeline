@@ -47,11 +47,16 @@ class LIME_TB_OT_ai_asset_apply_names(Operator):
         rename_plan = plan.get("rename_plan", {}) if isinstance(plan, dict) else {}
         object_ops = list(rename_plan.get("object_ops", []))
         material_ops = list(rename_plan.get("material_ops", []))
+        material_relink_ops = list(rename_plan.get("material_relink_ops", []))
+        material_remove_ops = list(rename_plan.get("material_remove_ops", []))
         collection_ops = list(rename_plan.get("collection_ops", []))
         reorg_plan = plan.get("reorg_plan", {}) if isinstance(plan, dict) else {}
 
         renamed_objects = 0
         renamed_materials = 0
+        relinked_materials = 0
+        relinked_slots = 0
+        removed_orphans = 0
         renamed_collections = 0
         skipped = 0
 
@@ -72,6 +77,52 @@ class LIME_TB_OT_ai_asset_apply_names(Operator):
             except Exception as ex:
                 skipped += 1
                 self.report({"WARNING"}, f"Failed to rename material '{old}': {ex}")
+
+        for source_mat, target_mat in material_relink_ops:
+            if source_mat is None or target_mat is None or source_mat == target_mat:
+                continue
+            source_name = str(getattr(source_mat, "name", "") or "<material>")
+            target_name = str(getattr(target_mat, "name", "") or "<material>")
+            changed_slots = 0
+            failed_slots = 0
+            for obj in list(getattr(context.blend_data, "objects", []) or []):
+                for slot in list(getattr(obj, "material_slots", []) or []):
+                    if getattr(slot, "material", None) != source_mat:
+                        continue
+                    try:
+                        slot.material = target_mat
+                        changed_slots += 1
+                    except Exception:
+                        failed_slots += 1
+            if changed_slots > 0:
+                relinked_materials += 1
+                relinked_slots += changed_slots
+            if failed_slots > 0:
+                skipped += failed_slots
+                self.report(
+                    {"WARNING"},
+                    (
+                        f"Failed to relink {failed_slots} slot(s) "
+                        f"from '{source_name}' to '{target_name}'"
+                    ),
+                )
+
+        for mat in material_remove_ops:
+            if mat is None:
+                continue
+            if bool(getattr(mat, "library", None) or getattr(mat, "override_library", None)):
+                continue
+            users = int(getattr(mat, "users", 0) or 0)
+            if users > 0:
+                continue
+            try:
+                name = str(getattr(mat, "name", "") or "<material>")
+                context.blend_data.materials.remove(mat)
+                removed_orphans += 1
+                self.report({"INFO"}, f"Removed orphan material '{name}'")
+            except Exception as ex:
+                skipped += 1
+                self.report({"WARNING"}, f"Failed to remove orphan material: {ex}")
 
         created_collections = 0
         moved_objects = 0
@@ -111,6 +162,8 @@ class LIME_TB_OT_ai_asset_apply_names(Operator):
             (
                 f"Applied: {renamed_objects} object(s), {renamed_materials} material(s), "
                 f"{renamed_collections} collection(s). "
+                f"Material relinks: {relinked_materials} ({relinked_slots} slot(s)); "
+                f"material orphans removed: {removed_orphans}. "
                 f"Collections created: {created_collections}. Objects moved: {moved_objects}. "
                 f"Ambiguous skipped: {len(ambiguous_names)}. "
                 f"Skipped: {skipped}."

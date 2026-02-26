@@ -32,6 +32,8 @@ sys.modules["lime_pipeline.core.ai_asset_response"] = module
 SPEC.loader.exec_module(module)  # type: ignore[arg-type]
 
 parse_items_from_response = module.parse_items_from_response
+parse_items_from_response_strict = module.parse_items_from_response_strict
+sanitize_target_collection_hint = module.sanitize_target_collection_hint
 
 
 class AIAssetResponseTests(unittest.TestCase):
@@ -65,6 +67,40 @@ class AIAssetResponseTests(unittest.TestCase):
     def test_parse_reject_invalid_payload(self):
         self.assertIsNone(parse_items_from_response(None))
         self.assertIsNone(parse_items_from_response({"message": "no items"}))
+
+    def test_strict_parse_matches_expected_ids(self):
+        payload = {
+            "items": [
+                {"id": "obj_0", "name": "Chair"},
+                {"id": "mat_0", "name": "MAT_Wood_Polished_V01"},
+            ]
+        }
+        items, err = parse_items_from_response_strict(payload, expected_ids=["obj_0", "mat_0"])
+        self.assertIsNone(err)
+        self.assertEqual(len(items or []), 2)
+
+    def test_strict_parse_rejects_missing_ids(self):
+        payload = {"items": [{"id": "obj_0", "name": "Chair"}]}
+        items, err = parse_items_from_response_strict(payload, expected_ids=["obj_0", "mat_0"])
+        self.assertIsNone(items)
+        self.assertIn("missing", str(err or "").lower())
+
+    def test_strict_parse_rejects_duplicate_ids(self):
+        payload = {
+            "items": [
+                {"id": "obj_0", "name": "Chair"},
+                {"id": "obj_0", "name": "Chair_02"},
+            ]
+        }
+        items, err = parse_items_from_response_strict(payload)
+        self.assertIsNone(items)
+        self.assertIn("duplicated", str(err or "").lower())
+
+    def test_sanitize_target_hint(self):
+        self.assertEqual(
+            sanitize_target_collection_hint(r"SHOT 01\\Props///Bolts<>"),
+            "SHOT 01/Props/Bolts",
+        )
 
 
 if __name__ == "__main__":
