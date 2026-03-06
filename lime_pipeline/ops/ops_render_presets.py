@@ -123,6 +123,7 @@ OUTPUT_PROPS = (
 )
 
 IMAGE_SETTINGS_PROPS = (
+    'media_type',
     'file_format',
     'color_mode',
     'color_depth',

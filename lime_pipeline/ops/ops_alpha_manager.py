@@ -35,7 +35,6 @@ from bpy.props import (
 from bpy.types import Operator, PropertyGroup
 
 ALPHA_PROP_PREFIX = "lp_alpha_event_"
-ALPHA_FCURVE_GROUP = "Lime Alpha Events"
 OBJECT_EVENTS_PROP = "lp_alpha_events"
 OBJECT_EVENTS_DELIM = "|"  # Storage delimiter for multiple slugs in a single ID prop
 OBJECT_BAKE_FRAMES_PROP = "_lp_alpha_bake_frames"
@@ -172,54 +171,48 @@ def _prop_name(slug: str) -> str:
     return f"{ALPHA_PROP_PREFIX}{slug}"
 
 
-def _ensure_scene_action(scene: bpy.types.Scene) -> bpy.types.Action | None:
-    ad = scene.animation_data
-    if ad is None:
-        ad = scene.animation_data_create()
-    if ad.action is None:
-        ad.action = bpy.data.actions.new(name="LP_SceneAlphaEvents")
-    return ad.action
+def _event_frame_range(event: 'LimeTBAlphaEvent') -> tuple[int, int]:
+    start = int(getattr(event, "frame_start", 0) or 0)
+    end = int(getattr(event, "frame_end", 0) or 0)
+    if end <= start:
+        end = start + 1
+    return start, end
 
 
-def _get_event_fcurve(scene: bpy.types.Scene, prop_name: str) -> bpy.types.FCurve | None:
-    ad = scene.animation_data
-    action = getattr(ad, "action", None) if ad else None
-    if action is None:
-        return None
-    data_path = f'"{prop_name}"'
-    fc = action.fcurves.find(f'["{prop_name}"]')
-    if fc is None:
-        fc = action.fcurves.find(data_path)
-    return fc
+def _cleanup_legacy_event_fcurve(scene: bpy.types.Scene | None, prop_name: str) -> None:
+    if scene is None or not prop_name:
+        return
+    try:
+        ad = getattr(scene, "animation_data", None)
+        action = getattr(ad, "action", None) if ad else None
+        fcurves = getattr(action, "fcurves", None) if action else None
+        if not fcurves:
+            return
+        data_path = f'["{prop_name}"]'
+        fc = fcurves.find(data_path)
+        if fc is not None:
+            fcurves.remove(fc)
+    except Exception:
+        pass
 
 
-def _ensure_event_fcurve(scene: bpy.types.Scene, prop_name: str) -> bpy.types.FCurve | None:
-    action = _ensure_scene_action(scene)
-    if action is None:
-        return None
-    fc = action.fcurves.find(f'["{prop_name}"]')
-    if fc is None:
-        fc = action.fcurves.new(data_path=f'["{prop_name}"]')
-    if fc.group is None:
-        group = action.groups.get(ALPHA_FCURVE_GROUP)
-        if group is None:
-            group = action.groups.new(name=ALPHA_FCURVE_GROUP)
-        fc.group = group
-    return fc
+def _set_scene_event_value(scene: bpy.types.Scene, prop_name: str, value: float) -> None:
+    try:
+        scene[prop_name] = _clamp(float(value))
+    except Exception:
+        pass
 
 
-def _write_event_keyframes(fc: bpy.types.FCurve, start: int, end: int) -> None:
-    kfs = fc.keyframe_points
-    if len(kfs) != 2:
-        kfs.clear()
-        kfs.add(count=2)
-    kfs[0].co = (float(start), 0.0)
-    kfs[0].handle_left = (float(start) - 1.0, 0.0)
-    kfs[0].handle_right = (float(start) + 1.0, 0.0)
-    kfs[-1].co = (float(end), 1.0)
-    kfs[-1].handle_left = (float(end) - 1.0, 1.0)
-    kfs[-1].handle_right = (float(end) + 1.0, 1.0)
-    fc.update()
+def _evaluate_event_range(event: 'LimeTBAlphaEvent', frame: float) -> float:
+    start, end = _event_frame_range(event)
+    if frame <= start:
+        return 0.0
+    if frame >= end:
+        return 1.0
+    span = float(end - start)
+    if span <= 1e-6:
+        return 1.0
+    return _clamp((float(frame) - float(start)) / span)
 
 
 # Curve settings removed - only LINEAR interpolation is supported
@@ -228,31 +221,19 @@ def _write_event_keyframes(fc: bpy.types.FCurve, start: int, end: int) -> None:
 def ensure_event_tracks(scene: bpy.types.Scene | None, event: 'LimeTBAlphaEvent', reset_keys: bool = False) -> None:
     if scene is None or event is None or not event.slug:
         return
-    if event.frame_end <= event.frame_start:
-        event.frame_end = event.frame_start + 1
+    start, end = _event_frame_range(event)
+    event.frame_start = start
+    event.frame_end = end
     prop_name = _prop_name(event.slug)
-    if prop_name not in scene:
-        scene[prop_name] = 0.0
-    fc = _ensure_event_fcurve(scene, prop_name)
-    if fc is None:
-        return
-    if reset_keys or len(fc.keyframe_points) < 2:
-        _write_event_keyframes(fc, event.frame_start, event.frame_end)
-    else:
-        fc.keyframe_points[0].co.x = float(event.frame_start)
-        fc.keyframe_points[-1].co.x = float(event.frame_end)
-        fc.update()
-    # Ensure keyframes are set with LINEAR interpolation
-    for kp in fc.keyframe_points:
-        kp.interpolation = 'LINEAR'
-    fc.update()
+    if reset_keys:
+        _cleanup_legacy_event_fcurve(scene, prop_name)
+    current_frame = float(getattr(scene, "frame_current", 0.0) or 0.0)
+    _set_scene_event_value(scene, prop_name, _evaluate_event_range(event, current_frame))
 
-    # Touch scene tag so fcurves update
     try:
-        scene.animation_data.action.use_fake_user = scene.animation_data.action.use_fake_user
+        scene.update_tag()
     except Exception:
         pass
-    # Force evaluation at current frame and refresh viewport
     try:
         scene.frame_set(scene.frame_current)
     except Exception:
@@ -281,7 +262,7 @@ def create_event(scene: bpy.types.Scene, name: str | None = None) -> 'LimeTBAlph
     new_event.slug = _slugify(new_event.name, existing_slugs)
     # For the first event, always start at frame 1 for better UX
     # For subsequent events, start at current frame
-    if not events:
+    if len(events) == 1:
         new_event.frame_start = 1
         new_event.frame_end = 1 + DEFAULT_EVENT_DURATION
     else:
@@ -303,20 +284,6 @@ def duplicate_event(scene: bpy.types.Scene, event: 'LimeTBAlphaEvent') -> 'LimeT
     new_event.frame_end = event.frame_end
     new_event.invert = event.invert
     ensure_event_tracks(scene, new_event, reset_keys=True)
-    src_fc = _get_event_fcurve(scene, _prop_name(event.slug))
-    dst_fc = _ensure_event_fcurve(scene, _prop_name(new_event.slug))
-    if src_fc and dst_fc:
-        dst_fc.keyframe_points.clear()
-        dst_fc.keyframe_points.add(count=len(src_fc.keyframe_points))
-        for idx, kp in enumerate(src_fc.keyframe_points):
-            dst = dst_fc.keyframe_points[idx]
-            dst.co = kp.co
-            dst.handle_left = kp.handle_left
-            dst.handle_right = kp.handle_right
-            dst.interpolation = kp.interpolation
-            if hasattr(dst, 'easing') and hasattr(kp, 'easing'):
-                dst.easing = kp.easing
-        dst_fc.update()
     return new_event
 
 
@@ -324,15 +291,12 @@ def delete_event(scene: bpy.types.Scene, event: 'LimeTBAlphaEvent') -> int:
     slug = event.slug
     prop_name = _prop_name(slug) if slug else ""
     removed = 0
+    _cleanup_legacy_event_fcurve(scene, prop_name)
     if prop_name and prop_name in scene:
         try:
             del scene[prop_name]
         except Exception:
             pass
-    fc = _get_event_fcurve(scene, prop_name)
-    action = scene.animation_data.action if scene.animation_data else None
-    if fc and action:
-        action.fcurves.remove(fc)
     for obj in scene.objects:
         slugs = _get_object_event_slugs(obj)
         if slug in slugs:
@@ -368,11 +332,9 @@ def rename_event(scene: bpy.types.Scene, event: 'LimeTBAlphaEvent', new_name: st
         return True, f"Event renamed to {name}"
     old_prop = _prop_name(old_slug)
     new_prop = _prop_name(new_slug)
-    value = scene.get(old_prop, 0.0)
-    scene[new_prop] = value
-    fc = _get_event_fcurve(scene, old_prop)
-    if fc:
-        fc.data_path = f'["{new_prop}"]'
+    value = _evaluate_event_range(event, float(getattr(scene, "frame_current", 0.0) or 0.0))
+    _set_scene_event_value(scene, new_prop, value)
+    _cleanup_legacy_event_fcurve(scene, old_prop)
     if old_prop in scene:
         try:
             del scene[old_prop]
@@ -662,11 +624,7 @@ def _clamp(value: float) -> float:
 
 
 def evaluate_event(scene: bpy.types.Scene, event: 'LimeTBAlphaEvent', frame: float) -> float:
-    prop_name = _prop_name(event.slug)
-    fc = _get_event_fcurve(scene, prop_name)
-    if fc:
-        return _clamp(fc.evaluate(frame))
-    return _clamp(float(scene.get(prop_name, 0.0)))
+    return _evaluate_event_range(event, frame)
 
 
 def combined_alpha(scene: bpy.types.Scene, events: Sequence['LimeTBAlphaEvent'], frame: float) -> float:

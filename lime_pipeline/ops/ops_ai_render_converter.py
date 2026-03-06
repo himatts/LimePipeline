@@ -1228,9 +1228,13 @@ class LIME_OT_ai_render_add_to_sequencer(Operator):
 
         frame_start = 1
         target_channel = 1
+        strips_all = getattr(seq, "strips_all", None)
+        if strips_all is None:
+            strips_all = getattr(seq, "sequences_all", ())
+
         try:
             last_end = 0
-            for s in seq.sequences_all:
+            for s in strips_all:
                 if int(getattr(s, "channel", 0) or 0) != target_channel:
                     continue
                 end = int(getattr(s, "frame_final_end", 0) or 0)
@@ -1240,8 +1244,15 @@ class LIME_OT_ai_render_add_to_sequencer(Operator):
         except Exception:
             frame_start = 1
 
+        strips = getattr(seq, "strips", None)
+        if strips is None:
+            strips = getattr(seq, "sequences", None)
+        if strips is None:
+            self.report({"ERROR"}, "Sequence editor strips API not available")
+            return {"CANCELLED"}
+
         try:
-            strip = seq.sequences.new_image(
+            strip = strips.new_image(
                 name=path.stem,
                 filepath=path.as_posix(),
                 channel=target_channel,

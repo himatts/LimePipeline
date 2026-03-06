@@ -20,8 +20,8 @@ UI Location: View3D > Sidebar (N) > Lime Pipeline
 bl_info = {
     "name": "Lime Pipeline",
     "author": "Lime",
-    "version": (0, 8, 1),  # Add resync operator for OBJECT-level material slots on linked meshes
-    "blender": (4, 5, 0),
+    "version": (0, 9, 0),  # Blender 5 migration: strips API cleanup and alpha live-track refactor
+    "blender": (5, 0, 0),
     "location": "View3D > Sidebar (N) > Lime Pipeline",
     "description": "Project organization, naming, and first save/backup helpers",
     "category": "System",

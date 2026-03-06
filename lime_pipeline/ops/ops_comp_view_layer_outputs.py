@@ -147,6 +147,10 @@ def _apply_output_format(node: bpy.types.Node, fmt_key: str) -> None:
     if fmt is None:
         return
     key = (fmt_key or "EXR").upper()
+    try:
+        fmt.media_type = "IMAGE"
+    except Exception:
+        pass
     if key == "PNG":
         fmt.file_format = "PNG"
         fmt.color_mode = "RGBA"
