@@ -22,11 +22,11 @@ import bpy
 from bpy.types import Operator, Scene
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 
-from ..core import validate_scene
-from ..ops.ops_save_templates import _ensure_editables_dir, _resolve_prj_rev_sc, _camera_index_for_shot
-from ..prefs import LimePipelinePrefs
-from ..props_ai_renders import update_ai_render_asset_cache
-from .ai_http import (
+from ...core import validate_scene
+from ...ops.ops_save_templates import _ensure_editables_dir, _resolve_prj_rev_sc, _camera_index_for_shot
+from ...prefs import LimePipelinePrefs
+from .props import update_ai_render_asset_cache
+from ...ops.ai_http import (
     has_krea_api_key,
     has_openrouter_api_key,
     openrouter_headers,

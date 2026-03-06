@@ -14,10 +14,10 @@ from pathlib import Path
 import bpy
 from bpy.types import Operator
 
-from ..core import validate_scene
-from ..core.naming import build_next_scene_path, hydrate_state_from_filepath
-from ..scene.scene_utils import _format_shot_name
-from .ops_duplicate_scene import _replace_sh_tokens
+from ...core import validate_scene
+from ...core.naming import build_next_scene_path, hydrate_state_from_filepath
+from ...scene.scene_utils import _format_shot_name
+from ...ops.ops_duplicate_scene import _replace_sh_tokens
 
 
 def _ensure_unique_action(id_block):
@@ -289,9 +289,9 @@ class LIME_OT_stage_create_next_scene_file(Operator):
     bl_options = {"REGISTER"}
 
     def _resolve_context(self, context):
-        st = getattr(context.window_manager, "lime_pipeline", None)
+        st = getattr(context.window_manager, "lime_scene_continuity", None)
         if st is None:
-            raise ValueError("Lime Pipeline state not available. Open 'Project Organization' first.")
+            raise ValueError("Scene Continuity lab state not available.")
 
         try:
             hydrate_state_from_filepath(st)

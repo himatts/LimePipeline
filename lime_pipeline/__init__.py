@@ -46,7 +46,6 @@ from .ui import (
     LIME_PT_render_outputs,
     LIME_PT_render_cameras,
 )
-from .ui import LIME_PT_ai_render_converter
 from .ui import LIME_PT_stage_setup
 from .ui import LIME_PT_image_save_as
 from .ui import (
@@ -80,7 +79,6 @@ from .ui import (
     LIME_TB_PT_ai_textures_maintenance,
     LIME_TB_UL_ai_texture_items,
 )
-from .ui import LIME_TB_PT_experimental
 from .ops.ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
@@ -95,27 +93,8 @@ from .ops.ai_asset_organizer import (
     LIME_TB_OT_ai_asset_material_debug_report,
     LIME_TB_OT_ai_asset_collection_debug_report,
 )
-from .ops.ops_ai_render_converter import (
-    register_ai_render_handlers,
-    unregister_ai_render_handlers,
-    refresh_ai_render_state,
-    refresh_ai_render_assets,
-    LIME_OT_ai_render_refresh,
-    LIME_OT_ai_render_frame,
-    LIME_OT_ai_render_generate,
-    LIME_OT_ai_render_retry,
-    LIME_OT_ai_render_cancel,
-    LIME_OT_ai_render_test_connection,
-    LIME_OT_ai_render_add_to_sequencer,
-    LIME_OT_ai_render_open_outputs_folder,
-    LIME_OT_ai_render_delete_selected,
-    LIME_OT_ai_render_delete_batch,
-    LIME_OT_ai_render_open_preview,
-    LIME_OT_ai_render_import_style,
-)
 from .props_ai_assets import register as register_ai_asset_props, unregister as unregister_ai_asset_props
 from .props_ai_textures import register as register_ai_texture_props, unregister as unregister_ai_texture_props
-from .props_ai_renders import register as register_ai_render_props, unregister as unregister_ai_render_props
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_render_shortcut_props, unregister_render_shortcut_props
 from .ui import register_shot_list_props, unregister_shot_list_props
@@ -220,9 +199,6 @@ from .ops.ops_auto_camera_bg import (
 from .ops.ops_stage_hdri import (
     LIME_OT_stage_set_hdri,
 )
-from .ops.ops_scene_continuity import (
-    LIME_OT_stage_create_next_scene_file,
-)
 from .ops.ops_view_layers import (
     LIME_OT_create_view_layers,
 )
@@ -288,7 +264,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_add_simple_camera,
     LIME_OT_import_layout,
     LIME_OT_duplicate_scene_sequential,
-    LIME_OT_stage_create_next_scene_file,
     LIME_OT_group_selection_empty,
     LIME_OT_move_controller,
     LIME_OT_apply_scene_deltas,
@@ -352,18 +327,6 @@ NON_PANEL_CLASSES = (
     LIME_TB_OT_ai_asset_collection_debug_report,
     LIME_TB_UL_ai_asset_items,
     LIME_TB_UL_ai_texture_items,
-    LIME_OT_ai_render_refresh,
-    LIME_OT_ai_render_frame,
-    LIME_OT_ai_render_generate,
-    LIME_OT_ai_render_retry,
-    LIME_OT_ai_render_cancel,
-    LIME_OT_ai_render_test_connection,
-    LIME_OT_ai_render_add_to_sequencer,
-    LIME_OT_ai_render_open_outputs_folder,
-    LIME_OT_ai_render_delete_selected,
-    LIME_OT_ai_render_delete_batch,
-    LIME_OT_ai_render_open_preview,
-    LIME_OT_ai_render_import_style,
 )
 
 PIPELINE_PANEL_CLASSES = (
@@ -392,8 +355,6 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_ai_textures_review,
     LIME_TB_PT_ai_textures_apply,
     LIME_TB_PT_ai_textures_maintenance,
-    LIME_TB_PT_experimental,
-    LIME_PT_ai_render_converter,
 )
 
 TOOLBOX_PANEL_CLASSES = (
@@ -408,8 +369,6 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_ai_textures_review,
     LIME_TB_PT_ai_textures_apply,
     LIME_TB_PT_ai_textures_maintenance,
-    LIME_TB_PT_experimental,
-    LIME_PT_ai_render_converter,
 )
 
 def _panel_is_child(cls) -> bool:
@@ -500,7 +459,6 @@ def register():
     register_alpha_props()
     register_ai_asset_props()
     register_ai_texture_props()
-    register_ai_render_props()
     register_camera_list_props()
     register_shot_list_props()
     register_render_shortcut_props()
@@ -625,19 +583,6 @@ def register():
         pass
 
     try:
-        register_ai_render_handlers()
-    except Exception:
-        pass
-    try:
-        refresh_ai_render_state(bpy.context, force=True)
-    except Exception:
-        pass
-    try:
-        refresh_ai_render_assets(bpy.context, force=True)
-    except Exception:
-        pass
-
-    try:
         enable_dimension_live_updates()
     except Exception:
         pass
@@ -683,7 +628,6 @@ def unregister():
     unregister_alpha_props()
     unregister_ai_asset_props()
     unregister_ai_texture_props()
-    unregister_ai_render_props()
     unregister_camera_list_props()
     unregister_shot_list_props()
     unregister_render_shortcut_props()
@@ -697,12 +641,6 @@ def unregister():
         bpy.app.handlers.load_post.remove(_on_load_post)
     except Exception:
         pass
-
-    try:
-        unregister_ai_render_handlers()
-    except Exception:
-        pass
-
 
 @persistent
 def _on_load_post(dummy):
@@ -748,14 +686,4 @@ def _on_load_post(dummy):
         ensure_auto_bg_live_updates(scene=bpy.context.scene)
     except Exception:
         pass
-
-    try:
-        refresh_ai_render_state(bpy.context, force=True)
-    except Exception:
-        pass
-    try:
-        refresh_ai_render_assets(bpy.context, force=True)
-    except Exception:
-        pass
-
 

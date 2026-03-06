@@ -1,26 +1,19 @@
-"""
-UI for experimental Lime Toolbox features.
+"""UI for the Scene Continuity lab feature."""
 
-Currently: exposes the Scene Continuity handoff operator in an isolated panel so it
-can be used without cluttering stable tools. Marked experimental because the freeze
-logic is still evolving.
-"""
-
-import bpy
 from bpy.types import Panel
 
-from ..core import validate_scene
+from ...core import validate_scene
 
 
 CAT = "Lime Toolbox"
 
 
-class LIME_TB_PT_experimental(Panel):
+class LIME_TB_PT_scene_continuity_lab(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = CAT
-    bl_label = "Experimental"
-    bl_idname = "LIME_TB_PT_experimental"
+    bl_label = "Scene Continuity"
+    bl_idname = "LIME_TB_PT_scene_continuity_lab"
     bl_options = {"DEFAULT_CLOSED"}
 
     @classmethod
@@ -29,16 +22,16 @@ class LIME_TB_PT_experimental(Panel):
 
     def draw(self, ctx):
         layout = self.layout
-        st = getattr(ctx.window_manager, "lime_pipeline", None)
+        st = getattr(ctx.window_manager, "lime_scene_continuity", None)
 
         header = layout.box()
         header.alert = True
-        header.label(text="Experimental features. Use with caution.", icon='EXPERIMENTAL')
+        header.label(text="Lab feature. Not registered by default.", icon='EXPERIMENTAL')
 
         box = layout.box()
         box.label(text="Scene Continuity", icon='OUTLINER_COLLECTION')
         if st is None:
-            box.label(text="Open Project Organization first.", icon='INFO')
+            box.label(text="Scene Continuity lab state not available.", icon='INFO')
             return
 
         box.prop(st, "scene_continuity_frame_mode", text="Handoff")
@@ -53,5 +46,5 @@ class LIME_TB_PT_experimental(Panel):
 
 
 __all__ = [
-    "LIME_TB_PT_experimental",
+    "LIME_TB_PT_scene_continuity_lab",
 ]
