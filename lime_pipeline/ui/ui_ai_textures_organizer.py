@@ -64,6 +64,7 @@ class LIME_TB_PT_ai_textures_organizer(Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Lime Toolbox"
+    bl_options = {"DEFAULT_CLOSED"}
     bl_order = 176
 
     def draw(self, context):

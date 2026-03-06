@@ -62,9 +62,6 @@ from .ops.ops_model_organizer import (
 from .ops.ops_material_alpha_mix import (
     LIME_OT_apply_object_alpha_mix,
 )
-from .ui import (
-    LIME_TB_PT_animation_params,
-)
 from .ui import LIME_TB_PT_noisy_movement
 from .ui import (
     LIME_TB_PT_alpha_manager,
@@ -122,7 +119,6 @@ from .ops.ops_render_presets import (
     LIME_OT_render_apply_resolution_shortcut,
     ensure_preset_slots,
 )
-from .ops.ops_animation_params import LIME_TB_OT_apply_keyframe_style
 from .ops.ops_step_clean import LIME_OT_clean_step
 from .ops.ops_dimensions import (
     LIME_OT_dimension_envelope,
@@ -270,7 +266,6 @@ NON_PANEL_CLASSES = (
     LIME_OT_colorize_parent_groups,
     LIME_OT_apply_object_alpha_mix,
     LIME_OT_set_unit_preset,
-    LIME_TB_OT_apply_keyframe_style,
     LIME_TB_OT_noise_add_profile,
     LIME_TB_OT_noise_sync,
     LIME_TB_OT_noise_apply_to_selected,
@@ -346,7 +341,6 @@ OTHER_PANEL_CLASSES = (
 TOOLBOX_CATEGORY_PANELS = (
     LIME_PT_model_organizer,
     LIME_PT_dimension_utilities,
-    LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_asset_organizer,
@@ -360,7 +354,6 @@ TOOLBOX_CATEGORY_PANELS = (
 TOOLBOX_PANEL_CLASSES = (
     LIME_PT_model_organizer,
     LIME_PT_dimension_utilities,
-    LIME_TB_PT_animation_params,
     LIME_TB_PT_noisy_movement,
     LIME_TB_PT_alpha_manager,
     LIME_TB_PT_ai_asset_organizer,
@@ -453,8 +446,7 @@ def register():
         pass
 
     register_props()
-    from .ui import register_anim_params_props, register_noise_props
-    register_anim_params_props()
+    from .ui import register_noise_props
     register_noise_props()
     register_alpha_props()
     register_ai_asset_props()
@@ -622,8 +614,7 @@ def unregister():
         except Exception:
             pass
     REGISTERED_CLASSES = []
-    from .ui import unregister_anim_params_props, unregister_noise_props
-    unregister_anim_params_props()
+    from .ui import unregister_noise_props
     unregister_noise_props()
     unregister_alpha_props()
     unregister_ai_asset_props()
