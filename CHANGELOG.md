@@ -2,6 +2,7 @@
 
 ## [Unreleased] - 2025-09-30
 ### Added
+- Added the local Codex skill `blender-version-migration-research` to standardize future Blender API migration audits.
 - 3D Model Organizer: added `Resync Object Materials` (`lime.resync_object_materials_from_data`) to reload used linked libraries and copy mesh DATA materials back into OBJECT-level slots for selected editable meshes.
 - AI Render Converter panel for storyboard sketch conversion (Krea + OpenRouter), with manifested outputs.
 - AI Asset Organizer panel to suggest names for selected objects and their materials (OpenRouter).
@@ -20,6 +21,10 @@
 - Maintained all core shot management functionality while improving UI consistency
 
 ### Changed
+- Target Blender version is now 5.0+; the last Blender 4.5-compatible baseline is tagged as `blender-4.5-stable-0.8.1`.
+- AI Render Converter now uses the current Sequencer strips API instead of deprecated `sequences` aliases.
+- Alpha Events live mode no longer depends on legacy scene `Action.fcurves/groups`; event values are evaluated directly from event ranges.
+- Compositor/View Layer output helpers and render preset storage now preserve `ImageFormatSettings.media_type`.
 - Removed the AI Material Renamer panel from Lime Toolbox.
 - Removed legacy `lime_tb.ai_*` Material Renamer compatibility operators.
 - AI Asset Organizer is now the only recommended workflow for AI material renaming.

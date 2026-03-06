@@ -7,7 +7,7 @@ title: Primeros Pasos
 Lime Pipeline es un add-on para Blender orientado a estandarizar estructura y naming. Esta guía te ayuda a instalarlo y crear tu primer archivo con las convenciones del pipeline.
 
 ## Requisitos
-- **Blender 4.5 LTS**.
+- **Blender 5.0 o superior**.
 - Conexión a internet solo si usarás funciones de IA.
 
 ## Instalación

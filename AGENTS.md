@@ -6,7 +6,8 @@ Los `AGENTS.md` anidados agregan reglas especificas para su subarbol.
 La arquitectura y decisiones tecnicas se detallan en `ARCHITECTURE.md`.
 
 ## Contexto del proyecto
-- Add-on de Blender 4.5 LTS para estandarizar naming, rutas, backups y flujos de SHOT/render.
+- Add-on de Blender 5.x para estandarizar naming, rutas, backups y flujos de SHOT/render.
+- El ultimo baseline compatible con Blender 4.5 esta marcado con el tag Git `blender-4.5-stable-0.8.1`.
 - Enfoque de producto: reducir error humano con reglas deterministas y preflight antes de aplicar cambios.
 - Modulos principales: `core`, `data`, `scene`, `ops`, `ui`, con registro central en `lime_pipeline/__init__.py`.
 

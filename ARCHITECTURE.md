@@ -150,7 +150,8 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Filename scheme: `core.naming.make_filename`
 
 ## Version compatibility
-- Blender 4.5+
+- Blender 5.0+
+- Last Blender 4.5-compatible baseline is tagged as `blender-4.5-stable-0.8.1`
 - Access to Cycles/ColorManagement guarded by capability checks; degrade gracefully
 
 ## Error handling

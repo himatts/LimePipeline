@@ -58,7 +58,8 @@ UI (ui/) -> OPS (ops/) -> SCENE (scene/) -> CORE (core/)
 - Numeración de escena: 1–999 (o libre si `free_scene_numbering`).
 
 ## Compatibilidad y errores
-- Blender 4.5+.
+- Blender 5.0+.
+- El último baseline compatible con Blender 4.5 quedó marcado con el tag `blender-4.5-stable-0.8.1`.
 - No se silencian excepciones; se reporta vía `self.report` en operadores.
 
 ## Referencias

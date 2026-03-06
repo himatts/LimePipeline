@@ -17,7 +17,8 @@ Typical workflow:
 See `docs/guias/desarrollo-cursor-blender-development.md` for details.
 
 ## Scope and versions
-- Blender minimum version: 4.5.0
+- Blender minimum version: 5.0.0
+- Last Blender 4.5-compatible baseline: Git tag `blender-4.5-stable-0.8.1`
 - Python: Blender bundled
 - Add-on goals: project organization, canonical naming, SHOT structure, save/backup/render utilities
 - AI Asset Organizer v2: object/material/collection naming, hierarchy-aware target resolution, ambiguity handling, preview counters, apply-scope filters, and optional collection organization

@@ -42,7 +42,8 @@ Estandarizar el trabajo para reducir fricci�n y errores humanos: archivos mal 
 - En 3D Model Organizer, **Apply Deltas** y el aviso de offsets de locaci�n operan solo sobre objetos seleccionados.
 
 ## Requisitos
-- Blender 4.5 LTS (objetivo actual del add-on).
+- Blender 5.0 o superior (objetivo actual del add-on).
+- El último estado estable compatible con Blender 4.5 quedó marcado con el tag Git `blender-4.5-stable-0.8.1`.
 
 ## Instalaci�n local (r�pida)
 1. Blender > Edit > Preferences > Add-ons > Install...
