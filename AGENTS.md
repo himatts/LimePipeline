@@ -72,3 +72,5 @@ Cada vez que muevas, renombres o agregues operadores/paneles:
 - `.codex/skills/release-bump/SKILL.md`
 - `.codex/skills/package-addon/SKILL.md`
 - `.codex/skills/validate-naming/SKILL.md`
+- `.codex/skills/blender-dev-start-terminal/SKILL.md`
+- `.codex/skills/blender-dev-reload-addons-terminal/SKILL.md`
