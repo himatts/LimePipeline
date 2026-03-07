@@ -42,7 +42,6 @@ from .ui import LIME_PT_project_org
 from .ui import LIME_PT_shots
 from .ui import (
     LIME_PT_render_configs,
-    LIME_PT_render_preset_actions,
     LIME_PT_render_outputs,
     LIME_PT_render_cameras,
 )
@@ -76,6 +75,7 @@ from .ui import (
     LIME_TB_PT_ai_textures_maintenance,
     LIME_TB_UL_ai_texture_items,
 )
+from .ui import LIME_TB_PT_labs, LIME_TB_PT_global_render_presets_lab
 from .ops.ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
@@ -327,7 +327,6 @@ NON_PANEL_CLASSES = (
 PIPELINE_PANEL_CLASSES = (
     LIME_PT_project_org,
     LIME_PT_render_configs,
-    LIME_PT_render_preset_actions,
     LIME_PT_render_outputs,
     LIME_PT_shots,
     LIME_PT_stage_setup,
@@ -349,6 +348,8 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_ai_textures_review,
     LIME_TB_PT_ai_textures_apply,
     LIME_TB_PT_ai_textures_maintenance,
+    LIME_TB_PT_labs,
+    LIME_TB_PT_global_render_presets_lab,
 )
 
 TOOLBOX_PANEL_CLASSES = (
@@ -362,6 +363,8 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_ai_textures_review,
     LIME_TB_PT_ai_textures_apply,
     LIME_TB_PT_ai_textures_maintenance,
+    LIME_TB_PT_labs,
+    LIME_TB_PT_global_render_presets_lab,
 )
 
 def _panel_is_child(cls) -> bool:

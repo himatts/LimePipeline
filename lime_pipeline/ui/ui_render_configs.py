@@ -1,11 +1,11 @@
 """
-UI for render presets, resolution shortcuts, and output utilities.
+UI for render shortcuts and output utilities.
 
-Purpose: Apply/save/clear global render presets, toggle denoising, set resolution via
-shortcuts (with UHD toggle), and open output folders.
-Key classes: LIME_PT_render_configs, LIME_PT_render_preset_actions, LIME_PT_render_outputs.
-Depends on: ops.ops_render_presets and core naming/paths helpers.
-Notes: UI-only; reads addon preferences and scene settings.
+Purpose: Provide fast render/output controls without exposing the deprecated
+global preset workflow in the main production panel.
+Key classes: LIME_PT_render_configs, LIME_PT_render_outputs.
+Depends on: core naming/paths helpers.
+Notes: UI-only; reads scene settings and pipeline state.
 """
 
 import bpy
@@ -18,8 +18,6 @@ from ..core.naming import hydrate_state_from_filepath
 
 
 CAT = "Lime Pipeline"
-ADDON_ID = __package__.split('.')[0]
-from ..ops.ops_render_presets import PRESET_SLOT_COUNT
 
 RESOLUTION_SHORTCUTS = (
     ("16:9", 1920, 1080),
@@ -41,46 +39,12 @@ class LIME_PT_render_configs(Panel):
 
     def draw(self, ctx):
         layout = self.layout
-        prefs = None
-        try:
-            prefs = ctx.preferences.addons[ADDON_ID].preferences
-        except Exception:
-            prefs = None
-
         scene = ctx.scene
         render = scene.render
 
-        global_col = layout.column(align=True)
-        global_col.label(text="Global Presets")
-        global_slots = getattr(prefs, 'global_render_presets', []) if prefs else []
-
-        grid = global_col.grid_flow(row_major=True, columns=PRESET_SLOT_COUNT, even_columns=True, align=True)
-
-        for idx in range(PRESET_SLOT_COUNT):
-            slot = global_slots[idx] if idx < len(global_slots) else None
-            has_data = bool(slot and not slot.is_empty and (slot.data_json or '').strip())
-
-            cell = grid.column(align=True)
-            cell.use_property_decorate = False
-
-            apply_col = cell.column(align=True)
-            apply_col.enabled = has_data
-            apply_btn = apply_col.operator("lime.render_preset_apply", text=str(idx + 1), icon='PRESET')
-            apply_btn.slot_index = idx
-
-            actions = cell.split(factor=0.5, align=True)
-            save_col = actions.column(align=True)
-            save_btn = save_col.operator("lime.render_preset_save", text="", icon='FILE_TICK')
-            save_btn.slot_index = idx
-
-            delete_col = actions.column(align=True)
-            delete_col.enabled = has_data
-            delete_btn = delete_col.operator("lime.render_preset_clear", text="", icon='TRASH')
-            delete_btn.slot_index = idx
-
-        global_col.separator()
-
-        shortcuts_row = global_col.row(align=True)
+        shortcuts_box = layout.box()
+        shortcuts_box.label(text="Render Shortcuts")
+        shortcuts_row = shortcuts_box.row(align=True)
         shortcuts_row.use_property_decorate = False
         for label, base_x, base_y in RESOLUTION_SHORTCUTS:
             op = shortcuts_row.operator("lime.render_apply_resolution_shortcut", text=label)
@@ -91,10 +55,8 @@ class LIME_PT_render_configs(Panel):
         uhd_toggle = shortcuts_row.row(align=True)
         uhd_toggle.prop(scene, "lime_render_shortcut_use_uhd", text="UHD", toggle=True)
 
-        filepath_row = global_col.row(align=True)
+        filepath_row = shortcuts_box.row(align=True)
         filepath_row.prop(render, "filepath", text="")
-
-        global_col.separator()
 
         layout.separator()
 
@@ -109,61 +71,13 @@ class LIME_PT_render_configs(Panel):
         anim_row_bottom.operator("lime.set_anim_output_test_local", text="Set Anim Output: Test (Local)", icon='FILE_CACHE')
         anim_row_bottom.operator("lime.set_anim_output_final_local", text="Set Anim Output: Final (Local)", icon='RENDER_ANIMATION')
 
-        cy = getattr(scene, 'cycles', None)
-
         render_box = layout.box()
         render_box.label(text="Render Settings")
-        engine_row = render_box.row(align=True)
-        engine_row.prop(render, "engine", text="")
-
-        if cy is None:
-            cy_col = render_box.column()
-            cy_col.enabled = False
-            cy_col.label(text="Cycles not available", icon='INFO')
-        else:
-            cy_col = render_box.column(align=True)
-            viewport_row = cy_col.row(align=True)
-            try:
-                viewport_row.prop(cy, "preview_adaptive_threshold", text="Noise Threshold")
-            except Exception:
-                pass
-            try:
-                viewport_row.prop(cy, "preview_samples", text="Samples")
-            except Exception:
-                pass
-            try:
-                op = viewport_row.operator(
-                    "lime.toggle_preview_denoising_property",
-                    text="",
-                    icon='CHECKBOX_HLT' if cy.use_preview_denoising else 'CHECKBOX_DEHLT',
-                )
-                op.current_value = cy.use_preview_denoising
-            except Exception:
-                pass
-
-            cy_col.separator()
-            render_row = cy_col.row(align=True)
-            try:
-                render_row.prop(cy, "adaptive_threshold", text="Noise Threshold")
-            except Exception:
-                pass
-            try:
-                render_row.prop(cy, "samples", text="Samples")
-            except Exception:
-                pass
-            try:
-                op = render_row.operator(
-                    "lime.toggle_denoising_property",
-                    text="",
-                    icon='CHECKBOX_HLT' if cy.use_denoising else 'CHECKBOX_DEHLT',
-                )
-                op.current_value = cy.use_denoising
-            except Exception:
-                pass
 
         checkbox_row = render_box.row(align=True)
         checkbox_row.prop(render, "use_persistent_data", text="Persistent Data")
-        checkbox_row.prop(render, "film_transparent", text="Transparent Film")
+        checkbox_row.prop(render, "use_motion_blur", text="Motion Blur")
+        checkbox_row.prop(render, "film_transparent", text="Transparency Fill")
 
         output_box = layout.box()
         output_box.label(text="Output Properties")
@@ -182,23 +96,6 @@ class LIME_PT_render_configs(Panel):
         color_row = color_box.row(align=True)
         color_row.prop(vs, "view_transform", text="")
         color_row.prop(vs, "look", text="")
-
-
-class LIME_PT_render_preset_actions(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_category = CAT
-    bl_label = "Preset Maintenance"
-    bl_options = {"DEFAULT_CLOSED"}
-    bl_parent_id = "LIME_PT_render_configs"
-    bl_order = 2
-
-    def draw(self, ctx):
-        layout = self.layout
-        col = layout.column(align=True)
-        col.operator("lime.render_preset_reset_all", text="Reset Presets", icon='TRASH')
-        col.operator("lime.render_preset_restore_defaults", text="Restore Defaults", icon='LOOP_BACK')
-        col.operator("lime.render_preset_update_defaults", text="Update Defaults", icon='FILE_REFRESH')
 
 
 class LIME_PT_render_outputs(Panel):
@@ -357,7 +254,6 @@ def unregister_render_shortcut_props():
 __all__ = [
     "LIME_PT_render_configs",
     "LIME_PT_render_outputs",
-    "LIME_PT_render_preset_actions",
     "register_render_shortcut_props",
     "unregister_render_shortcut_props",
 ]

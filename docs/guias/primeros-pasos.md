@@ -38,8 +38,9 @@ Scene Collection
 3. Ajusta opacidad/guías en el mismo panel.
 
 ## Render básico
-1. Ve a **Render Configs** y aplica un preset.
-2. Usa “Render” desde el panel de cámaras si necesitas un output rápido.
+1. Ve a **Render Configs** para elegir resolución, output path y toggles rápidos como `Persistent Data`.
+2. Si necesitas presets globales antiguos, ábrelos desde **Lime Toolbox > Labs > Global Render Presets**.
+3. Usa “Render” desde el panel de cámaras si necesitas un output rápido.
 
 ## Materiales con IA (opcional)
 1. Configura la API key en preferencias.

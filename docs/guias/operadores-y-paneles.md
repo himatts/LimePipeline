@@ -12,7 +12,8 @@ Esta gu�a documenta todos los operadores y paneles disponibles en Lime Pipelin
 |-------|----|---------|-----------|-----------|
 | **Stage** | `LIME_PT_stage_setup` | 3D View | Lime | Configuraci�n inicial de escena y proyecto |
 | **Shots** | `LIME_PT_shots` | 3D View | Lime | Gesti�n de SHOT collections y organizaci�n |
-| **Render Configs** | `LIME_PT_render_configs` | 3D View | Lime | Presets de render y configuraciones |
+| **Render Configs** | `LIME_PT_render_configs` | 3D View | Lime | Atajos de resolución, outputs y toggles rápidos de render |
+| **Labs** | `LIME_TB_PT_labs` | 3D View | Lime Toolbox | Funciones experimentales o deprecadas |
 | **Project Organization** | `LIME_PT_project_org` | 3D View | Lime | Organizaci�n de archivos y carpetas |
 | **Model Organizer** | `LIME_PT_model_organizer` | 3D View | Lime | Organizaci�n de modelos y grupos |
 | **Animation Parameters** | `LIME_TB_PT_animation_params` | 3D View | Lime | Par�metros de animaci�n y keyframes |
