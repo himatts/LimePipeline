@@ -75,7 +75,6 @@ from .ui import (
     LIME_TB_PT_ai_textures_maintenance,
     LIME_TB_UL_ai_texture_items,
 )
-from .ui import LIME_TB_PT_labs, LIME_TB_PT_global_render_presets_lab
 from .ops.ai_asset_organizer import (
     LIME_TB_OT_ai_asset_test_connection,
     LIME_TB_OT_ai_asset_suggest_names,
@@ -95,7 +94,11 @@ from .props_ai_textures import register as register_ai_texture_props, unregister
 from .ui import register_camera_list_props, unregister_camera_list_props
 from .ui import register_render_shortcut_props, unregister_render_shortcut_props
 from .ui import register_shot_list_props, unregister_shot_list_props
-from .ops.ops_select_root import LIME_OT_pick_root
+from .ops.ops_select_root import (
+    LIME_OT_pick_root,
+    LIME_OT_reload_current_project_data,
+    LIME_OT_clear_project_data,
+)
 from .ops.ops_folders import LIME_OT_ensure_folders, LIME_OT_open_folder
 from .ops.ops_folders import LIME_OT_open_output_folder
 from .ops.ops_anim_output import (
@@ -228,6 +231,8 @@ NON_PANEL_CLASSES = (
     LimePipelinePrefs,
     LIME_TB_UL_alpha_events,
     LIME_OT_pick_root,
+    LIME_OT_reload_current_project_data,
+    LIME_OT_clear_project_data,
     LIME_OT_ensure_folders,
     LIME_OT_open_folder,
     LIME_OT_open_output_folder,
@@ -348,8 +353,6 @@ TOOLBOX_CATEGORY_PANELS = (
     LIME_TB_PT_ai_textures_review,
     LIME_TB_PT_ai_textures_apply,
     LIME_TB_PT_ai_textures_maintenance,
-    LIME_TB_PT_labs,
-    LIME_TB_PT_global_render_presets_lab,
 )
 
 TOOLBOX_PANEL_CLASSES = (
@@ -363,8 +366,6 @@ TOOLBOX_PANEL_CLASSES = (
     LIME_TB_PT_ai_textures_review,
     LIME_TB_PT_ai_textures_apply,
     LIME_TB_PT_ai_textures_maintenance,
-    LIME_TB_PT_labs,
-    LIME_TB_PT_global_render_presets_lab,
 )
 
 def _panel_is_child(cls) -> bool:

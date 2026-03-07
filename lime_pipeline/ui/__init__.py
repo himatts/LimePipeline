@@ -7,10 +7,6 @@ from .ui_render_configs import (
     register_render_shortcut_props,
     unregister_render_shortcut_props,
 )
-from .ui_labs import (
-    LIME_TB_PT_labs,
-    LIME_TB_PT_global_render_presets_lab,
-)
 from .ui_cameras_manager import (
     LIME_PT_render_cameras,
     register_camera_list_props,
@@ -55,8 +51,6 @@ __all__ = [
     "LIME_PT_render_configs",
     "LIME_PT_render_cameras",
     "LIME_PT_render_outputs",
-    "LIME_TB_PT_labs",
-    "LIME_TB_PT_global_render_presets_lab",
     "register_render_shortcut_props",
     "unregister_render_shortcut_props",
     "register_camera_list_props",

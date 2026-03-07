@@ -2,16 +2,7 @@
 Animation Render Output Operators
 
 Provides operators to configure Blender's render output path for animation
-frames following Lime Pipeline conventions. The operators resolve the active
-SHOT, scene number, revision letter, and project root to build folder structures
-like:
-
-    Animation/Rev X/SC010_SH03/[test/]{basename}_####
-
-They create missing directories when possible and set the render filepath so
-F11 renders write frames into standardized locations. Errors are reported with
-actionable guidance when context is incomplete (no SHOT active, missing Rev,
-etc.).
+frames following Lime Pipeline conventions.
 """
 
 from __future__ import annotations
@@ -21,13 +12,16 @@ from pathlib import Path
 import bpy
 from bpy.types import Operator
 
+from ..core.anim_output_paths import (
+    build_local_anim_output_path,
+    build_pipeline_anim_output_path,
+)
 from ..core.naming import hydrate_state_from_filepath, resolve_project_name, RE_PROJECT_DIR
-from ..core.paths import paths_for_type
 from ..core.validate_scene import active_shot_context, parse_shot_index
 
 
 def _container_type_for_state(state) -> str:
-    """Return container project type for animation outputs."""
+    """Return the container project type for animation outputs."""
     try:
         ptype = (getattr(state, "project_type", "") or "").strip().upper()
     except Exception:
@@ -43,7 +37,7 @@ def _ensure_state(context) -> tuple[object, bpy.types.Scene]:
     state = getattr(wm, "lime_pipeline", None)
     if state is None:
         raise RuntimeError(
-            "Estado Lime Pipeline no disponible. Abre 'Project Organization' para inicializarlo."
+            "Lime Pipeline state is not available. Open Project Organization first."
         )
     try:
         hydrate_state_from_filepath(state)
@@ -58,10 +52,10 @@ def _resolve_core_context(context) -> tuple[object, Path, str, int, int, str]:
 
     root_str = (getattr(state, "project_root", "") or "").strip()
     if not root_str:
-        raise RuntimeError("Project Root no detectado. Revisa 'Project Organization'.")
+        raise RuntimeError("Project Root was not detected. Check Project Organization.")
     root = Path(root_str)
     if not root.exists():
-        raise RuntimeError(f"Project Root inválido o inaccesible: {root}")
+        raise RuntimeError(f"Project Root is invalid or inaccessible: {root}")
 
     try:
         sc_number = int(getattr(state, "sc_number", 0) or 0)
@@ -69,24 +63,42 @@ def _resolve_core_context(context) -> tuple[object, Path, str, int, int, str]:
         sc_number = 0
     if sc_number <= 0:
         raise RuntimeError(
-            "No se pudo resolver el número de escena (SC###). Normaliza el nombre del archivo o define SC en Project Organization."
+            "Scene number (SC###) could not be resolved. Normalize the blend filename or set SC in Project Organization."
         )
 
     rev = (getattr(state, "rev_letter", "") or "").strip().upper()
     if not rev:
-        raise RuntimeError("Revisión no configurada. Define la Rev en Project Organization.")
+        raise RuntimeError("Revision is not configured. Set Rev in Project Organization.")
 
     shot = active_shot_context(context)
     if shot is None:
-        raise RuntimeError("No hay SHOT activo. Activa un SHOT en el Outliner.")
+        raise RuntimeError("No active SHOT was found. Activate a SHOT collection in the Outliner.")
     shot_idx = parse_shot_index(getattr(shot, "name", ""))
     if shot_idx is None or shot_idx <= 0:
         raise RuntimeError(
-            "No se pudo leer el índice del SHOT activo. Usa colecciones 'SHOT 01', 'SHOT 02', etc."
+            "Could not read the active SHOT index. Use collection names like 'SHOT 01' or 'SHOT 02'."
         )
 
     container_ptype = _container_type_for_state(state)
     return state, root, container_ptype, sc_number, shot_idx, rev
+
+
+def _resolve_local_output_base_dir(context) -> Path:
+    """Resolve the configured local output base directory."""
+    try:
+        prefs = context.preferences.addons[__package__.split(".")[0]].preferences
+        base_dir = (getattr(prefs, "local_projects_root", "") or "").strip()
+    except Exception:
+        base_dir = ""
+
+    if base_dir:
+        return Path(base_dir)
+
+    desktop = Path.home() / "Desktop"
+    if desktop.exists():
+        return desktop
+
+    return Path.home() / "OneDrive" / "Desktop"
 
 
 class _LimeSetAnimOutput(Operator):
@@ -102,58 +114,63 @@ class _LimeSetAnimOutput(Operator):
         except RuntimeError as ex:
             self.report({"ERROR"}, str(ex))
             return {"CANCELLED"}
-        except Exception as ex:  # Safety net
-            self.report({"ERROR"}, f"Error preparando contexto: {ex}")
-            return {"CANCELLED"}
-
-        try:
-            local_mode = bool(getattr(state, "use_local_project", False))
-            _ramv, folder_type, _scenes, _target, _backups = paths_for_type(
-                root,
-                container_ptype,
-                rev,
-                sc_number,
-                local=local_mode,
-            )
         except Exception as ex:
-            self.report({"ERROR"}, f"No se pudo resolver carpeta RAMV: {ex}")
+            self.report({"ERROR"}, f"Error preparing the render context: {ex}")
             return {"CANCELLED"}
 
-        shot_token = f"SC{sc_number:03d}_SH{shot_idx:02d}"
-        target_dir = folder_type / shot_token
-        if self.use_test_variant:
-            target_dir = target_dir / "test"
-            basename = f"{shot_token}_test_"
-            mode_label = "Test"
-        else:
-            basename = f"{shot_token}_"
-            mode_label = "Final"
+        local_mode = bool(getattr(state, "use_local_project", False))
+        try:
+            if local_mode:
+                project_name = resolve_project_name(state)
+                if not project_name:
+                    self.report({"ERROR"}, "Project name could not be resolved. Check Project Organization.")
+                    return {"CANCELLED"}
+                output_path = build_local_anim_output_path(
+                    _resolve_local_output_base_dir(context),
+                    project_name,
+                    sc_number,
+                    shot_idx,
+                    use_test_variant=self.use_test_variant,
+                )
+                container_label = "Local"
+            else:
+                output_path = build_pipeline_anim_output_path(
+                    root,
+                    container_ptype,
+                    rev,
+                    sc_number,
+                    shot_idx,
+                    use_test_variant=self.use_test_variant,
+                    local_mode=False,
+                )
+                container_label = "Animation" if container_ptype == "ANIM" else "Renders"
+        except Exception as ex:
+            self.report({"ERROR"}, f"Could not resolve the animation output path: {ex}")
+            return {"CANCELLED"}
+
+        target_dir = output_path.parent
+        mode_label = "Test" if self.use_test_variant else "Final"
 
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
         except Exception as ex:
-            self.report({"ERROR"}, f"No se pudo crear la carpeta destino:\n{target_dir}\n{ex}")
+            self.report({"ERROR"}, f"Could not create the target folder:\n{target_dir}\n{ex}")
             return {"CANCELLED"}
 
-        output_path = target_dir / basename
         try:
             context.scene.render.filepath = str(output_path)
         except Exception as ex:
-            self.report({"ERROR"}, f"Blender rechazó la ruta de salida: {ex}")
+            self.report({"ERROR"}, f"Blender rejected the output path: {ex}")
             return {"CANCELLED"}
 
-        container_label = "Animation" if container_ptype == "ANIM" else "Renders"
-        self.report(
-            {"INFO"},
-            f"{mode_label} output listo en {container_label}: {output_path}",
-        )
+        self.report({"INFO"}, f"{mode_label} animation output set to {container_label}: {output_path}")
         return {"FINISHED"}
 
 
 class LIME_OT_set_anim_output_test(_LimeSetAnimOutput):
     bl_idname = "lime.set_anim_output_test"
     bl_label = "Set Anim Output: Test"
-    bl_description = "Configura la salida de animación para pruebas rápidas (carpeta test/)"
+    bl_description = "Set the animation output path for quick tests"
     output_label = "Animation Output (Test)"
     use_test_variant = True
 
@@ -161,7 +178,7 @@ class LIME_OT_set_anim_output_test(_LimeSetAnimOutput):
 class LIME_OT_set_anim_output_final(_LimeSetAnimOutput):
     bl_idname = "lime.set_anim_output_final"
     bl_label = "Set Anim Output: Final"
-    bl_description = "Configura la salida de animación final siguiendo la convención RAMV"
+    bl_description = "Set the final animation output path following Lime conventions"
     output_label = "Animation Output (Final)"
     use_test_variant = False
 
@@ -180,7 +197,7 @@ class _LimeSetAnimOutputLocal(Operator):
             self.report({"ERROR"}, str(ex))
             return {"CANCELLED"}
         except Exception as ex:
-            self.report({"ERROR"}, f"Error preparando contexto: {ex}")
+            self.report({"ERROR"}, f"Error preparing the render context: {ex}")
             return {"CANCELLED"}
 
         try:
@@ -188,93 +205,69 @@ class _LimeSetAnimOutputLocal(Operator):
         except Exception:
             sc_number = 0
         if sc_number <= 0:
-            self.report({"ERROR"}, "No se pudo resolver el número de escena (SC###). Revisa Project Organization.")
+            self.report({"ERROR"}, "Scene number (SC###) could not be resolved. Check Project Organization.")
             return {"CANCELLED"}
 
         shot = active_shot_context(context)
         if shot is None:
-            self.report({"ERROR"}, "No hay SHOT activo. Activa un SHOT en el Outliner.")
+            self.report({"ERROR"}, "No active SHOT was found. Activate a SHOT collection in the Outliner.")
             return {"CANCELLED"}
         shot_idx = parse_shot_index(getattr(shot, "name", ""))
         if shot_idx is None or shot_idx <= 0:
-            self.report({"ERROR"}, "No se pudo leer el índice del SHOT activo. Usa colecciones 'SHOT 01', 'SHOT 02', etc.")
+            self.report({"ERROR"}, "Could not read the active SHOT index. Use 'SHOT 01', 'SHOT 02', etc.")
             return {"CANCELLED"}
 
-        # Warn about ambiguous project roots when not using Local Project Mode.
         if not getattr(state, "use_local_project", False):
             try:
                 root_name = Path(getattr(state, "project_root", "") or "").name
                 if root_name and not RE_PROJECT_DIR.match(root_name) and not getattr(state, "use_custom_name", False):
                     self.report(
                         {"WARNING"},
-                        "Project Root no parece un folder de proyecto; el nombre local puede ser incorrecto.",
+                        "Project Root does not look like a project folder; the local project name may be inaccurate.",
                     )
             except Exception:
                 pass
 
-        # Get project name
         project_name = resolve_project_name(state)
         if not project_name:
-            self.report({"ERROR"}, "No se pudo obtener el nombre del proyecto. Revisa Project Organization.")
+            self.report({"ERROR"}, "Project name could not be resolved. Check Project Organization.")
             return {"CANCELLED"}
 
-        # Resolve local output base directory from preferences (fallback to Desktop).
         try:
-            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
-            base_dir = (getattr(prefs, "local_projects_root", "") or "").strip()
-        except Exception:
-            base_dir = ""
-        try:
-            if base_dir:
-                base = Path(base_dir)
-            else:
-                base = Path.home() / "Desktop"
-                if not base.exists():
-                    # Fallback for Windows OneDrive desktop when Desktop is missing
-                    base = Path.home() / "OneDrive" / "Desktop"
-            if not str(base):
-                raise RuntimeError("Ruta local no disponible")
+            output_path = build_local_anim_output_path(
+                _resolve_local_output_base_dir(context),
+                project_name,
+                sc_number,
+                shot_idx,
+                use_test_variant=self.use_test_variant,
+            )
         except Exception as ex:
-            self.report({"ERROR"}, f"No se pudo resolver la ruta local: {ex}")
+            self.report({"ERROR"}, f"Could not resolve the local output path: {ex}")
             return {"CANCELLED"}
 
-        # Create project folder under local base
-        project_dir = base / project_name
-        shot_token = f"SC{sc_number:03d}_SH{shot_idx:02d}"
-        target_dir = project_dir / shot_token
-
-        if self.use_test_variant:
-            target_dir = target_dir / "test"
-            basename = f"{shot_token}_test_"
-            mode_label = "Test (Local)"
-        else:
-            basename = f"{shot_token}_"
-            mode_label = "Final (Local)"
+        target_dir = output_path.parent
+        mode_label = "Test (Local)" if self.use_test_variant else "Final (Local)"
 
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
         except Exception as ex:
-            self.report({"ERROR"}, f"No se pudo crear la carpeta destino:\n{target_dir}\n{ex}")
+            self.report({"ERROR"}, f"Could not create the target folder:\n{target_dir}\n{ex}")
             return {"CANCELLED"}
 
-        output_path = target_dir / basename
         try:
             context.scene.render.filepath = str(output_path)
         except Exception as ex:
-            self.report({"ERROR"}, f"Blender rechazó la ruta de salida: {ex}")
+            self.report({"ERROR"}, f"Blender rejected the output path: {ex}")
             return {"CANCELLED"}
 
-        self.report(
-            {"INFO"},
-            f"{mode_label} output listo en local: {output_path}",
-        )
+        self.report({"INFO"}, f"{mode_label} animation output set to local: {output_path}")
         return {"FINISHED"}
 
 
 class LIME_OT_set_anim_output_test_local(_LimeSetAnimOutputLocal):
     bl_idname = "lime.set_anim_output_test_local"
     bl_label = "Set Anim Output: Test (Local)"
-    bl_description = "Configura la salida de animación para pruebas rápidas en el escritorio local"
+    bl_description = "Set the local animation output path for quick tests"
     output_label = "Animation Output (Test Local)"
     use_test_variant = True
 
@@ -282,7 +275,7 @@ class LIME_OT_set_anim_output_test_local(_LimeSetAnimOutputLocal):
 class LIME_OT_set_anim_output_final_local(_LimeSetAnimOutputLocal):
     bl_idname = "lime.set_anim_output_final_local"
     bl_label = "Set Anim Output: Final (Local)"
-    bl_description = "Configura la salida de animación final en el escritorio local"
+    bl_description = "Set the final local animation output path"
     output_label = "Animation Output (Final Local)"
     use_test_variant = False
 
@@ -293,4 +286,3 @@ __all__ = [
     "LIME_OT_set_anim_output_test_local",
     "LIME_OT_set_anim_output_final_local",
 ]
-

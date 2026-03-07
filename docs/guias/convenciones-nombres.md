@@ -146,6 +146,8 @@ RAW_MiProyecto_SB_SC005_Rev_B.png
 - Test: subcarpeta `test/`
 - Prefijo de salida: `SC###_SH##_` o `SC###_SH##_test_` (Blender agrega `####`)
 - Local: `Desktop/<ProjectName>/SC###_SH##/` (mismo esquema)
+- En `Local Project Mode`, los botones principales de `Render Configs > Output Files (Animation)` apuntan siempre a la salida local y no muestran botones locales duplicados.
+- En proyecto compartido, el panel mantiene ambas variantes: salida del proyecto y salida local.
 
 ## Backups
 

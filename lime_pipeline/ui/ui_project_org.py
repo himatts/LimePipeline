@@ -203,5 +203,11 @@ class LIME_PT_project_org(Panel):
         secondary_row = box3.row(align=True)
         secondary_row.operator("lime.ensure_folders", text="Create Folders", icon='FILE_NEW')
         secondary_row.operator("lime.open_folder", text="Open Folder", icon='FILE_FOLDER')
+        box3.separator()
+        sync_row = box3.row(align=True)
+        reload_row = sync_row.row(align=True)
+        reload_row.enabled = bool(getattr(bpy.data, "filepath", ""))
+        reload_row.operator("lime.reload_current_project_data", text="Reload Current Data", icon='FILE_REFRESH')
+        sync_row.operator("lime.clear_project_data", text="Clear Project Data", icon='TRASH')
 
 

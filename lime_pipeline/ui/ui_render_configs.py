@@ -61,15 +61,18 @@ class LIME_PT_render_configs(Panel):
         layout.separator()
 
         anim_box = layout.box()
-        anim_box.label(text="Output Files (Animation)")
-        # Existing buttons (RAMV path)
+        local_mode = bool(getattr(ctx.window_manager.lime_pipeline, "use_local_project", False))
+        anim_title = "Output Files (Animation)"
+        if local_mode:
+            anim_title = "Output Files (Animation, Local)"
+        anim_box.label(text=anim_title)
         anim_row_top = anim_box.row(align=True)
         anim_row_top.operator("lime.set_anim_output_test", text="Set Anim Output: Test", icon='FILE_CACHE')
         anim_row_top.operator("lime.set_anim_output_final", text="Set Anim Output: Final", icon='RENDER_ANIMATION')
-        # New local buttons (Desktop)
-        anim_row_bottom = anim_box.row(align=True)
-        anim_row_bottom.operator("lime.set_anim_output_test_local", text="Set Anim Output: Test (Local)", icon='FILE_CACHE')
-        anim_row_bottom.operator("lime.set_anim_output_final_local", text="Set Anim Output: Final (Local)", icon='RENDER_ANIMATION')
+        if not local_mode:
+            anim_row_bottom = anim_box.row(align=True)
+            anim_row_bottom.operator("lime.set_anim_output_test_local", text="Set Anim Output: Test (Local)", icon='FILE_CACHE')
+            anim_row_bottom.operator("lime.set_anim_output_final_local", text="Set Anim Output: Final (Local)", icon='RENDER_ANIMATION')
 
         render_box = layout.box()
         render_box.label(text="Render Settings")

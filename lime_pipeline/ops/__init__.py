@@ -24,6 +24,11 @@ from .ops_shots import (
     LIME_OT_duplicate_shot,
     LIME_OT_render_shots_from_markers,
 )
+from .ops_select_root import (
+    LIME_OT_pick_root,
+    LIME_OT_reload_current_project_data,
+    LIME_OT_clear_project_data,
+)
 from .ops_duplicate_scene import (
     LIME_OT_duplicate_scene_sequential,
 )
@@ -105,6 +110,9 @@ __all__ = [
     "LIME_OT_texture_refine",
     "LIME_OT_texture_apply",
     "LIME_OT_texture_clear_session",
+    "LIME_OT_pick_root",
+    "LIME_OT_reload_current_project_data",
+    "LIME_OT_clear_project_data",
 ]
 
 

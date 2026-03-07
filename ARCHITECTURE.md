@@ -33,6 +33,15 @@ Lime Pipeline is a Blender add-on that standardizes project structure and naming
 - Rules:
   - No imperative code; only data structures
 
+### labs (archived code)
+- Files: `labs/*`
+- Responsibilities:
+  - Preserve deprecated or experimental operators/panels/helpers that should remain in the repository for future reference
+- Rules:
+  - Not part of the default add-on registration
+  - Not exposed in the production UI unless a future migration explicitly promotes them back into `ui/`/`ops/`
+  - Safe place for archived panel/operator implementations that should not affect shipping behavior
+
 ### props
 - Files: `props.py` (WindowManager state), `props_ai_assets.py` (Scene-scoped AI asset organizer proposals), `props_ai_renders.py` (Scene-scoped AI render conversion state)
 - Responsibilities:

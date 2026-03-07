@@ -166,7 +166,7 @@ Esta guía proporciona soluciones detalladas para los problemas más comunes en 
 
 **Soluciones:**
 1. **Restaurar defaults:**
-   - Botón "Restore Defaults" en `Lime Toolbox > Labs > Global Render Presets`
+   - Si hace falta, recupera el flujo de presets desde `lime_pipeline/labs/`
    - Reset all settings
 
 2. **Verificar presets:**

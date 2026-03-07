@@ -1,10 +1,11 @@
 """
-UI panels for experimental or deprecated workflows kept out of the main pipeline.
+Archived UI panels for deprecated render preset workflows.
 
-Purpose: Host lower-priority tooling without cluttering production panels.
+Purpose: Preserve the old Global Render Presets interface in-repo without
+registering it in the shipping add-on UI.
 Key classes: LIME_TB_PT_labs, LIME_TB_PT_global_render_presets_lab.
 Depends on: render preset operators and addon preferences.
-Notes: UI-only; no heavy work in draw.
+Notes: Archived code only. Do not wire into default registration.
 """
 
 import bpy

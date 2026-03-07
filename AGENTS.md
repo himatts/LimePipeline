@@ -14,6 +14,7 @@ La arquitectura y decisiones tecnicas se detallan en `ARCHITECTURE.md`.
 ## Mapa de modulos
 - `lime_pipeline/core`: reglas de naming/paths/validacion y helpers Blender-agnostic.
 - `lime_pipeline/data`: constantes y plantillas declarativas.
+- `lime_pipeline/labs`: archivo interno para codigo deprecado o experimental; no forma parte de la UI/registro por defecto.
 - `lime_pipeline/scene`: utilidades de SHOT y estructura de escena.
 - `lime_pipeline/ops`: operadores y mutaciones de estado.
 - `lime_pipeline/ui`: paneles/listas con UI ligera.
@@ -22,6 +23,7 @@ La arquitectura y decisiones tecnicas se detallan en `ARCHITECTURE.md`.
 ## Reglas globales (no negociables)
 - `core` no debe importar `bpy` en nivel modulo, excepto `core/validate_scene.py`.
 - `ui` debe ser ligera: no IO pesado, red ni calculos costosos en `draw()`.
+- `labs/` no debe registrarse ni exponerse en la UI por defecto; se conserva solo como referencia interna.
 - No dupliques regex o constantes de negocio: reutiliza `core` y `data`.
 - Texto visible al usuario (labels, tooltips, `report`) en ingles.
 - Codigo y comentarios en ingles.

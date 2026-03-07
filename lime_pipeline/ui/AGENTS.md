@@ -16,6 +16,7 @@ Mantener una UI operativa para produccion: clara, rapida y sin side effects.
 - Si agregas o renombras paneles/UILists/props, actualizar:
   - `lime_pipeline/ui/__init__.py`
   - `lime_pipeline/__init__.py`
+- No registres modulos de `lime_pipeline/labs` en la UI principal ni en `Lime Toolbox`; `labs/` es archivo interno, no superficie de producto.
 - Mantener coherencia de `bl_parent_id`, `bl_order` y categoria (`Lime Pipeline` vs `Lime Toolbox`).
 
 ## QA minimo

@@ -49,3 +49,62 @@ class LIME_OT_pick_root(Operator):
         return {'FINISHED'}
 
 
+class LIME_OT_reload_current_project_data(Operator):
+    bl_idname = "lime.reload_current_project_data"
+    bl_label = "Reload Current Data"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Reload project data from the saved blend filepath"
+
+    def execute(self, context):
+        filepath = getattr(bpy.data, "filepath", "") or ""
+        if not filepath:
+            self.report({'ERROR'}, "Save the .blend file first to reload data from its path.")
+            return {'CANCELLED'}
+
+        st = context.window_manager.lime_pipeline
+        try:
+            from ..core.naming import hydrate_state_from_filepath
+
+            hydrate_state_from_filepath(st, force=True)
+        except Exception as ex:
+            self.report({'ERROR'}, f"Failed to reload project data: {ex}")
+            return {'CANCELLED'}
+
+        if not getattr(st, "project_root", ""):
+            self.report({'ERROR'}, "Could not infer project data from the current filepath.")
+            return {'CANCELLED'}
+
+        self.report({'INFO'}, "Project data reloaded from the current blend path.")
+        return {'FINISHED'}
+
+
+class LIME_OT_clear_project_data(Operator):
+    bl_idname = "lime.clear_project_data"
+    bl_label = "Clear Project Data"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_description = "Clear project fields so they can be entered or reloaded again"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        st = context.window_manager.lime_pipeline
+        st.use_local_project = False
+        st.project_root = ""
+        st.shared_root_snapshot = ""
+        st.local_project_name = ""
+        st.project_type = 'REND'
+        st.rev_letter = 'A'
+        try:
+            st.rev_index = 1
+        except Exception:
+            pass
+        st.sc_number = 10
+        st.use_custom_name = False
+        st.custom_name = ""
+        st.preview_name = ""
+        st.preview_path = ""
+        self.report({'INFO'}, "Project data cleared.")
+        return {'FINISHED'}
+
+

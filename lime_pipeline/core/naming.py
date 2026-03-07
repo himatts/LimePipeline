@@ -27,7 +27,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-from .paths import paths_for_type
+from .paths import RAMV_DIR_1, paths_for_type
 
 
 # Extracts "Project Name" from "XX-##### Project Name"
@@ -116,6 +116,15 @@ TOKENS_BY_PTYPE: dict[str, str] = {
 }
 
 PTYPE_BY_TOKEN: dict[str, str] = {v: k for k, v in TOKENS_BY_PTYPE.items()}
+
+FOLDER_NAME_BY_PTYPE: dict[str, str] = {
+    'BASE': '3D Base Model',
+    'PV': 'Proposal Views',
+    'REND': 'Renders',
+    'SB': 'Storyboard',
+    'ANIM': 'Animation',
+    'TMP': 'tmp',
+}
 
 
 def detect_ptype_from_filename(path_or_name: str) -> str | None:
@@ -214,6 +223,39 @@ def find_project_root(selected_path: str) -> Path | None:
         return None
 
 
+def infer_project_root_from_blend_path(path_or_name: str | Path) -> Path | None:
+    """Infer the project root from a saved blend path in shared or local mode."""
+    try:
+        blend_path = Path(path_or_name)
+    except Exception:
+        return None
+
+    if not blend_path.name:
+        return None
+
+    for parent in blend_path.parents:
+        if parent.name == RAMV_DIR_1:
+            return parent.parent
+
+    shared_root = find_project_root(str(blend_path))
+    if shared_root is not None:
+        return shared_root
+
+    info = parse_blend_details(blend_path.name)
+    if not info:
+        return None
+
+    expected_type_folder = FOLDER_NAME_BY_PTYPE.get(info.get('ptype'))
+    if not expected_type_folder:
+        return None
+
+    for parent in blend_path.parents:
+        if parent.name == expected_type_folder:
+            return parent.parent
+
+    return None
+
+
 def hydrate_state_from_filepath(state, force: bool = False) -> None:
     """Populate WindowManager LimePipelineState from current .blend filepath when possible.
 
@@ -246,18 +288,19 @@ def hydrate_state_from_filepath(state, force: bool = False) -> None:
             if info.get('sc') is not None and (force or current_sc == 0):
                 state.sc_number = int(info['sc'])
 
-        # Deduce project_root from folder structure using canonical RAMV segments
-        try:
-            from .paths import RAMV_DIR_1
-        except Exception:
-            RAMV_DIR_1 = '2. Graphic & Media'
-        gm = None
-        for parent in blend_path.parents:
-            if parent.name == RAMV_DIR_1:
-                gm = parent
-                break
-        if gm is not None and (force or not getattr(state, 'project_root', None)):
-            root = gm.parent
+        root = infer_project_root_from_blend_path(blend_path)
+        if root is not None and (force or not getattr(state, 'project_root', None)):
+            is_shared = bool(RE_PROJECT_DIR.match(root.name))
+            try:
+                if is_shared:
+                    state.use_local_project = False
+                else:
+                    local_name = info.get('project_name') if info else ''
+                    if local_name:
+                        state.local_project_name = local_name
+                    state.use_local_project = True
+            except Exception:
+                pass
             state.project_root = str(root)
     except Exception:
         pass
