@@ -92,6 +92,14 @@ def _ordered_cameras_from_ui(scene, cameras):
     return ordered
 
 
+def _set_camera_full_passepartout(cam_obj):
+    cam_data = getattr(cam_obj, "data", None)
+    if cam_data is None:
+        return
+    cam_data.show_passepartout = True
+    cam_data.passepartout_alpha = 1.0
+
+
 def _apply_initial_rig_scale(rig_objects):
     """Apply initial scale of 0.1 to rig objects after creation."""
     try:
@@ -1245,6 +1253,7 @@ class LIME_OT_add_simple_camera(Operator):
             cam_data = bpy.data.cameras.new("Camera")
             new_cam = bpy.data.objects.new(cam_data.name, cam_data)
             cam_coll.objects.link(new_cam)
+            _set_camera_full_passepartout(new_cam)
         except Exception as ex:
             self.report({'ERROR'}, f"Could not create camera: {ex}")
             return {'CANCELLED'}
@@ -1461,6 +1470,7 @@ class LIME_OT_add_camera_rig(Operator):
                 new_cams = [o for o in cam_coll.objects if getattr(o, "type", None) == 'CAMERA']
                 for cam_obj in new_cams:
                     try:
+                        _set_camera_full_passepartout(cam_obj)
                         ensure_camera_margin_backgrounds(cam_obj, set_visible=True, defaults_alpha=0.5)
                     except Exception:
                         pass
