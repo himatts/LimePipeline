@@ -12,13 +12,32 @@ _CACHE_MTIME: float | None = None
 _CACHE_VALUES: Dict[str, str] = {}
 
 
+def _package_env_file() -> Path:
+    """Return the default .env path next to the addon source tree."""
+    return Path(__file__).resolve().parents[2] / ".env"
+
+
+def _cwd_env_candidates() -> list[Path]:
+    """Return .env candidates walking from cwd towards the filesystem root."""
+    try:
+        cwd = Path.cwd().resolve()
+    except Exception:
+        return []
+    return [cwd / ".env", *[parent / ".env" for parent in cwd.parents]]
+
+
 def _resolve_env_file() -> Path:
-    """Return the .env path, allowing override via LIME_PIPELINE_ENV_FILE."""
+    """Return the best .env path, allowing override via LIME_PIPELINE_ENV_FILE."""
     override = (os.getenv("LIME_PIPELINE_ENV_FILE") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    # Repository root when developing from source.
-    return Path(__file__).resolve().parents[2] / ".env"
+    package_env = _package_env_file()
+    if package_env.is_file():
+        return package_env
+    for candidate in _cwd_env_candidates():
+        if candidate.is_file():
+            return candidate
+    return package_env
 
 
 
